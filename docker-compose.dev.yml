@@ -1,0 +1,32 @@
+services:
+  bot:
+    build:
+      context: ./classroom-discord-sync
+      dockerfile: Dockerfile
+    container_name: classroom-discord-sync-dev
+    restart: unless-stopped
+    env_file:
+      - classroom-discord-sync/.env
+    volumes:
+      - ./classroom-discord-sync/src:/app/src
+      - ./classroom-discord-sync/tests:/app/tests
+      - ./classroom-discord-sync/data:/app/data
+      - ./classroom-discord-sync/credentials:/app/credentials
+    command: ["python", "-m", "src.main"]
+
+  web:
+    image: node:22-alpine
+    container_name: classroom-web-dev
+    working_dir: /app
+    restart: unless-stopped
+    environment:
+      APP_URL: "http://localhost:5173"
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./:/app
+      - web_node_modules:/app/node_modules
+    command: sh -c "rm -rf node_modules/.vite && npm install && npm run dev -- --host 0.0.0.0 --port 5173 --strictPort --force"
+
+volumes:
+  web_node_modules:

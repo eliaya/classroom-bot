@@ -1,0 +1,13 @@
+discord.py>=2.4.0
+google-api-python-client>=2.120.0
+google-auth>=2.28.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+python-dotenv>=1.0.1
+APScheduler>=3.10.4
+sqlmodel>=0.0.16
+pydantic>=2.6.0
+pydantic-settings>=2.2.1
+aiosqlite>=0.20.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

@@ -1,0 +1,6 @@
+{
+  "name": "Classroom Discord Sync Setup Manager",
+  "description": "An interactive dashboard and development center for setting up, configuring, and exporting the production-ready Classroom Discord Sync Bot stack.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
