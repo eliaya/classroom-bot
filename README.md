@@ -1,26 +1,19 @@
-# Classroom Bot / Classroom Discord 同步機器人
+# Classroom Bot / Google Classroom ⇄ Discord 同期ボット
 
-## 繁體中文摘要
+[English](README.en.md) | [繁體中文](README.zh-TW.md)
 
-這個 repo 包含兩個部分：
+## 概要
 
-- `classroom-discord-sync/`：Discord bot，定期從 Google Classroom 抓取公告與作業，並推送到指定 Discord channel。
-- 根目錄 Vite/React app：管理與展示用的靜態 dashboard/simulator。
+このリポジトリは次の 2 つのコンポーネントで構成されています。
 
-Production 部署採 Docker Compose，CI/CD 使用 GitHub Actions 建置 Docker image、推送到 GHCR，並由 production server 上的 self-hosted runner 自動部署。
+- `classroom-discord-sync/`：Discord ボット。Google Classroom のお知らせと課題を定期的に取得し、指定した Discord チャンネルへ投稿します。
+- ルートの Vite/React アプリ：管理・可視化用の静的ダッシュボード／シミュレーターです。
 
-## English Summary
+本番環境では Docker Compose で稼働し、GitHub Actions が Docker イメージをビルドして GHCR に公開し、本番サーバー上の self-hosted runner が自動デプロイします。
 
-This repository contains:
+## クイックスタート
 
-- `classroom-discord-sync/`: a Discord bot that polls Google Classroom announcements/coursework and posts updates to Discord channels.
-- Root Vite/React app: a static dashboard/simulator for project visibility and operations.
-
-Production runs with Docker Compose. GitHub Actions builds images, publishes them to GHCR, and deploys through a self-hosted runner on the production server.
-
-## Quick Start / 快速開始
-
-Bot local setup:
+### ボット（ローカル）
 
 ```bash
 cd classroom-discord-sync
@@ -32,51 +25,45 @@ python src/scripts/setup_google_auth.py
 python -m src.main
 ```
 
-Web local setup:
+### Web UI（ローカル）
 
 ```bash
 npm install
 npm run dev
 ```
 
-Docker Compose local development:
+ブラウザで `http://localhost:5173` を開きます。
+
+### Docker Compose（ローカル開発）
 
 ```bash
 cp classroom-discord-sync/.env.example classroom-discord-sync/.env
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-In local compose, the bot defaults to idle mode when `BOT_ENABLED` is not set. To connect the real Discord bot, set a real `DISCORD_BOT_TOKEN` and run:
+ローカル compose では `BOT_ENABLED` が未設定の場合、ボットはアイドルモードになります。実際の Discord ボットに接続するには、有効な `DISCORD_BOT_TOKEN` を設定してから次を実行します。
 
 ```bash
 BOT_ENABLED=true docker compose -f docker-compose.dev.yml up --build
 ```
 
-Web UI:
-
-```text
-http://localhost:5173
-```
-
-Production deployment:
+### 本番デプロイ
 
 ```bash
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f bot
 ```
 
-## Documentation / 文件
+## ドキュメント
 
-- [Discord Bot Commands (Traditional Chinese) / Discord Bot 指令清單（繁中）](docs/BOT_COMMANDS_ZH_TW.md)
-- [Deployment Highlights (Traditional Chinese) / 部署重點流程（繁中）](docs/DEPLOYMENT_ZH_TW.md)
-- [Deployment / 部署流程](docs/DEPLOYMENT.md)
-- [Local Docker Development / 本機 Docker 開發](docs/LOCAL_DEVELOPMENT.md)
-- [Architecture / 架構](docs/ARCHITECTURE.md)
-- [Tech Stack / 技術棧](docs/TECH_STACK.md)
-- [Changelog / 更新紀錄](CHANGELOG.md)
+- [Discord Bot コマンド一覧（繁體中文）](docs/BOT_COMMANDS_ZH_TW.md)
+- [デプロイ手順の要点（繁體中文）](docs/DEPLOYMENT_ZH_TW.md)
+- [Deployment（English）](docs/DEPLOYMENT.md)
+- [ローカル Docker 開発（繁體中文）](docs/LOCAL_DEVELOPMENT.md)
+- [Architecture（English）](docs/ARCHITECTURE.md)
+- [Tech Stack（English）](docs/TECH_STACK.md)
+- [Changelog](CHANGELOG.md)
 
-## Next Phase / 下一階段
+## 次のフェーズ
 
-Gmail incoming notification support is reserved as the next feature. Configuration placeholders already exist, but runtime Gmail polling is not enabled yet.
-
-Gmail inbox 通知是下一階段功能；目前已加入設定占位，但尚未啟用 Gmail polling runtime。
+Gmail 受信通知は次期機能として予約されています。設定用のプレースホルダーは既に存在しますが、Gmail polling のランタイムはまだ有効化されていません。
