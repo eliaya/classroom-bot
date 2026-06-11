@@ -56,13 +56,9 @@ docker compose -f docker-compose.prod.yml logs -f bot
 
 ## 文件
 
-- [Discord Bot 指令清單（繁中）](docs/BOT_COMMANDS_ZH_TW.md)
-- [部署重點流程（繁中）](docs/DEPLOYMENT_ZH_TW.md)
-- [Deployment（英文）](docs/DEPLOYMENT.md)
-- [本機 Docker 開發](docs/LOCAL_DEVELOPMENT.md)
-- [Architecture（英文）](docs/ARCHITECTURE.md)
-- [Tech Stack（英文）](docs/TECH_STACK.md)
 - [Changelog / 更新紀錄](CHANGELOG.md)
+
+`docs/` 與 `classroom-discord-sync/README.md` 的詳細文件僅供本機開發使用，不納入 Git 版本控制。
 
 ## 下一階段
 

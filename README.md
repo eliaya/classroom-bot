@@ -56,13 +56,9 @@ docker compose -f docker-compose.prod.yml logs -f bot
 
 ## ドキュメント
 
-- [Discord Bot コマンド一覧（繁體中文）](docs/BOT_COMMANDS_ZH_TW.md)
-- [デプロイ手順の要点（繁體中文）](docs/DEPLOYMENT_ZH_TW.md)
-- [Deployment（English）](docs/DEPLOYMENT.md)
-- [ローカル Docker 開発（繁體中文）](docs/LOCAL_DEVELOPMENT.md)
-- [Architecture（English）](docs/ARCHITECTURE.md)
-- [Tech Stack（English）](docs/TECH_STACK.md)
 - [Changelog](CHANGELOG.md)
+
+詳細ドキュメント（`docs/` および `classroom-discord-sync/README.md`）はローカル開発用のため、Git 管理対象外です。
 
 ## 次のフェーズ
 

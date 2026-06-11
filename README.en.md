@@ -56,13 +56,9 @@ docker compose -f docker-compose.prod.yml logs -f bot
 
 ## Documentation
 
-- [Discord Bot Commands (Traditional Chinese)](docs/BOT_COMMANDS_ZH_TW.md)
-- [Deployment Highlights (Traditional Chinese)](docs/DEPLOYMENT_ZH_TW.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [Local Docker Development (Traditional Chinese)](docs/LOCAL_DEVELOPMENT.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Tech Stack](docs/TECH_STACK.md)
 - [Changelog](CHANGELOG.md)
+
+Detailed docs in `docs/` and `classroom-discord-sync/README.md` are kept for local development only and are excluded from Git.
 
 ## Next Phase
 

@@ -12,3 +12,7 @@ classroom-discord-sync/data/*.sqlite
 classroom-discord-sync/credentials/*.json
 classroom-discord-sync/data/*
 !classroom-discord-sync/data/README.md
+
+# Local documentation (README variants and CHANGELOG remain tracked)
+docs/
+classroom-discord-sync/README.md
