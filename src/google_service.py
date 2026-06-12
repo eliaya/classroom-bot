@@ -15,7 +15,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/classroom.courses.readonly",
     "https://www.googleapis.com/auth/classroom.announcements.readonly",
     "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
-    "https://www.googleapis.com/auth/classroom.announcements"
+    "https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly",
+    "https://www.googleapis.com/auth/classroom.rosters.readonly",
+    "https://www.googleapis.com/auth/classroom.profile.emails",
+    "https://www.googleapis.com/auth/classroom.announcements",
 ]
 
 CLASSROOM_MAX_PAGE_SIZE = 30
@@ -221,6 +224,82 @@ class GoogleClassroomService:
             return await asyncio.to_thread(_sync_fetch)
         except Exception as e:
             logger.error(f"Failed to fetch student submissions for course '{course_id}': {e}")
+            return []
+
+    async def fetch_topics(
+        self,
+        course_id: str,
+        *,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        def _sync_fetch() -> List[Dict[str, Any]]:
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseId"] = course_id
+                return service.courses().topics().list(**kwargs).execute()
+
+            return self._fetch_paginated(fetch_page, "topic", limit=limit)
+
+        try:
+            return await asyncio.to_thread(_sync_fetch)
+        except Exception as e:
+            logger.error(f"Failed to fetch topics for course '{course_id}': {e}")
+            return []
+
+    async def fetch_course_work_materials(
+        self,
+        course_id: str,
+        *,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        def _sync_fetch() -> List[Dict[str, Any]]:
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseId"] = course_id
+                return service.courses().courseWorkMaterials().list(**kwargs).execute()
+
+            return self._fetch_paginated(fetch_page, "courseWorkMaterial", limit=limit)
+
+        try:
+            return await asyncio.to_thread(_sync_fetch)
+        except Exception as e:
+            logger.error(f"Failed to fetch materials for course '{course_id}': {e}")
+            return []
+
+    async def fetch_students(
+        self,
+        course_id: str,
+        *,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        def _sync_fetch() -> List[Dict[str, Any]]:
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseId"] = course_id
+                return service.courses().students().list(**kwargs).execute()
+
+            return self._fetch_paginated(fetch_page, "students", limit=limit)
+
+        try:
+            return await asyncio.to_thread(_sync_fetch)
+        except Exception as e:
+            logger.error(f"Failed to fetch students for course '{course_id}': {e}")
+            return []
+
+    async def fetch_teachers(
+        self,
+        course_id: str,
+        *,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        def _sync_fetch() -> List[Dict[str, Any]]:
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseId"] = course_id
+                return service.courses().teachers().list(**kwargs).execute()
+
+            return self._fetch_paginated(fetch_page, "teachers", limit=limit)
+
+        try:
+            return await asyncio.to_thread(_sync_fetch)
+        except Exception as e:
+            logger.error(f"Failed to fetch teachers for course '{course_id}': {e}")
             return []
 
     async def create_announcement(self, course_id: str, text: str) -> Dict[str, Any]:

@@ -11,12 +11,7 @@ from src.config import settings, setup_logging
 
 logger = setup_logging()
 
-SCOPES = [
-    "https://www.googleapis.com/auth/classroom.courses.readonly",
-    "https://www.googleapis.com/auth/classroom.announcements.readonly",
-    "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
-    "https://www.googleapis.com/auth/classroom.announcements"
-]
+from src.google_service import SCOPES
 
 
 def resolve_local_path(configured_path: str) -> Path:

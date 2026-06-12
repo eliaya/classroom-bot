@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     GOOGLE_TOKEN_FILE: str = "/app/credentials/token.json"
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
+    # API / Web admin
+    ADMIN_API_TOKEN: str = ""
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+    CLASSROOM_SYNC_INTERVAL_MINUTES: int = 30
+    API_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:8080"
+
     # Reserved for the next phase: Gmail inbox notifications delivered to Discord.
     # These settings are intentionally inert until the Gmail sync service is implemented.
     GMAIL_NOTIFICATIONS_ENABLED: bool = False

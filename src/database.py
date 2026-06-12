@@ -35,7 +35,7 @@ async def init_db() -> None:
         logger.info("Initializing database and generating tables...")
         async with engine.begin() as conn:
             # We import all models to ensure they are registered on SQLModel.metadata
-            from src.models import GuildCourseLink, PostedAnnouncement
+            import src.models  # noqa: F401 — register all SQLModel tables
             await conn.run_sync(SQLModel.metadata.create_all)
         logger.info("Database initialized successfully.")
     except Exception as e:

@@ -2,17 +2,18 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-COPY web/index.html web/tsconfig.json web/vite.config.ts ./
-COPY web/src ./src
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
-RUN npm run lint
-RUN npm run build
+COPY web/ ./
+
+RUN pnpm exec tsc -b && pnpm exec vite build
 
 FROM nginx:1.27-alpine AS runtime
 
+COPY docker/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80

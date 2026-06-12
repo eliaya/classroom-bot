@@ -7,6 +7,21 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    container_name: classroom-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./credentials:/app/credentials
+    ports:
+      - "127.0.0.1:8000:8000"
+    logging: *default-logging
+
   bot:
     build:
       context: .
@@ -18,6 +33,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./credentials:/app/credentials
+    depends_on:
+      - api
     logging: *default-logging
 
   web:
@@ -28,4 +45,6 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:80"
+    depends_on:
+      - api
     logging: *default-logging

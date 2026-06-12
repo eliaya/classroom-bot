@@ -9,6 +9,7 @@ from sqlmodel import select
 from src.database import async_session_factory
 from src.google_service import google_service
 from src.models import GuildCourseLink
+from src.repositories import classroom_cache as cache
 from src.utils.permissions import is_guild_admin
 
 logger = logging.getLogger("classroom_sync.cogs.classroom")
@@ -141,40 +142,38 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            courses = await google_service.list_courses()
+            async with async_session_factory() as session:
+                courses = await cache.list_cached_courses(session)
             if not courses:
                 await interaction.followup.send(
-                    "📭 **No active Google Classroom courses found** for the authenticated teacher profile.",
+                    "📭 **No cached courses found.** Run sync in the web admin (POST /api/sync) first.",
                     ephemeral=True
                 )
                 return
 
             embed = discord.Embed(
-                title="🏫 Active Google Classroom Courses",
+                title="🏫 Cached Google Classroom Courses",
                 description="Use the **Course ID** below to link any course to a channel.",
                 color=0x137333
             )
 
-            for course in courses[:25]:  # Discord embed field limit
-                cid = course["id"]
-                name = course["name"]
-                sect = course.get("section", "No section")
-                url = course.get("alternateLink", "")
-                
+            for course in courses[:25]:
+                url = course.alternate_link or ""
                 embed.add_field(
-                    name=name,
-                    value=f"ID: `{cid}`\nSection: *{sect}*\n🔗 [Class URL]({url})",
+                    name=course.name,
+                    value=(
+                        f"ID: `{course.id}`\n"
+                        f"Section: *{course.section or 'No section'}*\n"
+                        f"🔗 [Class URL]({url})" if url else f"ID: `{course.id}`\nSection: *{course.section or 'No section'}*"
+                    ),
                     inline=True
                 )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
-            
+
         except Exception as e:
             logger.error(f"Failed listing classroom courses for Discord: {e}")
-            await interaction.followup.send(
-                "❌ **Failed to load courses.** Check if Google API token is authorized or needs configuration.",
-                ephemeral=True
-            )
+            await interaction.followup.send(f"❌ **Failed to load courses:** {e}", ephemeral=True)
 
     @classroom.command(name="course", description="Show detailed metadata for a Google Classroom course.")
     @app_commands.describe(course_id="The unique ID of the Classroom course")
@@ -183,26 +182,26 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            course = await google_service.get_course(course_id)
+            async with async_session_factory() as session:
+                course = await cache.get_cached_course(session, course_id)
             if not course:
                 await interaction.followup.send(
-                    f"❌ **Course not found:** No Google Classroom course exists for `{course_id}`.",
+                    f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
                     ephemeral=True
                 )
                 return
 
             embed = discord.Embed(
-                title=f"🏫 {course.get('name', 'Classroom Course')}",
-                description=self._truncate(course.get("descriptionHeading", "") or course.get("description", ""), 300),
+                title=f"🏫 {course.name}",
+                description=self._truncate(course.description_heading or course.description or "", 300),
                 color=0x137333,
-                url=course.get("alternateLink")
+                url=course.alternate_link
             )
-            embed.add_field(name="Course ID", value=f"`{course.get('id', course_id)}`", inline=False)
-            embed.add_field(name="Section", value=course.get("section", "No section"), inline=True)
-            embed.add_field(name="Room", value=course.get("room", "Not set"), inline=True)
-            embed.add_field(name="Owner", value=course.get("ownerId", "Unavailable"), inline=False)
-            embed.add_field(name="State", value=course.get("courseState", "UNKNOWN"), inline=True)
-            embed.add_field(name="Enrollment", value=course.get("enrollmentCode", "Hidden / unavailable"), inline=True)
+            embed.add_field(name="Course ID", value=f"`{course.id}`", inline=False)
+            embed.add_field(name="Section", value=course.section or "No section", inline=True)
+            embed.add_field(name="Room", value=course.room or "Not set", inline=True)
+            embed.add_field(name="Owner", value=course.owner_id or "Unavailable", inline=False)
+            embed.add_field(name="State", value=course.state or "UNKNOWN", inline=True)
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             logger.error(f"Failed fetching course details for '{course_id}': {e}")
@@ -226,37 +225,37 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
-            course = await google_service.get_course(course_id)
-            if not course:
+            async with async_session_factory() as session:
+                course = await cache.get_cached_course(session, course_id)
+                if not course:
+                    await interaction.followup.send(
+                        f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
+                        ephemeral=True
+                    )
+                    return
+                rows = await cache.list_cached_announcements(session, course_id, limit=resolved_limit)
+            if not rows:
                 await interaction.followup.send(
-                    f"❌ **Course not found:** No Google Classroom course exists for `{course_id}`.",
-                    ephemeral=True
-                )
-                return
-
-            announcements = await google_service.fetch_announcements(course_id, limit=resolved_limit)
-            if not announcements:
-                await interaction.followup.send(
-                    f"📭 **No announcements found** for **{course.get('name', course_id)}**.",
+                    f"📭 **No announcements found** for **{course.name}**.",
                     ephemeral=True
                 )
                 return
 
             field_builders = [
                 (
-                    ann.get("text", "Untitled Announcement").splitlines()[0][:80] or "Announcement",
+                    (row.text or "Untitled Announcement").splitlines()[0][:80] or "Announcement",
                     (
-                        f"{self._truncate(ann.get('text', ''), 220)}\n"
-                        f"Updated: `{ann.get('updateTime', 'Unknown')}`"
+                        f"{self._truncate(row.text or '', 220)}\n"
+                        f"Updated: `{row.update_time or 'Unknown'}`"
                     ),
                 )
-                for ann in announcements
+                for row in rows
             ]
-            count_label = "all" if fetch_all else str(len(announcements))
+            count_label = "all" if fetch_all else str(len(rows))
 
             await self._send_embed_pages(
                 interaction,
-                title=f"📢 Announcements • {course.get('name', course_id)}",
+                title=f"📢 Announcements • {course.name}",
                 description=f"Showing {count_label} announcement(s), newest first.",
                 color=0x137333,
                 field_builders=field_builders,
@@ -283,39 +282,38 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
-            course = await google_service.get_course(course_id)
-            if not course:
-                await interaction.followup.send(
-                    f"❌ **Course not found:** No Google Classroom course exists for `{course_id}`.",
-                    ephemeral=True
-                )
-                return
-
-            coursework_items = await google_service.fetch_coursework(course_id, limit=resolved_limit)
+            async with async_session_factory() as session:
+                course = await cache.get_cached_course(session, course_id)
+                if not course:
+                    await interaction.followup.send(
+                        f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
+                        ephemeral=True
+                    )
+                    return
+                coursework_items = await cache.list_cached_coursework(session, course_id, limit=resolved_limit)
             if not coursework_items:
                 await interaction.followup.send(
-                    f"📭 **No coursework found** for **{course.get('name', course_id)}**.",
+                    f"📭 **No coursework found** for **{course.name}**.",
                     ephemeral=True
                 )
                 return
 
             field_builders = []
             for item in coursework_items:
-                max_points = item.get("maxPoints")
-                due_date = item.get("dueDate")
                 due_text = (
-                    f"{due_date.get('year')}-{due_date.get('month'):02d}-{due_date.get('day'):02d}"
-                    if due_date else "No due date"
+                    f"{item.due_date_year}-{item.due_date_month:02d}-{item.due_date_day:02d}"
+                    if item.due_date_year and item.due_date_month and item.due_date_day
+                    else "No due date"
                 )
-                grade_text = f"{max_points} points" if max_points is not None else "Ungraded"
+                grade_text = f"{item.max_points} points" if item.max_points is not None else "Ungraded"
                 field_builders.append(
                     (
-                        item.get("title", "Untitled Coursework")[:80],
+                        (item.title or "Untitled Coursework")[:80],
                         (
-                            f"{self._truncate(item.get('description', ''), 180)}\n"
+                            f"{self._truncate(item.description or '', 180)}\n"
                             f"Due: `{due_text}`\n"
                             f"Grade: `{grade_text}`\n"
-                            f"Updated: `{item.get('updateTime', 'Unknown')}`"
+                            f"Updated: `{item.update_time or 'Unknown'}`"
                         ),
                     )
                 )
@@ -323,7 +321,7 @@ class ClassroomCog(commands.Cog):
             count_label = "all" if fetch_all else str(len(coursework_items))
             await self._send_embed_pages(
                 interaction,
-                title=f"📝 Coursework • {course.get('name', course_id)}",
+                title=f"📝 Coursework • {course.name}",
                 description=f"Showing {count_label} coursework item(s), newest first.",
                 color=0xf59e0b,
                 field_builders=field_builders,
@@ -348,10 +346,11 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
-            courses = await google_service.list_courses()
+            async with async_session_factory() as session:
+                courses = await cache.list_cached_courses(session)
             if not courses:
                 await interaction.followup.send(
-                    "📭 **No active Google Classroom courses found** for the authenticated account.",
+                    "📭 **No cached courses found.** Run web sync first.",
                     ephemeral=True
                 )
                 return
@@ -360,12 +359,14 @@ class ClassroomCog(commands.Cog):
             todo_items: List[Dict[str, Any]] = []
 
             for course in courses:
-                course_id = course["id"]
-                course_name = course.get("name", course_id)
-                coursework_items = await google_service.fetch_coursework(course_id)
+                course_id = course.id
+                course_name = course.name
+                async with async_session_factory() as session:
+                    coursework_rows = await cache.list_cached_coursework(session, course_id)
                 submissions = await google_service.list_student_submissions(course_id)
-
-                coursework_map = {item["id"]: item for item in coursework_items if item.get("id")}
+                coursework_map = {
+                    row.id: cache.coursework_to_discord_dict(row) for row in coursework_rows
+                }
 
                 for submission in submissions:
                     state = submission.get("state", "UNKNOWN")
@@ -450,19 +451,15 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            # Verify course exists
-            course = await google_service.get_course(course_id)
-            if not course:
-                await interaction.followup.send(
-                    f"❌ **Invalid Course ID:** Google Classroom course with ID `{course_id}` was not found.",
-                    ephemeral=True
-                )
-                return
-
-            course_name = course.get("name", "Classroom Course")
-
             async with async_session_factory() as session:
-                # Check if already mapped in this guild
+                course = await cache.get_cached_course(session, course_id)
+                if not course:
+                    await interaction.followup.send(
+                        f"❌ **Invalid Course ID:** `{course_id}` not found in cache. Run web sync first.",
+                        ephemeral=True
+                    )
+                    return
+                course_name = course.name
                 stmt = select(GuildCourseLink).where(
                     GuildCourseLink.guild_id == interaction.guild_id,
                     GuildCourseLink.course_id == course_id
@@ -561,9 +558,8 @@ class ClassroomCog(commands.Cog):
                     chan_text = channel.mention if channel else f"Channel ID `{link.channel_id}`"
                     status = "✅ Active" if link.is_active else "❌ Disabled"
                     
-                    # Try to load name or display placeholder
-                    course = await google_service.get_course(link.course_id)
-                    name = course.get("name", "Unknown Course") if course else "Unknown Course"
+                    cached = await cache.get_cached_course(session, link.course_id)
+                    name = cached.name if cached else "Unknown Course"
                     
                     embed.add_field(
                         name=f"🏫 {name}",
@@ -651,15 +647,16 @@ class ClassroomCog(commands.Cog):
         """Bidirectional command posting text to Google Classroom via a Modal popup."""
         try:
             # Verify course exists and retrieve name for visual title
-            course = await google_service.get_course(course_id)
+            async with async_session_factory() as session:
+                course = await cache.get_cached_course(session, course_id)
             if not course:
                 await interaction.response.send_message(
-                    f"❌ **Failed:** Google Classroom Course with ID `{course_id}` was not found.",
+                    f"❌ **Failed:** Course `{course_id}` not found in cache.",
                     ephemeral=True
                 )
                 return
 
-            course_name = course.get("name", "My Course")
+            course_name = course.name
             
             # Send the interactive UI Modal response
             modal = ClassroomAnnouncementModal(course_id, course_name)
