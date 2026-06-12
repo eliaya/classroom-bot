@@ -38,20 +38,20 @@ Open `http://localhost:5173` in your browser.
 
 ```bash
 cp classroom-discord-sync/.env.example classroom-discord-sync/.env
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker/compose.yml --profile dev up --build
 ```
 
 In local compose, the bot defaults to idle mode when `BOT_ENABLED` is not set. To connect the real Discord bot, set a valid `DISCORD_BOT_TOKEN` and run:
 
 ```bash
-BOT_ENABLED=true docker compose -f docker-compose.dev.yml up --build
+BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
 ```
 
 ### Production deployment
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f bot
+docker compose -f docker/compose.yml --profile prod ps
+docker compose -f docker/compose.yml --profile prod logs -f bot
 ```
 
 ## Documentation

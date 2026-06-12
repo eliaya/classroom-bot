@@ -10,11 +10,12 @@ coverage/
 .env.*
 !.env.example
 
+docs/
 classroom-discord-sync/.env
 classroom-discord-sync/.venv/
 classroom-discord-sync/venv/
 classroom-discord-sync/__pycache__/
-classroom-discord-sync/data/*.db
-classroom-discord-sync/data/*.sqlite
-classroom-discord-sync/credentials/token.json
-classroom-discord-sync/credentials/gmail_token.json
+classroom-discord-sync/.pytest_cache/
+classroom-discord-sync/data/*
+!classroom-discord-sync/data/README.md
+classroom-discord-sync/credentials/*.json

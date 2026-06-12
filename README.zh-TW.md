@@ -38,20 +38,20 @@ npm run dev
 
 ```bash
 cp classroom-discord-sync/.env.example classroom-discord-sync/.env
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker/compose.yml --profile dev up --build
 ```
 
 在本機 compose 中，若未設定 `BOT_ENABLED`，bot 預設為 idle 模式。若要連接實際 Discord bot，請設定有效的 `DISCORD_BOT_TOKEN` 後執行：
 
 ```bash
-BOT_ENABLED=true docker compose -f docker-compose.dev.yml up --build
+BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
 ```
 
 ### 正式環境部署
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f bot
+docker compose -f docker/compose.yml --profile prod ps
+docker compose -f docker/compose.yml --profile prod logs -f bot
 ```
 
 ## 文件

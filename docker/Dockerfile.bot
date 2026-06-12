@@ -8,10 +8,10 @@ WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
 
-COPY requirements.txt .
+COPY classroom-discord-sync/requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-COPY src ./src
+COPY classroom-discord-sync/src ./src
 
 RUN mkdir -p /app/data /app/credentials && chown -R app:app /app
 

@@ -505,51 +505,37 @@ class ClassroomCog(commands.Cog):
         await interaction.followup.send(f"✅ Linked **{course['name']}** to {channel.mention}!")`
   },
   {
-    name: 'docker-compose.yml',
-    path: 'docker-compose.yml',
+    name: 'compose.yml',
+    path: 'docker/compose.yml',
     language: 'yaml',
-    description: 'Orchestration stack declaring dependencies, network parameters, and secure directory mounts.',
-    content: `version: '3.8'
+    description: 'Unified Compose stack with dev and prod profiles for bot and web services.',
+    content: `name: classroom-bot
 
 services:
   bot:
+    profiles: [prod]
+    image: \${BOT_IMAGE:-classroom-bot:local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: classroom-discord-sync
-    restart: unless-stopped
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data
-      - ./credentials:/app/credentials
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"`
+      context: ..
+      dockerfile: docker/Dockerfile.bot
+
+  web-dev:
+    profiles: [dev]
+    image: node:22-alpine
+    ports:
+      - "127.0.0.1:5173:5173"`
   },
   {
-    name: 'Dockerfile',
-    path: 'Dockerfile',
+    name: 'Dockerfile.bot',
+    path: 'docker/Dockerfile.bot',
     language: 'dockerfile',
-    description: 'Multi-stage Dockerfile containing non-root users, optimized libraries, and isolation boundaries.',
-    content: `FROM python:3.12-slim as builder
+    description: 'Production bot image built from classroom-discord-sync sources with a non-root runtime user.',
+    content: `FROM python:3.12-slim AS runtime
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --user -r requirements.txt
-
-FROM python:3.12-slim
-RUN groupadd -g 10001 botuser && \\
-    useradd -u 10001 -g botuser -m -s /bin/bash botuser && \\
-    mkdir -p /app/data /app/credentials && \\
-    chown -R botuser:botuser /app
-USER botuser
-WORKDIR /app
-COPY --from=builder --chown=botuser:botuser /root/.local /home/botuser/.local
-COPY --chown=botuser:botuser src/ ./src/
-ENV PATH="/home/botuser/.local/bin:$PATH"
-VOLUME [ "/app/data", "/app/credentials" ]
-CMD ["python", "src/main.py"]`
+COPY classroom-discord-sync/requirements.txt .
+RUN pip install -r requirements.txt
+COPY classroom-discord-sync/src ./src
+USER app
+CMD ["python", "-m", "src.main"]`
   }
 ];

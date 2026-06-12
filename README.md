@@ -38,20 +38,20 @@ npm run dev
 
 ```bash
 cp classroom-discord-sync/.env.example classroom-discord-sync/.env
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker/compose.yml --profile dev up --build
 ```
 
 ローカル compose では `BOT_ENABLED` が未設定の場合、ボットはアイドルモードになります。実際の Discord ボットに接続するには、有効な `DISCORD_BOT_TOKEN` を設定してから次を実行します。
 
 ```bash
-BOT_ENABLED=true docker compose -f docker-compose.dev.yml up --build
+BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
 ```
 
 ### 本番デプロイ
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f bot
+docker compose -f docker/compose.yml --profile prod ps
+docker compose -f docker/compose.yml --profile prod logs -f bot
 ```
 
 ## ドキュメント

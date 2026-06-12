@@ -339,7 +339,7 @@ LOG_LEVEL="${logLevel}"`;
       step: '5',
       title: 'Start and verify the stack',
       description: 'Boot the development compose stack, check the bot log for OAuth success, then verify slash commands and manual sync inside Discord.',
-      command: 'docker compose -f docker-compose.dev.yml up -d --build'
+      command: 'docker compose -f docker/compose.yml --profile dev up -d --build'
     }
   ];
 
@@ -1363,10 +1363,10 @@ LOG_LEVEL="${logLevel}"`;
                               <span className="block text-[10px] font-semibold text-slate-400 font-mono">1. Start the compose stack</span>
                               <div className="bg-slate-950 rounded-lg p-3 font-mono text-xs text-emerald-400 border border-slate-800 flex items-center justify-between select-all leading-relaxed">
                                 <code className="truncate pr-4 flex-1">
-                                  docker compose -f docker-compose.dev.yml up -d --build
+                                  docker compose -f docker/compose.yml --profile dev up -d --build
                                 </code>
                                 <button 
-                                  onClick={() => { navigator.clipboard.writeText("docker compose -f docker-compose.dev.yml up -d --build"); triggerNotification("📋 Command Copied!"); }}
+                                  onClick={() => { navigator.clipboard.writeText("docker compose -f docker/compose.yml --profile dev up -d --build"); triggerNotification("📋 Command Copied!"); }}
                                   className="text-slate-500 hover:text-emerald-400 shrink-0"
                                 >
                                   <Copy className="w-3.5 h-3.5" />
@@ -1379,10 +1379,10 @@ LOG_LEVEL="${logLevel}"`;
                               <span className="block text-[10px] font-semibold text-slate-400 font-mono">2. Watch bot startup and OAuth status</span>
                               <div className="bg-slate-950 rounded-lg p-3 font-mono text-xs text-emerald-400 border border-slate-800 flex items-center justify-between select-all leading-relaxed">
                                 <code className="truncate pr-4 flex-1">
-                                  docker compose -f docker-compose.dev.yml logs -f bot
+                                  docker compose -f docker/compose.yml --profile dev logs -f bot
                                 </code>
                                 <button 
-                                  onClick={() => { navigator.clipboard.writeText("docker compose -f docker-compose.dev.yml logs -f bot"); triggerNotification("📋 Command Copied!"); }}
+                                  onClick={() => { navigator.clipboard.writeText("docker compose -f docker/compose.yml --profile dev logs -f bot"); triggerNotification("📋 Command Copied!"); }}
                                   className="text-slate-500 hover:text-emerald-400 shrink-0"
                                 >
                                   <Copy className="w-3.5 h-3.5" />
@@ -1395,10 +1395,10 @@ LOG_LEVEL="${logLevel}"`;
                               <span className="block text-[10px] font-semibold text-slate-400 font-mono">3. Confirm the dashboard entrypoint</span>
                               <div className="bg-slate-950 rounded-lg p-3 font-mono text-xs text-emerald-400 border border-slate-800 flex items-center justify-between select-all leading-relaxed">
                                 <code className="truncate pr-4 flex-1">
-                                  docker compose -f docker-compose.dev.yml exec web sh -c "wget -qO- http://127.0.0.1:5173/ | grep -E '&lt;title&gt;|src/main'"
+                                  docker compose -f docker/compose.yml --profile dev exec web sh -c "wget -qO- http://127.0.0.1:5173/ | grep -E '&lt;title&gt;|src/main'"
                                 </code>
                                 <button 
-                                  onClick={() => { navigator.clipboard.writeText("docker compose -f docker-compose.dev.yml exec web sh -c \"wget -qO- http://127.0.0.1:5173/ | grep -E '<title>|src/main'\""); triggerNotification("📋 Command Copied!"); }}
+                                  onClick={() => { navigator.clipboard.writeText("docker compose -f docker/compose.yml --profile dev exec web sh -c \"wget -qO- http://127.0.0.1:5173/ | grep -E '<title>|src/main'\""); triggerNotification("📋 Command Copied!"); }}
                                   className="text-slate-500 hover:text-emerald-400 shrink-0"
                                 >
                                   <Copy className="w-3.5 h-3.5" />

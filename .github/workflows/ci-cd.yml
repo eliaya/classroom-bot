@@ -66,12 +66,13 @@ jobs:
           image_prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
 
           docker build \
+            -f docker/Dockerfile.bot \
             -t "$image_prefix/classroom-bot:${GITHUB_SHA}" \
             -t "$image_prefix/classroom-bot:main" \
-            classroom-discord-sync
+            .
 
           docker build \
-            -f Dockerfile.web \
+            -f docker/Dockerfile.web \
             -t "$image_prefix/classroom-web:${GITHUB_SHA}" \
             -t "$image_prefix/classroom-web:main" \
             .
@@ -109,6 +110,6 @@ jobs:
           test -f classroom-discord-sync/credentials/client_secret.json
           test -f classroom-discord-sync/credentials/token.json
 
-          docker compose -f docker-compose.prod.yml pull
-          docker compose -f docker-compose.prod.yml up -d --remove-orphans
-          docker compose -f docker-compose.prod.yml ps
+          docker compose -f docker/compose.yml --profile prod pull
+          docker compose -f docker/compose.yml --profile prod up -d --remove-orphans
+          docker compose -f docker/compose.yml --profile prod ps
