@@ -8,7 +8,7 @@
 
 - `src/`：Discord bot（Python），從 Google Classroom 同步公告與作業到 Discord。
 - `web/`：Vite/React 管理 dashboard。
-- `docker/`：集中管理 Compose 與 Dockerfile。
+- `docker-compose.yml`、`Dockerfile.bot`、`Dockerfile.web`：Docker 設定放在 repo 根目錄。
 
 Production 採在目標伺服器上手動執行 Docker Compose 部署。
 
@@ -39,22 +39,22 @@ npm run dev
 
 ```bash
 cp .env.bot.example .env
-docker compose -f docker/compose.yml --profile dev up --build
+docker compose --profile dev up --build
 ```
 
 在本機 compose 中，若未設定 `BOT_ENABLED`，bot 預設為 idle 模式。若要連接實際 Discord bot，請設定有效的 `DISCORD_BOT_TOKEN` 後執行：
 
 ```bash
-BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
+BOT_ENABLED=true docker compose --profile dev up --build
 ```
 
 ### 正式環境部署（手動）
 
 ```bash
 cp .env.bot.example .env   # 首次設定；填入正式環境值
-docker compose -f docker/compose.yml --profile prod up -d --build
-docker compose -f docker/compose.yml --profile prod ps
-docker compose -f docker/compose.yml --profile prod logs -f bot
+docker compose --profile prod up -d --build
+docker compose --profile prod ps
+docker compose --profile prod logs -f bot
 ```
 
 ## 文件

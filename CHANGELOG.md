@@ -21,3 +21,9 @@ All notable changes to this project are documented here.
 - Legacy `classroom-discord-sync/` directory layout.
 
 ## Unreleased
+
+### Changed / 變更
+- Moved `docker-compose.yml`, `Dockerfile.bot`, and `Dockerfile.web` to the repo root.
+- 將 Docker 設定移至 repo 根目錄。
+- Removed unused `.env.example`; bot configuration now uses `.env.bot.example` only.
+- 移除未使用的 `.env.example`，bot 設定僅保留 `.env.bot.example`。

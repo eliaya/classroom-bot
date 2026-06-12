@@ -8,7 +8,7 @@ This repository is a flat monorepo:
 
 - `src/`: Discord bot (Python) that polls Google Classroom and posts updates to Discord.
 - `web/`: Vite/React operations dashboard.
-- `docker/`: Compose stack and Dockerfiles.
+- `docker-compose.yml`, `Dockerfile.bot`, `Dockerfile.web`: Docker settings at the repo root.
 
 Production is deployed manually with Docker Compose on the target server.
 
@@ -39,22 +39,22 @@ Open `http://localhost:5173` in your browser.
 
 ```bash
 cp .env.bot.example .env
-docker compose -f docker/compose.yml --profile dev up --build
+docker compose --profile dev up --build
 ```
 
 In local compose, the bot defaults to idle mode when `BOT_ENABLED` is not set. To connect the real Discord bot, set a valid `DISCORD_BOT_TOKEN` and run:
 
 ```bash
-BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
+BOT_ENABLED=true docker compose --profile dev up --build
 ```
 
 ### Production deployment (manual)
 
 ```bash
 cp .env.bot.example .env   # first run only; fill production values
-docker compose -f docker/compose.yml --profile prod up -d --build
-docker compose -f docker/compose.yml --profile prod ps
-docker compose -f docker/compose.yml --profile prod logs -f bot
+docker compose --profile prod up -d --build
+docker compose --profile prod ps
+docker compose --profile prod logs -f bot
 ```
 
 ## Documentation

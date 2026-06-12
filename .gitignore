@@ -8,7 +8,6 @@ coverage/
 *.log
 .env
 .env.*
-!.env.example
 !.env.bot.example
 
 __pycache__/

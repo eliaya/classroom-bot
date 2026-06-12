@@ -10,7 +10,6 @@ coverage/
 *.log
 .env
 .env.*
-!.env.example
 !.env.bot.example
 
 docs/

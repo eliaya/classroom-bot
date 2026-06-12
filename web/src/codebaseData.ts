@@ -505,8 +505,8 @@ class ClassroomCog(commands.Cog):
         await interaction.followup.send(f"✅ Linked **{course['name']}** to {channel.mention}!")`
   },
   {
-    name: 'compose.yml',
-    path: 'docker/compose.yml',
+    name: 'docker-compose.yml',
+    path: 'docker-compose.yml',
     language: 'yaml',
     description: 'Unified Compose stack with dev and prod profiles for bot and web services.',
     content: `name: classroom-bot
@@ -515,8 +515,8 @@ services:
   bot:
     profiles: [prod]
     build:
-      context: ..
-      dockerfile: docker/Dockerfile.bot
+      context: .
+      dockerfile: Dockerfile.bot
 
   web-dev:
     profiles: [dev]
@@ -526,7 +526,7 @@ services:
   },
   {
     name: 'Dockerfile.bot',
-    path: 'docker/Dockerfile.bot',
+    path: 'Dockerfile.bot',
     language: 'dockerfile',
     description: 'Production bot image built from repo-root Python sources with a non-root runtime user.',
     content: `FROM python:3.12-slim AS runtime

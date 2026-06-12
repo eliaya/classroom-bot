@@ -8,7 +8,7 @@
 
 - `src/`：Discord ボット（Python）。Google Classroom のお知らせと課題を取得し、Discord へ投稿します。
 - `web/`：管理・可視化用の Vite/React ダッシュボード。
-- `docker/`：Compose と Dockerfile を集約。
+- `docker-compose.yml`、`Dockerfile.bot`、`Dockerfile.web`：ルート直下の Docker 設定。
 
 本番環境では Docker Compose で手動デプロイします。
 
@@ -39,22 +39,22 @@ npm run dev
 
 ```bash
 cp .env.bot.example .env
-docker compose -f docker/compose.yml --profile dev up --build
+docker compose --profile dev up --build
 ```
 
 ローカル compose では `BOT_ENABLED` が未設定の場合、ボットはアイドルモードになります。実際の Discord ボットに接続するには、有効な `DISCORD_BOT_TOKEN` を設定してから次を実行します。
 
 ```bash
-BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
+BOT_ENABLED=true docker compose --profile dev up --build
 ```
 
 ### 本番デプロイ（手動）
 
 ```bash
 cp .env.bot.example .env   # 初回のみ。本番用の値を設定
-docker compose -f docker/compose.yml --profile prod up -d --build
-docker compose -f docker/compose.yml --profile prod ps
-docker compose -f docker/compose.yml --profile prod logs -f bot
+docker compose --profile prod up -d --build
+docker compose --profile prod ps
+docker compose --profile prod logs -f bot
 ```
 
 ## ドキュメント
