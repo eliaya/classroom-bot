@@ -12,9 +12,11 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY src ./src
+COPY docker/bot/entrypoint.sh /entrypoint.sh
 
-RUN mkdir -p /app/data /app/credentials && chown -R app:app /app
+RUN mkdir -p /app/data /app/credentials \
+    && chown -R app:app /app \
+    && chmod +x /entrypoint.sh
 
-USER app
-
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "src.main"]
