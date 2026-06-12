@@ -13,6 +13,10 @@ from src.utils.permissions import is_guild_admin
 
 logger = logging.getLogger("classroom_sync.cogs.classroom")
 
+DEFAULT_LIST_LIMIT = 10
+MAX_LIST_LIMIT = 100
+EMBED_FIELDS_PER_MESSAGE = 8
+
 
 class ClassroomAnnouncementModal(discord.ui.Modal):
     """Interactive Discord popup UI Modal allowing bidirectional posting from Discord to Google Classroom."""
@@ -96,6 +100,40 @@ class ClassroomCog(commands.Cog):
             return "No due date"
         return f"{due_date.get('year')}-{due_date.get('month', 0):02d}-{due_date.get('day', 0):02d}"
 
+    @staticmethod
+    def _resolve_list_limit(limit: Optional[int], fetch_all: bool) -> Optional[int]:
+        if fetch_all:
+            return None
+        return max(1, min(limit or DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT))
+
+    async def _send_embed_pages(
+        self,
+        interaction: discord.Interaction,
+        *,
+        title: str,
+        description: str,
+        color: int,
+        field_builders: List[tuple[str, str]],
+    ) -> None:
+        """Send one or more embed messages while respecting Discord field limits."""
+        if not field_builders:
+            await interaction.followup.send(description, ephemeral=True)
+            return
+
+        chunks = [
+            field_builders[i:i + EMBED_FIELDS_PER_MESSAGE]
+            for i in range(0, len(field_builders), EMBED_FIELDS_PER_MESSAGE)
+        ]
+        total_pages = len(chunks)
+
+        for page_index, chunk in enumerate(chunks, start=1):
+            page_title = title if total_pages == 1 else f"{title} ({page_index}/{total_pages})"
+            page_description = description if page_index == 1 else f"Page {page_index} of {total_pages}."
+            embed = discord.Embed(title=page_title, description=page_description, color=color)
+            for name, value in chunk:
+                embed.add_field(name=name, value=value, inline=False)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
     @classroom.command(name="courses", description="List your linked Google Classroom courses (find course IDs).")
     @is_guild_admin()
     async def list_google_courses(self, interaction: discord.Interaction) -> None:
@@ -170,17 +208,22 @@ class ClassroomCog(commands.Cog):
             logger.error(f"Failed fetching course details for '{course_id}': {e}")
             await interaction.followup.send(f"❌ **Failed to load course details:** {e}", ephemeral=True)
 
-    @classroom.command(name="announcements", description="List the latest announcements from a Google Classroom course.")
+    @classroom.command(name="announcements", description="List announcements from a Google Classroom course.")
     @app_commands.describe(
         course_id="The unique ID of the Classroom course",
-        limit="How many announcements to show (1-10)"
+        limit="How many announcements to show (1-100). Ignored when fetch_all is true.",
+        fetch_all="Fetch every announcement from Classroom, not just the latest page."
     )
     @is_guild_admin()
     async def list_announcements(
-        self, interaction: discord.Interaction, course_id: str, limit: Optional[int] = 5
+        self,
+        interaction: discord.Interaction,
+        course_id: str,
+        limit: Optional[int] = DEFAULT_LIST_LIMIT,
+        fetch_all: bool = False,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        limit = max(1, min(limit or 5, 10))
+        resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
             course = await google_service.get_course(course_id)
@@ -191,7 +234,7 @@ class ClassroomCog(commands.Cog):
                 )
                 return
 
-            announcements = await google_service.fetch_announcements(course_id, page_size=limit)
+            announcements = await google_service.fetch_announcements(course_id, limit=resolved_limit)
             if not announcements:
                 await interaction.followup.send(
                     f"📭 **No announcements found** for **{course.get('name', course_id)}**.",
@@ -199,38 +242,45 @@ class ClassroomCog(commands.Cog):
                 )
                 return
 
-            embed = discord.Embed(
-                title=f"📢 Latest Announcements • {course.get('name', course_id)}",
-                description=f"Showing the most recent {min(limit, len(announcements))} item(s).",
-                color=0x137333
-            )
-
-            for ann in announcements[:limit]:
-                embed.add_field(
-                    name=ann.get("text", "Untitled Announcement").splitlines()[0][:80] or "Announcement",
-                    value=(
+            field_builders = [
+                (
+                    ann.get("text", "Untitled Announcement").splitlines()[0][:80] or "Announcement",
+                    (
                         f"{self._truncate(ann.get('text', ''), 220)}\n"
                         f"Updated: `{ann.get('updateTime', 'Unknown')}`"
                     ),
-                    inline=False
                 )
+                for ann in announcements
+            ]
+            count_label = "all" if fetch_all else str(len(announcements))
 
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await self._send_embed_pages(
+                interaction,
+                title=f"📢 Announcements • {course.get('name', course_id)}",
+                description=f"Showing {count_label} announcement(s), newest first.",
+                color=0x137333,
+                field_builders=field_builders,
+            )
         except Exception as e:
             logger.error(f"Failed fetching announcements for '{course_id}': {e}")
             await interaction.followup.send(f"❌ **Failed to load announcements:** {e}", ephemeral=True)
 
-    @classroom.command(name="coursework", description="List the latest coursework items from a Google Classroom course.")
+    @classroom.command(name="coursework", description="List coursework items from a Google Classroom course.")
     @app_commands.describe(
         course_id="The unique ID of the Classroom course",
-        limit="How many coursework items to show (1-10)"
+        limit="How many coursework items to show (1-100). Ignored when fetch_all is true.",
+        fetch_all="Fetch every coursework item from Classroom, not just the latest page."
     )
     @is_guild_admin()
     async def list_coursework(
-        self, interaction: discord.Interaction, course_id: str, limit: Optional[int] = 5
+        self,
+        interaction: discord.Interaction,
+        course_id: str,
+        limit: Optional[int] = DEFAULT_LIST_LIMIT,
+        fetch_all: bool = False,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        limit = max(1, min(limit or 5, 10))
+        resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
             course = await google_service.get_course(course_id)
@@ -241,7 +291,7 @@ class ClassroomCog(commands.Cog):
                 )
                 return
 
-            coursework_items = await google_service.fetch_coursework(course_id, page_size=limit)
+            coursework_items = await google_service.fetch_coursework(course_id, limit=resolved_limit)
             if not coursework_items:
                 await interaction.followup.send(
                     f"📭 **No coursework found** for **{course.get('name', course_id)}**.",
@@ -249,13 +299,8 @@ class ClassroomCog(commands.Cog):
                 )
                 return
 
-            embed = discord.Embed(
-                title=f"📝 Latest Coursework • {course.get('name', course_id)}",
-                description=f"Showing the most recent {min(limit, len(coursework_items))} item(s).",
-                color=0xf59e0b
-            )
-
-            for item in coursework_items[:limit]:
+            field_builders = []
+            for item in coursework_items:
                 max_points = item.get("maxPoints")
                 due_date = item.get("dueDate")
                 due_text = (
@@ -263,28 +308,44 @@ class ClassroomCog(commands.Cog):
                     if due_date else "No due date"
                 )
                 grade_text = f"{max_points} points" if max_points is not None else "Ungraded"
-                embed.add_field(
-                    name=item.get("title", "Untitled Coursework")[:80],
-                    value=(
-                        f"{self._truncate(item.get('description', ''), 180)}\n"
-                        f"Due: `{due_text}`\n"
-                        f"Grade: `{grade_text}`\n"
-                        f"Updated: `{item.get('updateTime', 'Unknown')}`"
-                    ),
-                    inline=False
+                field_builders.append(
+                    (
+                        item.get("title", "Untitled Coursework")[:80],
+                        (
+                            f"{self._truncate(item.get('description', ''), 180)}\n"
+                            f"Due: `{due_text}`\n"
+                            f"Grade: `{grade_text}`\n"
+                            f"Updated: `{item.get('updateTime', 'Unknown')}`"
+                        ),
+                    )
                 )
 
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            count_label = "all" if fetch_all else str(len(coursework_items))
+            await self._send_embed_pages(
+                interaction,
+                title=f"📝 Coursework • {course.get('name', course_id)}",
+                description=f"Showing {count_label} coursework item(s), newest first.",
+                color=0xf59e0b,
+                field_builders=field_builders,
+            )
         except Exception as e:
             logger.error(f"Failed fetching coursework for '{course_id}': {e}")
             await interaction.followup.send(f"❌ **Failed to load coursework:** {e}", ephemeral=True)
 
     @classroom.command(name="todo", description="List not-turned-in coursework across your Google Classroom courses.")
-    @app_commands.describe(limit="How many todo items to show (1-20)")
+    @app_commands.describe(
+        limit="How many todo items to show (1-100). Ignored when fetch_all is true.",
+        fetch_all="Show every pending item instead of truncating to the latest results."
+    )
     @is_guild_admin()
-    async def list_todo(self, interaction: discord.Interaction, limit: Optional[int] = 10) -> None:
+    async def list_todo(
+        self,
+        interaction: discord.Interaction,
+        limit: Optional[int] = DEFAULT_LIST_LIMIT,
+        fetch_all: bool = False,
+    ) -> None:
         await interaction.response.defer(ephemeral=True)
-        limit = max(1, min(limit or 10, 20))
+        resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
             courses = await google_service.list_courses()
@@ -301,8 +362,8 @@ class ClassroomCog(commands.Cog):
             for course in courses:
                 course_id = course["id"]
                 course_name = course.get("name", course_id)
-                coursework_items = await google_service.fetch_coursework(course_id, page_size=100)
-                submissions = await google_service.list_student_submissions(course_id, page_size=100)
+                coursework_items = await google_service.fetch_coursework(course_id)
+                submissions = await google_service.list_student_submissions(course_id)
 
                 coursework_map = {item["id"]: item for item in coursework_items if item.get("id")}
 
@@ -344,17 +405,9 @@ class ClassroomCog(commands.Cog):
                 return
 
             todo_items.sort(key=lambda item: item["due_key"])
-            visible_items = todo_items[:limit]
+            visible_items = todo_items if fetch_all else todo_items[: resolved_limit or len(todo_items)]
 
-            embed = discord.Embed(
-                title="📚 Google Classroom To-do",
-                description=(
-                    f"Showing {len(visible_items)} pending item(s) out of {len(todo_items)} total.\n"
-                    f"This approximates the Google Classroom `not-turned-in` view for the authenticated account."
-                ),
-                color=0xE65100
-            )
-
+            field_builders = []
             for item in visible_items:
                 title = item["title"][:80]
                 status_bits = [f"Due: `{item['due_text']}`", f"State: `{item['state']}`"]
@@ -367,12 +420,19 @@ class ClassroomCog(commands.Cog):
                 )
                 if item["alternate_link"]:
                     value += f"\n[Open in Classroom]({item['alternate_link']})"
-                embed.add_field(name=title, value=value, inline=False)
+                field_builders.append((title, value))
 
-            if len(todo_items) > limit:
-                embed.set_footer(text=f"Truncated to {limit} items. Increase the limit argument to inspect more.")
-
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            count_label = "all" if fetch_all else str(len(visible_items))
+            await self._send_embed_pages(
+                interaction,
+                title="📚 Google Classroom To-do",
+                description=(
+                    f"Showing {count_label} pending item(s) out of {len(todo_items)} total.\n"
+                    f"This approximates the Google Classroom `not-turned-in` view for the authenticated account."
+                ),
+                color=0xE65100,
+                field_builders=field_builders,
+            )
         except Exception as e:
             logger.error(f"Failed loading todo items: {e}")
             await interaction.followup.send(f"❌ **Failed to load Google Classroom todo items:** {e}", ephemeral=True)
@@ -524,14 +584,21 @@ class ClassroomCog(commands.Cog):
             await interaction.followup.send(f"❌ **Failed to retrieve current mappings:** {e}", ephemeral=True)
 
     @classroom.command(name="sync", description="Force an immediate background update sync.")
-    @app_commands.describe(course_id="Specific course ID to sync (optional)")
+    @app_commands.describe(
+        course_id="Specific course ID to sync (optional)",
+        backfill="Post every unposted historical announcement and coursework item to Discord"
+    )
     @is_guild_admin()
-    async def force_sync(self, interaction: discord.Interaction, course_id: Optional[str] = None) -> None:
+    async def force_sync(
+        self,
+        interaction: discord.Interaction,
+        course_id: Optional[str] = None,
+        backfill: bool = False,
+    ) -> None:
         """Forces an instant synchronization pass."""
         await interaction.response.defer(ephemeral=True)
 
         try:
-            # We fetch ClassroomSyncService from custom client extensions
             sync_service = getattr(self.bot, "sync_service", None)
             if not sync_service:
                 await interaction.followup.send("❌ Internal bot configuration error: Sync service not loaded.", ephemeral=True)
@@ -558,12 +625,20 @@ class ClassroomCog(commands.Cog):
                         )
                         return
 
-                    await sync_service.sync_single_link(session, link)
+                    await sync_service.sync_single_link(session, link, backfill=backfill)
                     await session.commit()
-                await interaction.followup.send(f"🔄 **Sync Finished!** Scanned updates for Course ID `{course_id}` successfully.", ephemeral=True)
+                mode = "backfill" if backfill else "incremental"
+                await interaction.followup.send(
+                    f"🔄 **Sync Finished!** Completed a {mode} sync for Course ID `{course_id}`.",
+                    ephemeral=True,
+                )
             else:
-                await sync_service.sync_all_links()
-                await interaction.followup.send("🔄 **Global Sync Completed:** Scanned all registered course links.", ephemeral=True)
+                await sync_service.sync_all_links(backfill=backfill)
+                mode = "backfill" if backfill else "incremental"
+                await interaction.followup.send(
+                    f"🔄 **Global Sync Completed:** Finished a {mode} sync across all registered course links.",
+                    ephemeral=True,
+                )
 
         except Exception as e:
             logger.error(f"Failed manual synchronization trigger: {e}")

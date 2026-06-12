@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -17,6 +17,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
     "https://www.googleapis.com/auth/classroom.announcements"
 ]
+
+CLASSROOM_MAX_PAGE_SIZE = 30
 
 
 class GoogleClassroomService:
@@ -73,12 +75,46 @@ class GoogleClassroomService:
                 raise ConnectionError("Google Classroom API connection failed: Missing or invalid credentials.")
         return build("classroom", "v1", credentials=self.creds)
 
-    async def list_courses(self) -> List[Dict[str, Any]]:
+    def _fetch_paginated(
+        self,
+        fetch_page: Callable[..., Dict[str, Any]],
+        result_key: str,
+        *,
+        page_size: int = CLASSROOM_MAX_PAGE_SIZE,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch all pages from a Google Classroom list endpoint."""
+        service = self._get_api_service()
+        items: List[Dict[str, Any]] = []
+        page_token: Optional[str] = None
+        effective_page_size = max(1, min(page_size, CLASSROOM_MAX_PAGE_SIZE))
+
+        while True:
+            kwargs: Dict[str, Any] = {"pageSize": effective_page_size}
+            if page_token:
+                kwargs["pageToken"] = page_token
+
+            results = fetch_page(service, kwargs)
+            batch = results.get(result_key, [])
+            items.extend(batch)
+
+            if limit is not None and len(items) >= limit:
+                return items[:limit]
+
+            page_token = results.get("nextPageToken")
+            if not page_token:
+                break
+
+        return items
+
+    async def list_courses(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Asynchronously lists all active courses where the authenticated user is enrolled or teaching."""
         def _sync_list() -> List[Dict[str, Any]]:
-            service = self._get_api_service()
-            results = service.courses().list(courseStates=["ACTIVE"]).execute()
-            return results.get("courses", [])
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseStates"] = ["ACTIVE"]
+                return service.courses().list(**kwargs).execute()
+
+            return self._fetch_paginated(fetch_page, "courses", limit=limit)
 
         try:
             return await asyncio.to_thread(_sync_list)
@@ -98,16 +134,29 @@ class GoogleClassroomService:
             logger.error(f"Failed to fetch course details for ID '{course_id}': {e}")
             return None
 
-    async def fetch_announcements(self, course_id: str, page_size: int = 30) -> List[Dict[str, Any]]:
-        """Asynchronously fetches announcements from a course, sorted by updateTime descending."""
+    async def fetch_announcements(
+        self,
+        course_id: str,
+        *,
+        page_size: int = CLASSROOM_MAX_PAGE_SIZE,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch announcements from a course, sorted by updateTime descending.
+
+        When ``limit`` is None, all pages are retrieved.
+        """
         def _sync_fetch() -> List[Dict[str, Any]]:
-            service = self._get_api_service()
-            results = service.courses().announcements().list(
-                courseId=course_id,
-                pageSize=page_size,
-                orderBy="updateTime desc"
-            ).execute()
-            return results.get("announcements", [])
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseId"] = course_id
+                kwargs["orderBy"] = "updateTime desc"
+                return service.courses().announcements().list(**kwargs).execute()
+
+            return self._fetch_paginated(
+                fetch_page,
+                "announcements",
+                page_size=page_size,
+                limit=limit,
+            )
 
         try:
             return await asyncio.to_thread(_sync_fetch)
@@ -115,16 +164,29 @@ class GoogleClassroomService:
             logger.error(f"Failed to fetch announcements for course '{course_id}': {e}")
             return []
 
-    async def fetch_coursework(self, course_id: str, page_size: int = 30) -> List[Dict[str, Any]]:
-        """Asynchronously fetches coursework (assignments) from a course, sorted by updateTime descending."""
+    async def fetch_coursework(
+        self,
+        course_id: str,
+        *,
+        page_size: int = CLASSROOM_MAX_PAGE_SIZE,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch coursework from a course, sorted by updateTime descending.
+
+        When ``limit`` is None, all pages are retrieved.
+        """
         def _sync_fetch() -> List[Dict[str, Any]]:
-            service = self._get_api_service()
-            results = service.courses().courseWork().list(
-                courseId=course_id,
-                pageSize=page_size,
-                orderBy="updateTime desc"
-            ).execute()
-            return results.get("courseWork", [])
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseId"] = course_id
+                kwargs["orderBy"] = "updateTime desc"
+                return service.courses().courseWork().list(**kwargs).execute()
+
+            return self._fetch_paginated(
+                fetch_page,
+                "courseWork",
+                page_size=page_size,
+                limit=limit,
+            )
 
         try:
             return await asyncio.to_thread(_sync_fetch)
@@ -137,18 +199,23 @@ class GoogleClassroomService:
         course_id: str,
         course_work_id: str = "-",
         user_id: str = "me",
-        page_size: int = 100,
+        page_size: int = CLASSROOM_MAX_PAGE_SIZE,
+        limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """List student submissions for the authenticated user or a specific user."""
         def _sync_fetch() -> List[Dict[str, Any]]:
-            service = self._get_api_service()
-            results = service.courses().courseWork().studentSubmissions().list(
-                courseId=course_id,
-                courseWorkId=course_work_id,
-                userId=user_id,
-                pageSize=page_size,
-            ).execute()
-            return results.get("studentSubmissions", [])
+            def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+                kwargs["courseId"] = course_id
+                kwargs["courseWorkId"] = course_work_id
+                kwargs["userId"] = user_id
+                return service.courses().courseWork().studentSubmissions().list(**kwargs).execute()
+
+            return self._fetch_paginated(
+                fetch_page,
+                "studentSubmissions",
+                page_size=page_size,
+                limit=limit,
+            )
 
         try:
             return await asyncio.to_thread(_sync_fetch)

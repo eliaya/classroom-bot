@@ -84,6 +84,52 @@ async def test_create_announcement(mock_get_api):
 
 @pytest.mark.asyncio
 @patch("src.google_service.google_service._get_api_service")
+async def test_fetch_announcements_paginates(mock_get_api):
+    """Verify announcements are fetched across multiple API pages."""
+    mock_service = MagicMock()
+    mock_get_api.return_value = mock_service
+
+    first_page = {
+        "announcements": [{"id": "a1", "updateTime": "2026-06-01T00:00:00.000Z"}],
+        "nextPageToken": "token-2",
+    }
+    second_page = {
+        "announcements": [{"id": "a2", "updateTime": "2026-05-01T00:00:00.000Z"}],
+    }
+    mock_service.courses().announcements().list().execute.side_effect = [first_page, second_page]
+
+    announcements = await google_service.fetch_announcements("c1")
+
+    assert len(announcements) == 2
+    assert announcements[0]["id"] == "a1"
+    assert announcements[1]["id"] == "a2"
+    assert mock_service.courses().announcements().list().execute.call_count == 2
+
+
+@pytest.mark.asyncio
+@patch("src.google_service.google_service._get_api_service")
+async def test_fetch_coursework_respects_limit(mock_get_api):
+    """Verify coursework fetching can cap results after pagination."""
+    mock_service = MagicMock()
+    mock_get_api.return_value = mock_service
+
+    mock_service.courses().courseWork().list().execute.return_value = {
+        "courseWork": [
+            {"id": "cw1", "updateTime": "2026-06-01T00:00:00.000Z"},
+            {"id": "cw2", "updateTime": "2026-05-01T00:00:00.000Z"},
+            {"id": "cw3", "updateTime": "2026-04-01T00:00:00.000Z"},
+        ]
+    }
+
+    coursework = await google_service.fetch_coursework("c1", limit=2)
+
+    assert len(coursework) == 2
+    assert coursework[0]["id"] == "cw1"
+    assert coursework[1]["id"] == "cw2"
+
+
+@pytest.mark.asyncio
+@patch("src.google_service.google_service._get_api_service")
 async def test_list_student_submissions(mock_get_api):
     """Verify student submissions are returned from the Classroom API list endpoint."""
     mock_service = MagicMock()
