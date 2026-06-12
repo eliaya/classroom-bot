@@ -6,11 +6,13 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Removed / 移除
+- Removed GitHub Actions CI/CD workflow, GHCR image publishing, and self-hosted production deployment automation.
+- 移除 GitHub Actions CI/CD workflow、GHCR image 推送與 self-hosted production 自動部署。
+
 ### Added / 新增
 - Added production Docker images for the Discord bot and Vite web UI.
 - 新增 Discord bot 與 Vite web UI 的 production Docker image 設定。
-- Added GitHub Actions CI/CD for tests, GHCR image publishing, and self-hosted production deployment.
-- 新增 GitHub Actions CI/CD：自動測試、推送 GHCR image、透過 production self-hosted runner 部署。
 - Added production Docker Compose stack with persistent bot data and credentials volumes.
 - 新增 production Docker Compose stack，保留 bot 的資料庫與 Google OAuth 憑證 volume。
 - Added local Docker Compose development stack and localhost workflow documentation.

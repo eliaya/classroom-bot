@@ -10,7 +10,7 @@
 - `web/`：管理・可視化用の Vite/React ダッシュボード。
 - `docker/`：Compose と Dockerfile を集約。
 
-本番環境では Docker Compose で稼働し、GitHub Actions が Docker イメージをビルドして GHCR に公開し、本番サーバー上の self-hosted runner が自動デプロイします。
+本番環境では Docker Compose で手動デプロイします。
 
 ## クイックスタート
 
@@ -48,9 +48,11 @@ docker compose -f docker/compose.yml --profile dev up --build
 BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
 ```
 
-### 本番デプロイ
+### 本番デプロイ（手動）
 
 ```bash
+cp .env.bot.example .env   # 初回のみ。本番用の値を設定
+docker compose -f docker/compose.yml --profile prod up -d --build
 docker compose -f docker/compose.yml --profile prod ps
 docker compose -f docker/compose.yml --profile prod logs -f bot
 ```

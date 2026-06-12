@@ -10,7 +10,7 @@
 - `web/`：Vite/React 管理 dashboard。
 - `docker/`：集中管理 Compose 與 Dockerfile。
 
-Production 部署採 Docker Compose，CI/CD 使用 GitHub Actions 建置 image、推送到 GHCR，並由 production server 上的 self-hosted runner 自動部署。
+Production 採在目標伺服器上手動執行 Docker Compose 部署。
 
 ## 快速開始
 
@@ -48,9 +48,11 @@ docker compose -f docker/compose.yml --profile dev up --build
 BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
 ```
 
-### 正式環境部署
+### 正式環境部署（手動）
 
 ```bash
+cp .env.bot.example .env   # 首次設定；填入正式環境值
+docker compose -f docker/compose.yml --profile prod up -d --build
 docker compose -f docker/compose.yml --profile prod ps
 docker compose -f docker/compose.yml --profile prod logs -f bot
 ```

@@ -10,7 +10,7 @@ This repository is a flat monorepo:
 - `web/`: Vite/React operations dashboard.
 - `docker/`: Compose stack and Dockerfiles.
 
-Production runs with Docker Compose. GitHub Actions builds Docker images, publishes them to GHCR, and deploys through a self-hosted runner on the production server.
+Production is deployed manually with Docker Compose on the target server.
 
 ## Quick Start
 
@@ -48,9 +48,11 @@ In local compose, the bot defaults to idle mode when `BOT_ENABLED` is not set. T
 BOT_ENABLED=true docker compose -f docker/compose.yml --profile dev up --build
 ```
 
-### Production deployment
+### Production deployment (manual)
 
 ```bash
+cp .env.bot.example .env   # first run only; fill production values
+docker compose -f docker/compose.yml --profile prod up -d --build
 docker compose -f docker/compose.yml --profile prod ps
 docker compose -f docker/compose.yml --profile prod logs -f bot
 ```

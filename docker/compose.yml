@@ -9,7 +9,6 @@ x-logging: &default-logging
 services:
   bot:
     profiles: [prod]
-    image: ${BOT_IMAGE:-classroom-bot:local}
     build:
       context: ..
       dockerfile: docker/Dockerfile.bot
@@ -24,7 +23,6 @@ services:
 
   web:
     profiles: [prod]
-    image: ${WEB_IMAGE:-classroom-web:local}
     build:
       context: ..
       dockerfile: docker/Dockerfile.web

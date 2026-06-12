@@ -514,7 +514,6 @@ class ClassroomCog(commands.Cog):
 services:
   bot:
     profiles: [prod]
-    image: \${BOT_IMAGE:-classroom-bot:local}
     build:
       context: ..
       dockerfile: docker/Dockerfile.bot
