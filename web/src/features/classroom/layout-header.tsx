@@ -1,14 +1,31 @@
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
+import { TopNav } from '@/components/layout/top-nav'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 
-export function ClassroomHeader({ title }: { title: string }) {
+type NavLink = {
+  title: string
+  href: string
+  isActive: boolean
+  disabled?: boolean
+}
+
+type ClassroomHeaderProps = {
+  topNav?: NavLink[]
+  fixed?: boolean
+}
+
+export function ClassroomHeader({ topNav, fixed }: ClassroomHeaderProps) {
   return (
-    <Header>
-      <h1 className='me-auto text-lg font-semibold'>{title}</h1>
-      <Search />
+    <Header fixed={fixed}>
+      {topNav ? (
+        <TopNav links={topNav} className='me-auto' />
+      ) : (
+        <Search className='me-auto' />
+      )}
+      {topNav && <Search />}
       <ThemeSwitch />
       <ConfigDrawer />
       <ProfileDropdown />

@@ -2,8 +2,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   RefreshCw,
-  Users,
-  BookOpen,
+  Settings,
   Command,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -16,14 +15,14 @@ export const sidebarData: SidebarData = {
   },
   teams: [
     {
-      name: 'Classroom Bot',
+      name: 'Classroom Bot Admin',
       logo: Command,
       plan: 'Google Classroom Sync',
     },
   ],
   navGroups: [
     {
-      title: 'Classroom',
+      title: 'General',
       items: [
         {
           title: 'Dashboard',
@@ -40,20 +39,10 @@ export const sidebarData: SidebarData = {
           url: '/sync',
           icon: RefreshCw,
         },
-      ],
-    },
-    {
-      title: 'Views',
-      items: [
         {
-          title: 'Stream',
-          url: '/courses',
-          icon: BookOpen,
-        },
-        {
-          title: 'People',
-          url: '/courses',
-          icon: Users,
+          title: 'Settings',
+          url: '/settings',
+          icon: Settings,
         },
       ],
     },

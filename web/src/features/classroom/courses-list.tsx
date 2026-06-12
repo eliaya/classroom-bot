@@ -1,26 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { getRouteApi } from '@tanstack/react-router'
 import { Main } from '@/components/layout/main'
 import { api, type Course } from '@/lib/api'
+import { CoursesTable } from './components/courses-table'
 import { ClassroomHeader } from './layout-header'
 
+const route = getRouteApi('/_authenticated/courses/')
+
 export function CoursesListPage() {
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
   const [courses, setCourses] = useState<Course[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -33,53 +22,18 @@ export function CoursesListPage() {
 
   return (
     <>
-      <ClassroomHeader title='Courses' />
-      <Main>
-        <Card>
-          <CardHeader>
-            <CardTitle>Google Classroom courses</CardTitle>
-            <CardDescription>Data from local SQL cache</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {error && <p className='mb-4 text-destructive text-sm'>{error}</p>}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Section</TableHead>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {courses.map((course) => (
-                  <TableRow key={course.id}>
-                    <TableCell className='font-medium'>{course.name}</TableCell>
-                    <TableCell>{course.section || '—'}</TableCell>
-                    <TableCell className='font-mono text-xs'>{course.id}</TableCell>
-                    <TableCell className='flex flex-wrap gap-2'>
-                      <Button size='sm' variant='outline' asChild>
-                        <Link to='/courses/$courseId/stream' params={{ courseId: course.id }}>
-                          Stream
-                        </Link>
-                      </Button>
-                      <Button size='sm' variant='outline' asChild>
-                        <Link to='/courses/$courseId/classwork' params={{ courseId: course.id }}>
-                          Classwork
-                        </Link>
-                      </Button>
-                      <Button size='sm' variant='outline' asChild>
-                        <Link to='/courses/$courseId/people' params={{ courseId: course.id }}>
-                          People
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <ClassroomHeader fixed />
+      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+        <div>
+          <h2 className='text-2xl font-bold tracking-tight'>Courses</h2>
+          <p className='text-muted-foreground'>
+            Google Classroom courses from local SQL cache
+          </p>
+        </div>
+        {error && (
+          <p className='text-destructive text-sm'>{error}</p>
+        )}
+        <CoursesTable data={courses} search={search} navigate={navigate} />
       </Main>
     </>
   )

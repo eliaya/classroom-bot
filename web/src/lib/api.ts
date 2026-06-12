@@ -53,7 +53,8 @@ export type SyncRun = {
 
 export const api = {
   health: () => request<{ status: string }>('/health'),
-  status: () => request<{ google_credentials: string }>('/status'),
+  status: () =>
+    request<{ google_credentials: string; python?: string }>('/status'),
   listCourses: () => request<{ items: Course[]; total: number }>('/courses'),
   getCourse: (id: string) => request<Course>(`/courses/${id}`),
   getStream: (id: string, limit = 50, offset = 0) =>
