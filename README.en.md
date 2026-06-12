@@ -8,9 +8,30 @@ This repository is a flat monorepo:
 
 - `src/`: Discord bot (Python) that polls Google Classroom and posts updates to Discord.
 - `web/`: Vite/React operations dashboard.
-- `docker-compose.yml`, `Dockerfile.bot`, `Dockerfile.web`: Docker settings at the repo root.
+- `docker-compose.yml`, `docker/bot/Dockerfile`, `docker/web/Dockerfile`: Docker settings.
 
 Production is deployed manually with Docker Compose on the target server.
+
+## Production-required files (repo root)
+
+`git pull` ships **code only**. Secrets and local data are **intentionally excluded** and must be created on the server:
+
+| Path | Purpose |
+|------|---------|
+| `.env` | Copy from `.env.bot.example`; set `DISCORD_BOT_TOKEN`, etc. |
+| `credentials/client_secret.json` | Google Cloud OAuth client secret |
+| `credentials/token.json` | Google OAuth token after authorization |
+| `data/classroom_sync.db` | Optional; omit to start with an empty database |
+
+After `git clone` / `git pull` you get: `credentials/`, `data/` (each with `README.md`), and `.env.bot.example`.
+
+Bootstrap:
+
+```bash
+./scripts/setup-production.sh
+```
+
+The script creates directories, seeds `.env`, and checks for OAuth files. To migrate from a dev machine, upload local `credentials/*.json` and optional `data/classroom_sync.db` to the same paths on the server.
 
 ## Quick Start
 
@@ -35,26 +56,24 @@ npm run dev
 
 Open `http://localhost:5173` in your browser.
 
-### Docker Compose (local development)
+### Docker Compose (local)
 
 ```bash
-cp .env.bot.example .env
-docker compose --profile dev up --build
+./scripts/setup-production.sh   # or: cp .env.bot.example .env
+docker compose up --build
 ```
 
-In local compose, the bot defaults to idle mode when `BOT_ENABLED` is not set. To connect the real Discord bot, set a valid `DISCORD_BOT_TOKEN` and run:
-
-```bash
-BOT_ENABLED=true docker compose --profile dev up --build
-```
+Without `BOT_ENABLED` or a valid `DISCORD_BOT_TOKEN`, the bot starts in idle mode. Set both in `.env` to connect to Discord.
 
 ### Production deployment (manual)
 
 ```bash
-cp .env.bot.example .env   # first run only; fill production values
-docker compose --profile prod up -d --build
-docker compose --profile prod ps
-docker compose --profile prod logs -f bot
+git pull
+./scripts/setup-production.sh   # first run: create .env, check credentials
+# edit .env; upload credentials/*.json (and optional data/classroom_sync.db)
+docker compose up -d --build
+docker compose ps
+docker compose logs -f bot
 ```
 
 ## Documentation

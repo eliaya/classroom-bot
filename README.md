@@ -8,9 +8,30 @@
 
 - `src/`：Discord ボット（Python）。Google Classroom のお知らせと課題を取得し、Discord へ投稿します。
 - `web/`：管理・可視化用の Vite/React ダッシュボード。
-- `docker-compose.yml`、`Dockerfile.bot`、`Dockerfile.web`：ルート直下の Docker 設定。
+- `docker-compose.yml`、`docker/bot/Dockerfile`、`docker/web/Dockerfile`：Docker 設定。
 
 本番環境では Docker Compose で手動デプロイします。
+
+## 本番必須ファイル（リポジトリルート）
+
+`git pull` で取得できるのは**コードのみ**です。機密情報とローカルデータは**意図的に Git 管理外**のため、サーバー上で手動作成が必要です。
+
+| パス | 説明 |
+|------|------|
+| `.env` | `.env.bot.example` からコピーし、`DISCORD_BOT_TOKEN` などを設定 |
+| `credentials/client_secret.json` | Google Cloud OAuth クライアントシークレット |
+| `credentials/token.json` | Google OAuth 認可後のトークン |
+| `data/classroom_sync.db` | 任意。なければ空の DB から開始 |
+
+`git clone` / `git pull` 後に存在するもの：`credentials/`、`data/`（各 `README.md` 付き）、`.env.bot.example`。
+
+初期化：
+
+```bash
+./scripts/setup-production.sh
+```
+
+スクリプトはディレクトリ作成、`.env` 生成、OAuth ファイルの有無を確認します。開発環境から移行する場合は、ローカルの `credentials/*.json` と任意の `data/classroom_sync.db` を同じパスにアップロードしてください。
 
 ## クイックスタート
 
@@ -35,26 +56,24 @@ npm run dev
 
 ブラウザで `http://localhost:5173` を開きます。
 
-### Docker Compose（ローカル開発）
+### Docker Compose（ローカル）
 
 ```bash
-cp .env.bot.example .env
-docker compose --profile dev up --build
+./scripts/setup-production.sh   # または cp .env.bot.example .env
+docker compose up --build
 ```
 
-ローカル compose では `BOT_ENABLED` が未設定の場合、ボットはアイドルモードになります。実際の Discord ボットに接続するには、有効な `DISCORD_BOT_TOKEN` を設定してから次を実行します。
-
-```bash
-BOT_ENABLED=true docker compose --profile dev up --build
-```
+`BOT_ENABLED` または有効な `DISCORD_BOT_TOKEN` がない場合、ボットはアイドルモードで起動します。Discord に接続するには `.env` で両方を設定してください。
 
 ### 本番デプロイ（手動）
 
 ```bash
-cp .env.bot.example .env   # 初回のみ。本番用の値を設定
-docker compose --profile prod up -d --build
-docker compose --profile prod ps
-docker compose --profile prod logs -f bot
+git pull
+./scripts/setup-production.sh   # 初回：.env 作成、credentials 確認
+# .env を編集、credentials/*.json をアップロード（任意で data/classroom_sync.db）
+docker compose up -d --build
+docker compose ps
+docker compose logs -f bot
 ```
 
 ## ドキュメント
