@@ -4,10 +4,11 @@
 
 ## Overview
 
-This repository contains two components:
+This repository is a flat monorepo:
 
-- `classroom-discord-sync/`: a Discord bot that polls Google Classroom announcements and coursework, then posts updates to designated Discord channels.
-- Root Vite/React app: a static dashboard/simulator for project visibility and operations.
+- `src/`: Discord bot (Python) that polls Google Classroom and posts updates to Discord.
+- `web/`: Vite/React operations dashboard.
+- `docker/`: Compose stack and Dockerfiles.
 
 Production runs with Docker Compose. GitHub Actions builds Docker images, publishes them to GHCR, and deploys through a self-hosted runner on the production server.
 
@@ -16,11 +17,10 @@ Production runs with Docker Compose. GitHub Actions builds Docker images, publis
 ### Bot (local)
 
 ```bash
-cd classroom-discord-sync
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.bot.example .env
 python src/scripts/setup_google_auth.py
 python -m src.main
 ```
@@ -28,6 +28,7 @@ python -m src.main
 ### Web UI (local)
 
 ```bash
+cd web
 npm install
 npm run dev
 ```
@@ -37,7 +38,7 @@ Open `http://localhost:5173` in your browser.
 ### Docker Compose (local development)
 
 ```bash
-cp classroom-discord-sync/.env.example classroom-discord-sync/.env
+cp .env.bot.example .env
 docker compose -f docker/compose.yml --profile dev up --build
 ```
 
@@ -58,7 +59,7 @@ docker compose -f docker/compose.yml --profile prod logs -f bot
 
 - [Changelog](CHANGELOG.md)
 
-Detailed docs in `docs/` and `classroom-discord-sync/README.md` are kept for local development only and are excluded from Git.
+Detailed docs in `docs/` are kept for local development only and are excluded from Git.
 
 ## Next Phase
 

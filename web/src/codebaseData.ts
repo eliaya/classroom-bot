@@ -529,12 +529,12 @@ services:
     name: 'Dockerfile.bot',
     path: 'docker/Dockerfile.bot',
     language: 'dockerfile',
-    description: 'Production bot image built from classroom-discord-sync sources with a non-root runtime user.',
+    description: 'Production bot image built from repo-root Python sources with a non-root runtime user.',
     content: `FROM python:3.12-slim AS runtime
 WORKDIR /app
-COPY classroom-discord-sync/requirements.txt .
+COPY requirements.txt .
 RUN pip install -r requirements.txt
-COPY classroom-discord-sync/src ./src
+COPY src ./src
 USER app
 CMD ["python", "-m", "src.main"]`
   }

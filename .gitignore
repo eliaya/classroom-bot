@@ -1,18 +1,24 @@
 node_modules/
+web/node_modules/
+web/dist/
 build/
 dist/
 coverage/
 .DS_Store
 *.log
-.env*
+.env
+.env.*
 !.env.example
-classroom-discord-sync/.env
-classroom-discord-sync/data/*.db
-classroom-discord-sync/data/*.sqlite
-classroom-discord-sync/credentials/*.json
-classroom-discord-sync/data/*
-!classroom-discord-sync/data/README.md
+!.env.bot.example
+
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+credentials/*.json
+data/*
+!data/README.md
 
 # Local documentation (README variants and CHANGELOG remain tracked)
 docs/
-classroom-discord-sync/README.md

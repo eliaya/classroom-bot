@@ -16,10 +16,10 @@ services:
     container_name: classroom-discord-sync
     restart: unless-stopped
     env_file:
-      - ../classroom-discord-sync/.env
+      - ../.env
     volumes:
-      - ../classroom-discord-sync/data:/app/data
-      - ../classroom-discord-sync/credentials:/app/credentials
+      - ../data:/app/data
+      - ../credentials:/app/credentials
     logging: *default-logging
 
   web:
@@ -42,12 +42,12 @@ services:
     container_name: classroom-discord-sync-dev
     restart: unless-stopped
     env_file:
-      - ../classroom-discord-sync/.env
+      - ../.env
     volumes:
-      - ../classroom-discord-sync/src:/app/src
-      - ../classroom-discord-sync/tests:/app/tests
-      - ../classroom-discord-sync/data:/app/data
-      - ../classroom-discord-sync/credentials:/app/credentials
+      - ../src:/app/src
+      - ../tests:/app/tests
+      - ../data:/app/data
+      - ../credentials:/app/credentials
     command: ["python", "-m", "src.main"]
 
   web-dev:
@@ -61,7 +61,7 @@ services:
     ports:
       - "127.0.0.1:5173:5173"
     volumes:
-      - ..:/app
+      - ../web:/app
       - web_node_modules:/app/node_modules
     command: sh -c "rm -rf node_modules/.vite && npm install && npm run dev -- --host 0.0.0.0 --port 5173 --strictPort --force"
 

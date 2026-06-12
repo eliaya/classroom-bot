@@ -315,25 +315,25 @@ LOG_LEVEL="${logLevel}"`;
       step: '1',
       title: 'Prepare the server workspace',
       description: 'Create a clean directory for the compose stack and mount points for credentials and SQLite data.',
-      command: 'mkdir -p /opt/classroom-bot/classroom-discord-sync/{credentials,data} && cd /opt/classroom-bot'
+      command: 'mkdir -p /opt/classroom-bot/{credentials,data,web,docker} && cd /opt/classroom-bot'
     },
     {
       step: '2',
       title: 'Place bot files and compose files',
-      description: 'Copy this repository to the VM so the root web app and classroom-discord-sync bot code are both available to Docker Compose.',
+      description: 'Copy this repository to the VM so the flat monorepo layout (src/, web/, docker/) is available to Docker Compose.',
       command: 'git clone <your-repo-url> /opt/classroom-bot && cd /opt/classroom-bot'
     },
     {
       step: '3',
       title: 'Create Google OAuth files',
-      description: 'Put client_secret.json and token.json into classroom-discord-sync/credentials. Generate token.json once on a host machine with browser access if you do not already have it.',
+      description: 'Put client_secret.json and token.json into credentials/. Generate token.json once on a host machine with browser access if you do not already have it.',
       command: 'python src/scripts/setup_google_auth.py'
     },
     {
       step: '4',
       title: 'Fill the .env file',
-      description: 'Use the Env Parameters panel to generate .env, then place it at classroom-discord-sync/.env with the real Discord token, BOT_ENABLED=true, OAuth paths, and SQLite path.',
-      command: 'cp classroom-discord-sync/.env.example classroom-discord-sync/.env'
+      description: 'Use the Env Parameters panel to generate .env, then place it at the repo root with the real Discord token, BOT_ENABLED=true, OAuth paths, and SQLite path.',
+      command: 'cp .env.bot.example .env'
     },
     {
       step: '5',
@@ -346,8 +346,8 @@ LOG_LEVEL="${logLevel}"`;
   const deploymentChecks = [
     'Google Cloud Console: enable Classroom API and add the teacher Google account to OAuth test users.',
     'Discord Developer Portal: copy the bot token and invite the application with bot plus applications.commands scopes.',
-    'Credentials directory: classroom-discord-sync/credentials/client_secret.json and token.json must both exist.',
-    'Environment file: classroom-discord-sync/.env must include DISCORD_BOT_TOKEN, BOT_ENABLED, DATABASE_URL, GOOGLE_CLIENT_SECRET_FILE, and GOOGLE_TOKEN_FILE.'
+    'Credentials directory: credentials/client_secret.json and credentials/token.json must both exist.',
+    'Environment file: repo-root .env must include DISCORD_BOT_TOKEN, BOT_ENABLED, DATABASE_URL, GOOGLE_CLIENT_SECRET_FILE, and GOOGLE_TOKEN_FILE.'
   ];
 
   const copyToClipboard = (text: string, isEnv: boolean) => {
@@ -1413,7 +1413,7 @@ LOG_LEVEL="${logLevel}"`;
                               <Info className="w-4.5 h-4.5 text-blue-500 shrink-0 mt-0.5" />
                               <div>
                                 <strong className={`block mb-0.5 font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-800'}`}>OAuth bootstrap note:</strong>
-                                If the VM cannot open a browser, run <code className={`font-mono p-0.5 border px-1 rounded ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-800'}`}>python src/scripts/setup_google_auth.py</code> on a local machine first, then upload `client_secret.json` and `token.json` to `classroom-discord-sync/credentials/`.
+                                If the VM cannot open a browser, run <code className={`font-mono p-0.5 border px-1 rounded ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-800'}`}>python src/scripts/setup_google_auth.py</code> on a local machine first, then upload `client_secret.json` and `token.json` to `credentials/`.
                               </div>
                             </div>
                           </div>
@@ -1916,7 +1916,7 @@ LOG_LEVEL="${logLevel}"`;
                     <div className={`lg:col-span-12 xl:col-span-4 border rounded-xl p-4 flex flex-col space-y-3.5 text-left transition-colors
                       ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
                     >
-                      <h3 className="font-bold text-sm pb-2 border-b border-slate-800/20">classroom-discord-sync/</h3>
+                      <h3 className="font-bold text-sm pb-2 border-b border-slate-800/20">src/</h3>
                       
                       <div className="space-y-1.5 overflow-y-auto max-h-[450px] pr-1">
                         {pythonFiles.map((file, idx) => (

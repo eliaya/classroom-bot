@@ -4,23 +4,23 @@
 
 ## 概要
 
-這個 repo 包含兩個部分：
+這是一個扁平化的 monorepo：
 
-- `classroom-discord-sync/`：Discord bot，定期從 Google Classroom 抓取公告與作業，並推送到指定 Discord channel。
-- 根目錄 Vite/React app：管理與展示用的靜態 dashboard/simulator。
+- `src/`：Discord bot（Python），從 Google Classroom 同步公告與作業到 Discord。
+- `web/`：Vite/React 管理 dashboard。
+- `docker/`：集中管理 Compose 與 Dockerfile。
 
-Production 部署採 Docker Compose，CI/CD 使用 GitHub Actions 建置 Docker image、推送到 GHCR，並由 production server 上的 self-hosted runner 自動部署。
+Production 部署採 Docker Compose，CI/CD 使用 GitHub Actions 建置 image、推送到 GHCR，並由 production server 上的 self-hosted runner 自動部署。
 
 ## 快速開始
 
 ### Bot（本機）
 
 ```bash
-cd classroom-discord-sync
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.bot.example .env
 python src/scripts/setup_google_auth.py
 python -m src.main
 ```
@@ -28,6 +28,7 @@ python -m src.main
 ### Web UI（本機）
 
 ```bash
+cd web
 npm install
 npm run dev
 ```
@@ -37,7 +38,7 @@ npm run dev
 ### Docker Compose（本機開發）
 
 ```bash
-cp classroom-discord-sync/.env.example classroom-discord-sync/.env
+cp .env.bot.example .env
 docker compose -f docker/compose.yml --profile dev up --build
 ```
 
@@ -58,7 +59,7 @@ docker compose -f docker/compose.yml --profile prod logs -f bot
 
 - [Changelog / 更新紀錄](CHANGELOG.md)
 
-`docs/` 與 `classroom-discord-sync/README.md` 的詳細文件僅供本機開發使用，不納入 Git 版本控制。
+`docs/` 的詳細文件僅供本機開發使用，不納入 Git 版本控制。
 
 ## 下一階段
 
