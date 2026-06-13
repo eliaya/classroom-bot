@@ -1,6 +1,6 @@
 # Classroom Bot / Google Classroom ⇄ Discord Sync Bot
 
-**v0.1.0** · [日本語](README.md) | [繁體中文](README.zh-TW.md)
+**v0.2.0** · [日本語](README.md) | [繁體中文](README.zh-TW.md)
 
 ## Overview
 

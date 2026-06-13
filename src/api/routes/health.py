@@ -16,8 +16,9 @@ async def health() -> dict:
 
 @router.get("/status")
 async def status() -> dict:
-    google_ok = google_service.load_credentials()
+    creds = google_service.credential_status()
     return {
-        "google_credentials": "valid" if google_ok else "missing",
+        "google_credentials": "valid" if creds["valid"] else "missing",
+        "google": creds,
         "python": platform.python_version(),
     }

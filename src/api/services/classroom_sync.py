@@ -18,7 +18,10 @@ class ClassroomSyncService:
         total = 0
         try:
             if not google_service.load_credentials():
-                raise RuntimeError("Google credentials missing or invalid. Run setup_google_auth.py.")
+                detail = google_service.last_credential_error or (
+                    "Google credentials missing or invalid. Run setup_google_auth.py."
+                )
+                raise RuntimeError(detail)
 
             courses = await google_service.list_courses()
             for course in courses:
@@ -34,7 +37,10 @@ class ClassroomSyncService:
         run = await cache.start_sync_run(session, resource="course", course_id=course_id)
         try:
             if not google_service.load_credentials():
-                raise RuntimeError("Google credentials missing or invalid.")
+                detail = google_service.last_credential_error or (
+                    "Google credentials missing or invalid."
+                )
+                raise RuntimeError(detail)
             count = await self._sync_course(session, course_id, track_run=False)
             await cache.finish_sync_run(session, run, status="success", items_count=count)
             return {"status": "success", "course_id": course_id, "items": count}

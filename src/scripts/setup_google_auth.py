@@ -6,7 +6,20 @@ from pathlib import Path
 # Add src to python path to resolve imports correctly when running as standalone script
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from google_auth_oauthlib.flow import InstalledAppFlow
+try:
+    from google_auth_oauthlib.flow import InstalledAppFlow
+except ModuleNotFoundError:
+    print("Missing Python dependencies (google-auth-oauthlib).")
+    print("")
+    print("Use the project virtualenv:")
+    print("  ./scripts/setup-google-auth.sh")
+    print("")
+    print("Or manually:")
+    print("  python3 -m venv .venv")
+    print("  source .venv/bin/activate")
+    print("  pip install -r requirements.txt")
+    print("  python src/scripts/setup_google_auth.py")
+    sys.exit(1)
 from src.config import settings, setup_logging
 
 logger = setup_logging()

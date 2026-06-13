@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,18 +19,29 @@ export function SyncPage() {
   const [runs, setRuns] = useState<SyncRun[]>([])
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [credentialError, setCredentialError] = useState<string | null>(null)
 
-  const load = () =>
-    api
-      .syncStatus()
-      .then((res) => {
-        setRuns(res.runs)
-        setError(null)
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Load failed')
-        setRuns([])
-      })
+  const load = async () => {
+    try {
+      const [sync, status] = await Promise.all([
+        api.syncStatus(),
+        api.status(),
+      ])
+      setRuns(sync.runs)
+      setError(null)
+      if (status.google_credentials !== 'valid') {
+        setCredentialError(
+          status.google?.error ||
+            'Google OAuth is not configured. Run setup_google_auth.py on the host.'
+        )
+      } else {
+        setCredentialError(null)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Load failed')
+      setRuns([])
+    }
+  }
 
   useEffect(() => {
     void load()
@@ -63,6 +75,25 @@ export function SyncPage() {
             {syncing ? 'Starting…' : 'Trigger full sync'}
           </Button>
         </div>
+
+        {credentialError && (
+          <Alert variant='destructive'>
+            <AlertTitle>Google OAuth not ready</AlertTitle>
+            <AlertDescription className='space-y-2'>
+              <p>{credentialError}</p>
+              <p className='text-sm'>
+                On the host machine (not inside Docker), run:{' '}
+                <code className='rounded bg-muted px-1 py-0.5'>
+                  python src/scripts/setup_google_auth.py
+                </code>
+                , then restart:{' '}
+                <code className='rounded bg-muted px-1 py-0.5'>
+                  docker compose restart api bot
+                </code>
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {error && <p className='text-destructive text-sm'>{error}</p>}
 

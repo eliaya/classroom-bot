@@ -18,6 +18,12 @@
     "test:coverage": "vitest run --coverage --browser.headless",
     "test:browser:install": "playwright install chromium --with-deps"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@clerk/shared"
+    ]
+  },
   "dependencies": {
     "@clerk/react": "^6.4.3",
     "@hookform/resolvers": "^5.2.2",

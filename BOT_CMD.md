@@ -1,7 +1,7 @@
 # Classroom Bot — Slash Commands
 
-**Version:** v0.1.0  
-**Last updated:** 2026-06-12
+**Version:** v0.2.0  
+**Last updated:** 2026-06-13
 
 All commands are Discord **slash commands**. They must be run inside a **server channel** (not DMs).
 

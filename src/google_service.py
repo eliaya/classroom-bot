@@ -29,6 +29,65 @@ class GoogleClassroomService:
 
     def __init__(self) -> None:
         self.creds: Optional[Credentials] = None
+        self.last_credential_error: Optional[str] = None
+
+    def _missing_scopes(self, granted: Optional[List[str]]) -> List[str]:
+        granted_set = set(granted or [])
+        return [scope for scope in SCOPES if scope not in granted_set]
+
+    def credential_status(self) -> dict[str, Any]:
+        """Return non-secret diagnostics for admin UI and /api/status."""
+        token_path = settings.GOOGLE_TOKEN_FILE
+        secret_path = settings.GOOGLE_CLIENT_SECRET_FILE
+        status: dict[str, Any] = {
+            "token_file": token_path,
+            "client_secret_file": secret_path,
+            "token_exists": os.path.exists(token_path),
+            "client_secret_exists": os.path.exists(secret_path),
+            "valid": False,
+            "missing_scopes": [],
+            "expired": None,
+            "error": self.last_credential_error,
+            "fix_hint": "python src/scripts/setup_google_auth.py",
+        }
+
+        if not status["client_secret_exists"]:
+            status["error"] = f"client_secret.json not found at {secret_path}"
+            return status
+
+        if not status["token_exists"]:
+            status["error"] = f"token.json not found at {token_path}"
+            return status
+
+        try:
+            creds = Credentials.from_authorized_user_file(token_path)
+            status["expired"] = bool(creds.expiry and creds.expired)
+            missing = self._missing_scopes(creds.scopes)
+            status["missing_scopes"] = missing
+            if missing:
+                status["error"] = (
+                    "OAuth token is missing required Classroom scopes. "
+                    "Re-run setup_google_auth.py to re-authorize."
+                )
+                return status
+
+            if creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    with open(token_path, "w") as token:
+                        token.write(creds.to_json())
+                    status["expired"] = False
+                except Exception as refresh_error:
+                    status["error"] = f"OAuth token refresh failed: {refresh_error}"
+                    return status
+
+            status["valid"] = bool(creds.valid)
+            if not status["valid"]:
+                status["error"] = "OAuth token is invalid or expired without a refresh token."
+        except Exception as exc:
+            status["error"] = f"Failed to read OAuth token: {exc}"
+
+        return status
 
     def load_credentials(self) -> bool:
         """Loads and refreshes OAuth2 credentials from token.json or checks setup status.
@@ -36,39 +95,68 @@ class GoogleClassroomService:
         Returns:
             bool: True if credentials loaded & valid (or successfully refreshed), False otherwise.
         """
+        self.last_credential_error = None
         try:
             token_path = settings.GOOGLE_TOKEN_FILE
             secret_path = settings.GOOGLE_CLIENT_SECRET_FILE
 
-            if os.path.exists(token_path):
-                self.creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-                logger.debug("Credentials loaded from token.json.")
+            if not os.path.exists(secret_path):
+                self.last_credential_error = (
+                    f"Google client secret not found at {secret_path}. "
+                    "Place client_secret.json in credentials/."
+                )
+                logger.warning(self.last_credential_error)
+                return False
 
-            # If credentials don't exist or are invalid, try to refresh them
-            if self.creds and self.creds.expired and self.creds.refresh_token:
+            if not os.path.exists(token_path):
+                self.last_credential_error = (
+                    f"Google token not found at {token_path}. "
+                    "Run 'python src/scripts/setup_google_auth.py' on the host."
+                )
+                logger.warning(self.last_credential_error)
+                return False
+
+            # Use scopes stored in token.json; do not overwrite with SCOPES here.
+            self.creds = Credentials.from_authorized_user_file(token_path)
+            logger.debug("Credentials loaded from token.json.")
+
+            missing = self._missing_scopes(self.creds.scopes)
+            if missing:
+                self.last_credential_error = (
+                    "OAuth token is missing required Classroom scopes. "
+                    f"Re-run setup_google_auth.py. Missing: {', '.join(missing)}"
+                )
+                logger.warning(self.last_credential_error)
+                self.creds = None
+                return False
+
+            if self.creds.expired and self.creds.refresh_token:
                 logger.info("Credentials expired. Attempting token refresh...")
                 try:
                     self.creds.refresh(Request())
-                    # Save refreshed credentials
                     with open(token_path, "w") as token:
                         token.write(self.creds.to_json())
                     logger.info("Credentials refreshed and saved.")
                     return True
                 except Exception as refresh_error:
-                    logger.error(f"Failed to refresh OAuth token: {refresh_error}")
+                    self.last_credential_error = f"OAuth token refresh failed: {refresh_error}"
+                    logger.error(self.last_credential_error)
                     self.creds = None
-            
-            if self.creds and self.creds.valid:
+                    return False
+
+            if self.creds.valid:
                 return True
 
-            logger.warning(
-                f"No valid Google credentials found at {token_path}. "
-                f"Please run 'python src/scripts/setup_google_auth.py' to authenticate."
+            self.last_credential_error = (
+                f"No valid Google credentials at {token_path}. "
+                "Run 'python src/scripts/setup_google_auth.py' to authenticate."
             )
+            logger.warning(self.last_credential_error)
             return False
 
         except Exception as e:
-            logger.error(f"Error loading credentials: {e}")
+            self.last_credential_error = f"Error loading credentials: {e}"
+            logger.error(self.last_credential_error)
             return False
 
     def _get_api_service(self) -> Any:
