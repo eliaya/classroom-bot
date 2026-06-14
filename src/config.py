@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET_FILE: str = "/app/credentials/client_secret.json"
     GOOGLE_TOKEN_FILE: str = "/app/credentials/token.json"
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    # Emit structured JSON logs (with timestamp + job_id) instead of plain text.
+    LOG_JSON: bool = False
 
     # API / Web admin
     ADMIN_API_TOKEN: str = ""
@@ -64,6 +66,32 @@ except Exception as e:
         raise e
 
 
+class JsonLogFormatter(logging.Formatter):
+    """Structured JSON log formatter.
+
+    Always includes an ISO-8601 ``timestamp`` and, when provided via
+    ``logger.info(..., extra={"job_id": ...})``, a ``job_id`` field so sync
+    runs can be correlated. Never emits secrets — only the standard record
+    fields plus an explicit allow-list of extras.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json as _json
+
+        payload: dict[str, object] = {
+            "timestamp": datetime.fromtimestamp(record.created, TOKYO_TZ).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        job_id = getattr(record, "job_id", None)
+        if job_id is not None:
+            payload["job_id"] = job_id
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return _json.dumps(payload, ensure_ascii=False)
+
+
 def setup_logging() -> logging.Logger:
     """Configures global logging system for the application."""
     log_level_map = {
@@ -73,15 +101,20 @@ def setup_logging() -> logging.Logger:
         "ERROR": logging.ERROR,
         "CRITICAL": logging.CRITICAL
     }
-    
+
     level = log_level_map.get(settings.LOG_LEVEL, logging.INFO)
-    
-    logging.basicConfig(
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        level=level,
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    
+
+    if settings.LOG_JSON:
+        handler = logging.StreamHandler()
+        handler.setFormatter(JsonLogFormatter())
+        logging.basicConfig(level=level, handlers=[handler], force=True)
+    else:
+        logging.basicConfig(
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            level=level,
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+
     # Minimize noise from external packages
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("googleapiclient").setLevel(logging.WARNING)

@@ -1,8 +1,49 @@
 import { type ClassValue, clsx } from 'clsx'
+import { formatDistanceToNow } from 'date-fns'
 import { twMerge } from 'tailwind-merge'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+function toDate(
+  value: string | number | Date | null | undefined
+): Date | null {
+  if (value === null || value === undefined || value === '') return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * Human-readable relative time, e.g. "3 hours ago".
+ * Returns `emptyLabel` (default "—") when the value is missing/invalid.
+ */
+export function humanReadableTime(
+  value: string | number | Date | null | undefined,
+  emptyLabel = '—'
+): string {
+  const date = toDate(value)
+  if (!date) return emptyLabel
+  return formatDistanceToNow(date, { addSuffix: true })
+}
+
+/**
+ * Full, locale-aware timestamp used as the fallback / tooltip for relative
+ * times, e.g. "Jun 14, 2026, 09:45 AM". Uses the browser locale via Intl;
+ * returns an empty string when the value is missing/invalid.
+ */
+export function fullTimestamp(
+  value: string | number | Date | null | undefined
+): string {
+  const date = toDate(value)
+  if (!date) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
 }
 
 export function sleep(ms: number = 1000) {

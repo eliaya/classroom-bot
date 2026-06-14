@@ -10,8 +10,9 @@ import discord
 from discord.ext import commands
 
 from src.config import settings, setup_logging
-from src.database import init_db, engine
+from src.database import init_db, engine, async_session_factory
 from src.google_service import google_service
+from src.repositories import bot_status
 from src.sync_service import ClassroomSyncService
 
 # Setup logger configuration
@@ -64,12 +65,40 @@ class ClassroomSyncBot(commands.Bot):
             replace_existing=True,
             next_run_time=None  # Starts after the interval completes, or use run_now if needed
         )
+        # 5. Periodic heartbeat so the API/dashboard can report bot status.
+        self.scheduler.add_job(
+            self._heartbeat,
+            "interval",
+            seconds=60,
+            id="bot_heartbeat",
+            replace_existing=True,
+        )
+
         self.scheduler.start()
         logger.info(f"Background Sync Daemon scheduled to check for classroom updates every {interval} minutes.")
+
+    async def _write_heartbeat(self, status: str, detail: str | None = None) -> None:
+        """Best-effort write of the bot status to the shared DB."""
+        try:
+            async with async_session_factory() as session:
+                await bot_status.record_heartbeat(session, status, detail)
+        except Exception:
+            logger.exception("Failed to write bot heartbeat")
+
+    async def _heartbeat(self) -> None:
+        connected = self.is_ready() and not self.is_closed()
+        await self._write_heartbeat("connected" if connected else "disconnected")
+
+    async def on_disconnect(self) -> None:
+        await self._write_heartbeat("disconnected", "gateway disconnect")
+
+    async def on_resumed(self) -> None:
+        await self._write_heartbeat("connected")
 
     async def on_ready(self) -> None:
         """Invoked when bot establishes session with Discord gateway."""
         logger.info(f"Bot connected successfully! Logged in as: {self.user.name} ({self.user.id})")
+        await self._write_heartbeat("connected")
         
         # Sync slash commands with Discord global catalog
         try:
@@ -90,7 +119,10 @@ class ClassroomSyncBot(commands.Bot):
     async def close(self) -> None:
         """Hook for graceful shutdowns, pausing runners and closing active connections."""
         logger.info("Initiating graceful shutdown sequence...")
-        
+
+        # Record disconnected status before tearing down the DB engine.
+        await self._write_heartbeat("disconnected", "shutdown")
+
         # Shutdown scheduler daemon
         if self.scheduler.running:
             self.scheduler.shutdown(wait=False)

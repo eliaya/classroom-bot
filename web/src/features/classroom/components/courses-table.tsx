@@ -32,10 +32,39 @@ type CoursesTableProps = {
   navigate: NavigateFn
 }
 
+// Persist column visibility so user choices (e.g. re-enabling Room) survive
+// reloads. Room is hidden by default.
+const COLUMN_VISIBILITY_KEY = 'courses-table:column-visibility'
+const DEFAULT_COLUMN_VISIBILITY: VisibilityState = { room: false }
+
+function loadColumnVisibility(): VisibilityState {
+  if (typeof window === 'undefined') return DEFAULT_COLUMN_VISIBILITY
+  try {
+    const raw = window.localStorage.getItem(COLUMN_VISIBILITY_KEY)
+    if (raw) return JSON.parse(raw) as VisibilityState
+  } catch {
+    // ignore malformed storage
+  }
+  return DEFAULT_COLUMN_VISIBILITY
+}
+
 export function CoursesTable({ data, search, navigate }: CoursesTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    loadColumnVisibility
+  )
   const [sorting, setSorting] = useState<SortingState>([])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        COLUMN_VISIBILITY_KEY,
+        JSON.stringify(columnVisibility)
+      )
+    } catch {
+      // ignore storage write failures (e.g. private mode)
+    }
+  }, [columnVisibility])
 
   const {
     columnFilters,

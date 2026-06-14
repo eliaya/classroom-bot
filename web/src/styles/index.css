@@ -57,6 +57,20 @@
   @apply after:pointer-events-none after:absolute after:inset-s-0 after:bottom-0 after:hidden after:h-32 after:w-full after:rounded-b-2xl after:bg-[linear-gradient(180deg,transparent_10%,var(--background)_70%)] md:after:block;
 }
 
+/* Progress bar: default uses the primary color; toggling .progress--complete
+   turns it solid success-green when a run reaches 100%. */
+.progress__bar {
+  background-color: var(--color-primary);
+}
+.progress__bar.progress--complete {
+  background-color: var(--color-green-success);
+}
+
+/* Success status label color (e.g. sync run "success"). */
+.status--success {
+  color: var(--color-green-success);
+}
+
 /* styles.css */
 .CollapsibleContent {
   overflow: hidden;

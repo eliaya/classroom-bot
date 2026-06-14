@@ -48,9 +48,39 @@ async def init_db() -> None:
                 names = [row[1] for row in res.fetchall()]
                 return column in names
 
-            for col_name, col_type in [("message", "TEXT"), ("percent", "INTEGER")]:
-                if not await _has_column(conn, "classroom_sync_runs", col_name):
-                    await conn.execute(text(f"ALTER TABLE classroom_sync_runs ADD COLUMN {col_name} {col_type}"))
+            # column additions keyed by table -> [(name, type), ...]
+            _added_columns: dict[str, list[tuple[str, str]]] = {
+                "classroom_sync_runs": [("message", "TEXT"), ("percent", "INTEGER")],
+                # Soft-delete + diff timestamps on every cached entity.
+                "classroom_courses": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
+                "classroom_announcements": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
+                "classroom_topics": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
+                "classroom_people": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
+                # Normalized classwork content fields + soft-delete timestamps.
+                "classroom_coursework": [
+                    ("body_text", "TEXT"), ("body_html", "TEXT"),
+                    ("attachments_json", "TEXT"), ("content_url", "TEXT"),
+                    ("updated_at", "DATETIME"), ("removed_at", "DATETIME"),
+                ],
+                "classroom_materials": [
+                    ("body_text", "TEXT"), ("body_html", "TEXT"),
+                    ("attachments_json", "TEXT"), ("content_url", "TEXT"),
+                    ("updated_at", "DATETIME"), ("removed_at", "DATETIME"),
+                ],
+            }
+            for table_name, columns in _added_columns.items():
+                # Skip tables that don't exist yet (create_all already made new ones complete).
+                exists = await conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
+                    {"n": table_name},
+                )
+                if not exists.fetchone():
+                    continue
+                for col_name, col_type in columns:
+                    if not await _has_column(conn, table_name, col_name):
+                        await conn.execute(
+                            text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
+                        )
         logger.info("Database initialized successfully.")
     except Exception as e:
         logger.critical(f"Failed to initialize database: {e}")

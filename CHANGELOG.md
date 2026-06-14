@@ -67,3 +67,38 @@ All notable changes to this project are documented here.
 ### Changed / 變更
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
+
+## [0.4.0] - 2026-06-14
+
+### Added / 新增
+- Classroom sync now persists the authenticated user's **To-do** items (`classroom_todos`): derived from each course's open `studentSubmissions` (NEW/CREATED/RECLAIMED) joined with course work, storing `item_id/course_id/title/due_date/status/course_work_link`. Exposed via `GET /api/courses/{id}/todos`.
+- Classroom 同步新增**待辦（To-do）**：由各課程未繳交的 `studentSubmissions` 與 courseWork 交叉產生，存於 `classroom_todos`，並以 `GET /api/courses/{id}/todos` 提供。
+- Field-level **change log** (`classroom_sync_changes`): every created/updated/removed cache record is recorded with `changed_fields` + before/after JSON and the originating `run_id`. Exposed via `GET /api/sync/changes`.
+- 新增欄位級**變更紀錄**（`classroom_sync_changes`）：記錄 created/updated/removed、變動欄位與前後 JSON，並以 `GET /api/sync/changes` 提供。
+- **Soft-delete** semantics: records that disappear upstream are marked `removed_at` (not hard-deleted) and hidden from cached listings; reappearing records are resurrected.
+- 新增**軟刪除**：上游消失的記錄標記 `removed_at` 而非實刪，列表自動隱藏；重新出現會自動復原。
+- Normalized classwork content fields on coursework & materials (`body_text`, `body_html`, `attachments_json`, `content_url`) so hidden-DIV / "View material" content is queryable without parsing `raw_json`.
+- coursework/materials 新增正規化內容欄位（`body_text`/`body_html`/`attachments_json`/`content_url`）。
+- SQL migration files under `migrations/` and optional structured **JSON logging** (`LOG_JSON=true`) with `timestamp` + `job_id`.
+- 新增 `migrations/` SQL 檔與可選的結構化 **JSON 日誌**（`LOG_JSON=true`，含 `timestamp`/`job_id`）。
+- Dashboard: new **Discord Bot** status card (connected / disconnected / disabled / unknown) with a last-check time, backed by a bot heartbeat written to the shared DB and exposed via `GET /api/bot/status`.
+- 儀表板：新增 **Discord Bot** 狀態卡（connected/disconnected/disabled/unknown）與最後檢查時間；資料來自 bot 寫入共用 DB 的 heartbeat，經 `GET /api/bot/status` 提供。
+- Dashboard: Google OAuth card shows an accessible green check SVG (role="img", aria-label="Valid") instead of the word "valid".
+- 儀表板：Google OAuth 卡在有效時以無障礙綠色勾選 SVG（role="img"、aria-label="Valid"）取代 "valid" 文字。
+- i18n infrastructure (i18next + react-i18next) with an English resource for the strings touched by this work.
+- 導入 i18n 基建（i18next + react-i18next），並為本次相關字串建立英文資源。
+- `humanReadableTime` / `fullTimestamp` time utilities (relative time with full-timestamp tooltip fallback, locale-aware), with unit tests.
+- 新增 `humanReadableTime` / `fullTimestamp` 時間工具（相對時間 + 完整時間戳 tooltip fallback、locale 感知）並附單元測試。
+- Component & accessibility tests for the progress/status indicators, the green SVG icon, and the keyboard-accessible row action.
+
+### Changed / 變更
+- Sync upserts are now **field-level UpdateOrNew**: unchanged records are skipped (only `synced_at` touched), changes set `updated_at` and write a change-log row. Full sync is **resilient per course** — a failing course rolls back only its own writes and the run continues.
+- 同步改為**欄位級 UpdateOrNew**：未變更只更新 `synced_at`，有變更才寫 `updated_at` 與變更紀錄；全量同步**逐課程容錯**，單一課程失敗只回滾該課程並繼續。
+- Dashboard "Last sync" and Courses "Synced at" now render as relative time with a full-timestamp tooltip.
+- 儀表板 "Last sync" 與課程 "Synced at" 改為相對時間顯示，並以完整時間戳作為 tooltip。
+- Sync table: the progress bar turns solid success-green via a `.progress--complete` class at 100%; a "success" status renders green via `.status--success`.
+- 同步表：進度達 100% 時透過 `.progress--complete` 變實心成功綠；"success" 狀態透過 `.status--success` 顯示綠色。
+- Sync table: removed the Actions column; the contextual row action (Clear / View details) is now revealed on row hover/focus and is keyboard-accessible.
+- 同步表：移除 Actions 欄；改以 row hover/focus 顯示情境動作（Clear / View details），且鍵盤可達。
+- Courses table: widened the Course name column; the Room column is hidden by default with visibility persisted to localStorage.
+- 課程表：加寬 Course name 欄；Room 欄預設隱藏，可見性持久化於 localStorage。

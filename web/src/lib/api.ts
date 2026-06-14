@@ -61,6 +61,14 @@ export type SchedulerStatus = {
   next_run_time?: string | null
 }
 
+export type BotStatus = {
+  status: 'connected' | 'disconnected' | 'disabled' | 'unknown' | 'error'
+  last_heartbeat?: string | null
+  stale: boolean
+  detail?: string | null
+  checked_at: string
+}
+
 export type Topic = { id?: string; name?: string; [k: string]: unknown }
 export type ClassworkItem = {
   id?: string
@@ -130,6 +138,7 @@ export const api = {
     request<{ status: string }>(`/sync/${courseId}`, { method: 'POST' }),
   clearDeadRun: (runId: number) =>
     request<{ status: string; run_id: number }>(`/sync/runs/${runId}/clear`, { method: 'POST' }),
+  botStatus: () => request<BotStatus>('/bot/status'),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>
     request<SchedulerStatus>('/scheduler', {

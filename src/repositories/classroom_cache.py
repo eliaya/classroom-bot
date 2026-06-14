@@ -14,7 +14,9 @@ from src.models import (
     ClassroomCoursework,
     ClassroomMaterial,
     ClassroomPerson,
+    ClassroomSyncChange,
     ClassroomSyncRun,
+    ClassroomTodo,
     ClassroomTopic,
     dump_json,
 )
@@ -23,6 +25,138 @@ from src.models import (
 def _parse_materials(item: Dict[str, Any]) -> Optional[str]:
     materials = item.get("materials")
     return dump_json(materials) if materials else None
+
+
+def _json_default(obj: Any) -> str:
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    return str(obj)
+
+
+def _dump_change(data: Any) -> Optional[str]:
+    if data is None:
+        return None
+    return json.dumps(data, ensure_ascii=False, default=_json_default)
+
+
+async def record_change(
+    session: AsyncSession,
+    *,
+    entity_type: str,
+    entity_id: Any,
+    change_type: str,
+    course_id: Optional[str] = None,
+    run_id: Optional[int] = None,
+    changed_fields: Optional[List[str]] = None,
+    before: Optional[Dict[str, Any]] = None,
+    after: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Append one row to the field-level change log (sync_changes)."""
+    session.add(
+        ClassroomSyncChange(
+            run_id=run_id,
+            entity_type=entity_type,
+            entity_id=str(entity_id),
+            course_id=course_id,
+            change_type=change_type,
+            changed_fields=_dump_change(changed_fields) if changed_fields else None,
+            before_json=_dump_change(before),
+            after_json=_dump_change(after),
+        )
+    )
+
+
+async def _apply(
+    session: AsyncSession,
+    existing: Any,
+    new_row: Any,
+    tracked: tuple[str, ...],
+    *,
+    entity_type: str,
+    entity_id: Any,
+    course_id: Optional[str],
+    run_id: Optional[int],
+) -> str:
+    """UpdateOrNew with field-level diff + change-log. ``raw_json``/``synced_at``
+    are always refreshed but excluded from the diff so changed_fields stays
+    meaningful. Returns 'created' | 'updated' | 'unchanged'."""
+    if existing is None:
+        session.add(new_row)
+        after = {f: getattr(new_row, f) for f in tracked}
+        await record_change(
+            session, entity_type=entity_type, entity_id=entity_id, course_id=course_id,
+            run_id=run_id, change_type="created", changed_fields=list(tracked), after=after,
+        )
+        return "created"
+
+    changed: List[str] = []
+    before: Dict[str, Any] = {}
+    after: Dict[str, Any] = {}
+    for field in tracked:
+        old, new = getattr(existing, field), getattr(new_row, field)
+        if old != new:
+            changed.append(field)
+            before[field] = old
+            after[field] = new
+            setattr(existing, field, new)
+
+    # Always refresh the opaque payload + sync timestamp (not part of the diff).
+    if hasattr(existing, "raw_json"):
+        existing.raw_json = getattr(new_row, "raw_json")
+    existing.synced_at = new_row.synced_at
+
+    # Resurrect a previously soft-deleted record that reappeared upstream.
+    if getattr(existing, "removed_at", None) is not None:
+        existing.removed_at = None
+        if "removed_at" not in changed:
+            changed.append("removed_at")
+
+    if changed:
+        if hasattr(existing, "updated_at"):
+            existing.updated_at = now_jst()
+        session.add(existing)
+        await record_change(
+            session, entity_type=entity_type, entity_id=entity_id, course_id=course_id,
+            run_id=run_id, change_type="updated", changed_fields=changed, before=before, after=after,
+        )
+        return "updated"
+
+    session.add(existing)
+    return "unchanged"
+
+
+async def soft_delete_missing(
+    session: AsyncSession,
+    model: Any,
+    *,
+    course_id: str,
+    seen_ids: set,
+    id_attr: str,
+    entity_type: str,
+    run_id: Optional[int] = None,
+    extra_filter: Any = None,
+) -> int:
+    """Mark cached rows that are no longer present upstream as removed (soft delete)."""
+    stmt = select(model).where(
+        model.course_id == course_id,
+        model.removed_at.is_(None),
+    )
+    if extra_filter is not None:
+        stmt = stmt.where(extra_filter)
+    rows = (await session.execute(stmt)).scalars().all()
+    removed = 0
+    for row in rows:
+        rid = getattr(row, id_attr)
+        if rid in seen_ids:
+            continue
+        row.removed_at = now_jst()
+        session.add(row)
+        await record_change(
+            session, entity_type=entity_type, entity_id=rid, course_id=course_id,
+            run_id=run_id, change_type="removed",
+        )
+        removed += 1
+    return removed
 
 
 def _course_from_api(data: Dict[str, Any]) -> ClassroomCourse:
@@ -75,6 +209,10 @@ def _coursework_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomCours
         due_time_minutes=due_time.get("minutes"),
         max_points=data.get("maxPoints"),
         materials_json=_parse_materials(data),
+        body_text=data.get("description"),
+        body_html=data.get("description"),
+        attachments_json=_parse_materials(data),
+        content_url=data.get("alternateLink"),
         creation_time=data.get("creationTime"),
         update_time=data.get("updateTime"),
         alternate_link=data.get("alternateLink"),
@@ -103,10 +241,28 @@ def _material_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomMateria
         description=data.get("description"),
         state=data.get("state"),
         materials_json=_parse_materials(data),
+        body_text=data.get("description"),
+        body_html=data.get("description"),
+        attachments_json=_parse_materials(data),
+        content_url=data.get("alternateLink"),
         creation_time=data.get("creationTime"),
         update_time=data.get("updateTime"),
         alternate_link=data.get("alternateLink"),
         raw_json=dump_json(data),
+        synced_at=now_jst(),
+    )
+
+
+def _todo_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomTodo:
+    return ClassroomTodo(
+        user_id=data.get("user_id", "me"),
+        item_id=data["item_id"],
+        course_id=course_id,
+        title=data.get("title"),
+        due_date=data.get("due_date"),
+        status=data.get("status"),
+        course_work_link=data.get("course_work_link"),
+        raw_json=dump_json(data.get("raw", data)),
         synced_at=now_jst(),
     )
 
@@ -128,22 +284,45 @@ def _person_from_api(course_id: str, role: str, data: Dict[str, Any]) -> Classro
     )
 
 
-async def upsert_course(session: AsyncSession, data: Dict[str, Any]) -> None:
+# Per-entity tracked fields used for the field-level diff (raw_json/synced_at
+# are always refreshed but deliberately excluded so changed_fields is meaningful).
+_COURSE_FIELDS = (
+    "name", "section", "room", "owner_id", "state", "alternate_link",
+    "description_heading", "description",
+)
+_ANNOUNCEMENT_FIELDS = (
+    "text", "materials_json", "creator_user_id", "state",
+    "creation_time", "update_time", "alternate_link",
+)
+_COURSEWORK_FIELDS = (
+    "title", "description", "work_type", "state", "topic_id",
+    "due_date_year", "due_date_month", "due_date_day",
+    "due_time_hours", "due_time_minutes", "max_points", "materials_json",
+    "body_text", "body_html", "attachments_json", "content_url",
+    "creation_time", "update_time", "alternate_link",
+)
+_TOPIC_FIELDS = ("name", "update_time")
+_MATERIAL_FIELDS = (
+    "topic_id", "title", "description", "state", "materials_json",
+    "body_text", "body_html", "attachments_json", "content_url",
+    "creation_time", "update_time", "alternate_link",
+)
+_PERSON_FIELDS = ("full_name", "email", "photo_url")
+_TODO_FIELDS = ("title", "due_date", "status", "course_work_link")
+
+
+async def upsert_course(session: AsyncSession, data: Dict[str, Any], *, run_id: Optional[int] = None) -> None:
     row = _course_from_api(data)
     existing = await session.get(ClassroomCourse, row.id)
-    if existing:
-        for field in (
-            "name", "section", "room", "owner_id", "state", "alternate_link",
-            "description_heading", "description", "raw_json", "synced_at",
-        ):
-            setattr(existing, field, getattr(row, field))
-        session.add(existing)
-    else:
-        session.add(row)
+    await _apply(
+        session, existing, row, _COURSE_FIELDS,
+        entity_type="course", entity_id=row.id, course_id=row.id, run_id=run_id,
+    )
 
 
-async def upsert_announcements(session: AsyncSession, course_id: str, items: List[Dict[str, Any]]) -> int:
-    count = 0
+async def upsert_announcements(
+    session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
+) -> int:
     for item in items:
         row = _announcement_from_api(course_id, item)
         stmt = select(ClassroomAnnouncement).where(
@@ -151,19 +330,16 @@ async def upsert_announcements(session: AsyncSession, course_id: str, items: Lis
             ClassroomAnnouncement.course_id == course_id,
         )
         existing = (await session.execute(stmt)).scalar_one_or_none()
-        if existing:
-            for field in row.model_fields:
-                if field != "db_id":
-                    setattr(existing, field, getattr(row, field))
-            session.add(existing)
-        else:
-            session.add(row)
-        count += 1
-    return count
+        await _apply(
+            session, existing, row, _ANNOUNCEMENT_FIELDS,
+            entity_type="announcement", entity_id=row.id, course_id=course_id, run_id=run_id,
+        )
+    return len(items)
 
 
-async def upsert_coursework(session: AsyncSession, course_id: str, items: List[Dict[str, Any]]) -> int:
-    count = 0
+async def upsert_coursework(
+    session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
+) -> int:
     for item in items:
         row = _coursework_from_api(course_id, item)
         stmt = select(ClassroomCoursework).where(
@@ -171,19 +347,16 @@ async def upsert_coursework(session: AsyncSession, course_id: str, items: List[D
             ClassroomCoursework.course_id == course_id,
         )
         existing = (await session.execute(stmt)).scalar_one_or_none()
-        if existing:
-            for field in row.model_fields:
-                if field != "db_id":
-                    setattr(existing, field, getattr(row, field))
-            session.add(existing)
-        else:
-            session.add(row)
-        count += 1
-    return count
+        await _apply(
+            session, existing, row, _COURSEWORK_FIELDS,
+            entity_type="coursework", entity_id=row.id, course_id=course_id, run_id=run_id,
+        )
+    return len(items)
 
 
-async def upsert_topics(session: AsyncSession, course_id: str, items: List[Dict[str, Any]]) -> int:
-    count = 0
+async def upsert_topics(
+    session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
+) -> int:
     for item in items:
         row = _topic_from_api(course_id, item)
         stmt = select(ClassroomTopic).where(
@@ -191,19 +364,16 @@ async def upsert_topics(session: AsyncSession, course_id: str, items: List[Dict[
             ClassroomTopic.course_id == course_id,
         )
         existing = (await session.execute(stmt)).scalar_one_or_none()
-        if existing:
-            for field in row.model_fields:
-                if field != "db_id":
-                    setattr(existing, field, getattr(row, field))
-            session.add(existing)
-        else:
-            session.add(row)
-        count += 1
-    return count
+        await _apply(
+            session, existing, row, _TOPIC_FIELDS,
+            entity_type="topic", entity_id=row.id, course_id=course_id, run_id=run_id,
+        )
+    return len(items)
 
 
-async def upsert_materials(session: AsyncSession, course_id: str, items: List[Dict[str, Any]]) -> int:
-    count = 0
+async def upsert_materials(
+    session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
+) -> int:
     for item in items:
         row = _material_from_api(course_id, item)
         stmt = select(ClassroomMaterial).where(
@@ -211,19 +381,16 @@ async def upsert_materials(session: AsyncSession, course_id: str, items: List[Di
             ClassroomMaterial.course_id == course_id,
         )
         existing = (await session.execute(stmt)).scalar_one_or_none()
-        if existing:
-            for field in row.model_fields:
-                if field != "db_id":
-                    setattr(existing, field, getattr(row, field))
-            session.add(existing)
-        else:
-            session.add(row)
-        count += 1
-    return count
+        await _apply(
+            session, existing, row, _MATERIAL_FIELDS,
+            entity_type="material", entity_id=row.id, course_id=course_id, run_id=run_id,
+        )
+    return len(items)
 
 
-async def upsert_people(session: AsyncSession, course_id: str, role: str, items: List[Dict[str, Any]]) -> int:
-    count = 0
+async def upsert_people(
+    session: AsyncSession, course_id: str, role: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
+) -> int:
     for item in items:
         row = _person_from_api(course_id, role, item)
         stmt = select(ClassroomPerson).where(
@@ -232,18 +399,37 @@ async def upsert_people(session: AsyncSession, course_id: str, role: str, items:
             ClassroomPerson.role == role,
         )
         existing = (await session.execute(stmt)).scalar_one_or_none()
-        if existing:
-            for field in ("full_name", "email", "photo_url", "raw_json", "synced_at"):
-                setattr(existing, field, getattr(row, field))
-            session.add(existing)
-        else:
-            session.add(row)
-        count += 1
-    return count
+        await _apply(
+            session, existing, row, _PERSON_FIELDS,
+            entity_type="person", entity_id=f"{row.user_id}:{role}", course_id=course_id, run_id=run_id,
+        )
+    return len(items)
+
+
+async def upsert_todos(
+    session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
+) -> int:
+    for item in items:
+        row = _todo_from_api(course_id, item)
+        stmt = select(ClassroomTodo).where(
+            ClassroomTodo.user_id == row.user_id,
+            ClassroomTodo.course_id == course_id,
+            ClassroomTodo.item_id == row.item_id,
+        )
+        existing = (await session.execute(stmt)).scalar_one_or_none()
+        await _apply(
+            session, existing, row, _TODO_FIELDS,
+            entity_type="todo", entity_id=f"{row.user_id}:{row.item_id}", course_id=course_id, run_id=run_id,
+        )
+    return len(items)
 
 
 async def list_cached_courses(session: AsyncSession) -> List[ClassroomCourse]:
-    result = await session.execute(select(ClassroomCourse).order_by(ClassroomCourse.name))
+    result = await session.execute(
+        select(ClassroomCourse)
+        .where(ClassroomCourse.removed_at.is_(None))
+        .order_by(ClassroomCourse.name)
+    )
     return list(result.scalars().all())
 
 
@@ -260,7 +446,10 @@ async def list_cached_announcements(
 ) -> List[ClassroomAnnouncement]:
     stmt = (
         select(ClassroomAnnouncement)
-        .where(ClassroomAnnouncement.course_id == course_id)
+        .where(
+            ClassroomAnnouncement.course_id == course_id,
+            ClassroomAnnouncement.removed_at.is_(None),
+        )
         .order_by(ClassroomAnnouncement.update_time.desc())
         .offset(offset)
     )
@@ -285,7 +474,10 @@ async def list_cached_coursework(
     """
     stmt = (
         select(ClassroomCoursework)
-        .where(ClassroomCoursework.course_id == course_id)
+        .where(
+            ClassroomCoursework.course_id == course_id,
+            ClassroomCoursework.removed_at.is_(None),
+        )
     )
     if topic_id is not None:
         stmt = stmt.where(ClassroomCoursework.topic_id == topic_id)
@@ -298,7 +490,9 @@ async def list_cached_coursework(
 
 async def list_cached_topics(session: AsyncSession, course_id: str) -> List[ClassroomTopic]:
     result = await session.execute(
-        select(ClassroomTopic).where(ClassroomTopic.course_id == course_id).order_by(ClassroomTopic.name)
+        select(ClassroomTopic)
+        .where(ClassroomTopic.course_id == course_id, ClassroomTopic.removed_at.is_(None))
+        .order_by(ClassroomTopic.name)
     )
     return list(result.scalars().all())
 
@@ -310,7 +504,10 @@ async def list_cached_materials(
     topic_id: Optional[str] = None,
 ) -> List[ClassroomMaterial]:
     """List cached course work materials. Supports optional topic_id filter (for Topic filter use)."""
-    stmt = select(ClassroomMaterial).where(ClassroomMaterial.course_id == course_id)
+    stmt = select(ClassroomMaterial).where(
+        ClassroomMaterial.course_id == course_id,
+        ClassroomMaterial.removed_at.is_(None),
+    )
     if topic_id is not None:
         stmt = stmt.where(ClassroomMaterial.topic_id == topic_id)
     stmt = stmt.order_by(ClassroomMaterial.update_time.desc())
@@ -321,9 +518,43 @@ async def list_cached_materials(
 async def list_cached_people(session: AsyncSession, course_id: str) -> List[ClassroomPerson]:
     result = await session.execute(
         select(ClassroomPerson)
-        .where(ClassroomPerson.course_id == course_id)
+        .where(ClassroomPerson.course_id == course_id, ClassroomPerson.removed_at.is_(None))
         .order_by(ClassroomPerson.role, ClassroomPerson.full_name)
     )
+    return list(result.scalars().all())
+
+
+async def list_cached_todos(
+    session: AsyncSession,
+    course_id: Optional[str] = None,
+    *,
+    user_id: str = "me",
+    include_removed: bool = False,
+) -> List[ClassroomTodo]:
+    stmt = select(ClassroomTodo).where(ClassroomTodo.user_id == user_id)
+    if course_id is not None:
+        stmt = stmt.where(ClassroomTodo.course_id == course_id)
+    if not include_removed:
+        stmt = stmt.where(ClassroomTodo.removed_at.is_(None))
+    stmt = stmt.order_by(ClassroomTodo.due_date)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def list_sync_changes(
+    session: AsyncSession,
+    *,
+    run_id: Optional[int] = None,
+    entity_type: Optional[str] = None,
+    limit: int = 100,
+) -> List[ClassroomSyncChange]:
+    stmt = select(ClassroomSyncChange)
+    if run_id is not None:
+        stmt = stmt.where(ClassroomSyncChange.run_id == run_id)
+    if entity_type is not None:
+        stmt = stmt.where(ClassroomSyncChange.entity_type == entity_type)
+    stmt = stmt.order_by(ClassroomSyncChange.id.desc()).limit(limit)
+    result = await session.execute(stmt)
     return list(result.scalars().all())
 
 
