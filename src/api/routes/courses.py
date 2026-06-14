@@ -121,6 +121,27 @@ async def get_classwork(
     }
 
 
+@router.get("/{course_id}/todos")
+async def get_todos(course_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
+    if not await cache.get_cached_course(session, course_id):
+        raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
+    todos = await cache.list_cached_todos(session, course_id)
+    return {
+        "items": [
+            {
+                "item_id": t.item_id,
+                "course_id": t.course_id,
+                "title": t.title,
+                "due_date": t.due_date,
+                "status": t.status,
+                "course_work_link": t.course_work_link,
+            }
+            for t in todos
+        ],
+        "total": len(todos),
+    }
+
+
 @router.get("/{course_id}/people")
 async def get_people(course_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
     if not await cache.get_cached_course(session, course_id):

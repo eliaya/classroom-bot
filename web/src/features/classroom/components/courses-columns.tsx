@@ -14,6 +14,7 @@ import {
 import { DataTableColumnHeader } from '@/components/data-table'
 import { LongText } from '@/components/long-text'
 import { type Course } from '@/lib/api'
+import { fullTimestamp, humanReadableTime } from '@/lib/utils'
 
 export const coursesColumns: ColumnDef<Course>[] = [
   {
@@ -22,10 +23,11 @@ export const coursesColumns: ColumnDef<Course>[] = [
       <DataTableColumnHeader column={column} title='Course name' />
     ),
     cell: ({ row }) => (
-      <LongText className='max-w-48 font-medium'>
+      <LongText className='max-w-[320px] font-medium'>
         {row.getValue('name')}
       </LongText>
     ),
+    meta: { className: 'min-w-[260px]' },
     enableHiding: false,
   },
   {
@@ -63,11 +65,17 @@ export const coursesColumns: ColumnDef<Course>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Synced at' />
     ),
-    cell: ({ row }) => (
-      <span className='text-muted-foreground text-sm'>
-        {(row.getValue('synced_at') as string | null) || '—'}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const value = row.getValue('synced_at') as string | null
+      return (
+        <span
+          className='text-muted-foreground text-sm'
+          title={fullTimestamp(value) || undefined}
+        >
+          {humanReadableTime(value)}
+        </span>
+      )
+    },
   },
   {
     id: 'actions',

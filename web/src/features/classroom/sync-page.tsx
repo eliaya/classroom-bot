@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, RefreshCw } from 'lucide-react'
+import { RefreshCw, XCircle } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,16 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { Main } from '@/components/layout/main'
 import { api, type SyncRun } from '@/lib/api'
 import { ClassroomHeader } from './layout-header'
+import { RunProgressBar, RunStatusBadge } from './components/run-indicators'
 
 const BUILD_TIME = import.meta.env.VITE_BUILD_TIME as string | undefined
 
@@ -37,7 +32,6 @@ export function SyncPage() {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [credentialError, setCredentialError] = useState<string | null>(null)
-  const [selectedRun, setSelectedRun] = useState<SyncRun | null>(null)
 
   // Pagination and filter states (10 per page + search/filter)
   const [page, setPage] = useState(1)
@@ -310,9 +304,7 @@ export function SyncPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Progress</TableHead>
                 <TableHead>Items</TableHead>
-                <TableHead>Details</TableHead>
                 <TableHead>Finished</TableHead>
-                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -321,13 +313,13 @@ export function SyncPage() {
                 return (
                 <TableRow
                   key={run.id}
-                  className={
+                  className={cn(
                     run.status === 'running'
                       ? isStaleRunning(run)
                         ? 'bg-orange-500/10'
                         : 'bg-muted/40'
                       : ''
-                  }
+                  )}
                 >
                   <TableCell>{run.id}</TableCell>
                   <TableCell className='font-medium'>{run.resource}</TableCell>
@@ -335,25 +327,16 @@ export function SyncPage() {
                     {run.course_id || '—'}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        run.status === 'error' ? 'destructive' : run.status === 'running' ? 'default' : 'secondary'
-                      }
-                    >
+                    <RunStatusBadge status={run.status}>
                       {run.status}
                       {isStaleRunning(run) && ' (stuck?)'}
-                    </Badge>
+                    </RunStatusBadge>
                   </TableCell>
                   <TableCell>
                     {displayPercent != null ? (
                       <div className='flex flex-col gap-0.5 text-xs'>
                         <div className='flex items-center gap-2'>
-                          <div className='h-1.5 w-16 overflow-hidden rounded bg-muted'>
-                            <div
-                              className='h-1.5 bg-primary transition-all'
-                              style={{ width: `${Math.min(100, Math.max(0, displayPercent))}%` }}
-                            />
-                          </div>
+                          <RunProgressBar percent={displayPercent} />
                           <span>{displayPercent}%</span>
                         </div>
                         {run.status === 'running' && run.message && (
@@ -378,48 +361,36 @@ export function SyncPage() {
                   </TableCell>
                   <TableCell className='tabular-nums'>{run.items_count}</TableCell>
                   <TableCell className='text-muted-foreground text-sm'>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='h-7 w-7'
-                      onClick={() => setSelectedRun(run)}
-                      title='View run details'
-                    >
-                      <Eye className='h-3.5 w-3.5' />
-                    </Button>
-                  </TableCell>
-                  <TableCell className='text-muted-foreground text-sm'>
-                    {run.finished_at
-                      ? formatDistanceToNow(new Date(run.finished_at), { addSuffix: true })
-                      : run.started_at
-                        ? `started ${formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}`
-                        : '—'}
-                  </TableCell>
-                  <TableCell>
-                    {run.status === 'running' ? (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="h-7 px-2 text-[10px]"
-                        onClick={() => void handleClearDead(run.id)}
-                        title={
-                          isStaleRunning(run)
-                            ? 'This job has been running >30min with no finish — likely dead/stuck. Click to release it.'
-                            : 'Force-clear this running job (mark as error so new syncs can start)'
-                        }
-                      >
-                        {isStaleRunning(run) ? 'Clear stuck' : 'Clear'}
-                      </Button>
-                    ) : (
-                      '—'
-                    )}
+                    <div className='flex items-center gap-2'>
+                      <span>
+                        {run.finished_at
+                          ? formatDistanceToNow(new Date(run.finished_at), { addSuffix: true })
+                          : run.started_at
+                            ? `started ${formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}`
+                            : '—'}
+                      </span>
+                      {/* A stuck job (running >30min with no finish) automatically
+                          surfaces a clickable X icon to manually release it. */}
+                      {isStaleRunning(run) && (
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className='text-destructive h-6 w-6'
+                          onClick={() => void handleClearDead(run.id)}
+                          aria-label='Clear stuck job'
+                          title='This job has been running >30min with no finish — likely stuck. Click to release it (marks it as error so new syncs can start).'
+                        >
+                          <XCircle className='h-4 w-4' />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
                 )
               })}
               {!runs.length && (
                 <TableRow>
-                  <TableCell colSpan={9} className='text-muted-foreground'>
+                  <TableCell colSpan={7} className='text-muted-foreground'>
                     {search || statusFilter
                       ? 'No runs match the current search or filters.'
                       : 'No sync runs recorded yet. Trigger a full sync to see live progress here.'}
@@ -466,66 +437,6 @@ export function SyncPage() {
           </div>
         )}
       </Main>
-
-      <Sheet
-        open={!!selectedRun}
-        onOpenChange={(open) => {
-          if (!open) setSelectedRun(null)
-        }}
-      >
-        <SheetContent className='w-full overflow-y-auto sm:max-w-md'>
-          {selectedRun && (
-            <>
-              <SheetHeader>
-                <SheetTitle>Sync run #{selectedRun.id}</SheetTitle>
-                <SheetDescription>{selectedRun.resource} sync details</SheetDescription>
-              </SheetHeader>
-              <dl className='grid grid-cols-3 gap-x-3 gap-y-2 px-4 text-sm'>
-                <dt className='text-muted-foreground'>Status</dt>
-                <dd className='col-span-2'>
-                  <Badge
-                    variant={
-                      selectedRun.status === 'error'
-                        ? 'destructive'
-                        : selectedRun.status === 'running'
-                          ? 'default'
-                          : 'secondary'
-                    }
-                  >
-                    {selectedRun.status}
-                  </Badge>
-                </dd>
-                <dt className='text-muted-foreground'>Resource</dt>
-                <dd className='col-span-2'>{selectedRun.resource}</dd>
-                <dt className='text-muted-foreground'>Course</dt>
-                <dd className='col-span-2 font-mono text-xs'>{selectedRun.course_id || '—'}</dd>
-                <dt className='text-muted-foreground'>Progress</dt>
-                <dd className='col-span-2 tabular-nums'>
-                  {getDisplayPercent(selectedRun) != null
-                    ? `${getDisplayPercent(selectedRun)}%${selectedRun.status === 'success' ? ' (finalized)' : ''}`
-                    : '—'}
-                </dd>
-                <dt className='text-muted-foreground'>Items</dt>
-                <dd className='col-span-2 tabular-nums'>{selectedRun.items_count}</dd>
-                <dt className='text-muted-foreground'>Started</dt>
-                <dd className='col-span-2'>
-                  {selectedRun.started_at ? new Date(selectedRun.started_at).toLocaleString() : '—'}
-                </dd>
-                <dt className='text-muted-foreground'>Finished</dt>
-                <dd className='col-span-2'>
-                  {selectedRun.finished_at ? new Date(selectedRun.finished_at).toLocaleString() : '—'}
-                </dd>
-              </dl>
-              <div className='px-4 pb-6'>
-                <div className='mb-1 text-xs font-medium text-muted-foreground'>Message / Error</div>
-                <pre className='max-h-72 overflow-auto rounded bg-muted/50 p-3 text-xs leading-snug break-all whitespace-pre-wrap'>
-                  {selectedRun.error_message || selectedRun.message || '—'}
-                </pre>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
     </>
   )
 }

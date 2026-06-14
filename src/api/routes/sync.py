@@ -63,6 +63,35 @@ async def sync_status(
     }
 
 
+@router.get("/changes")
+async def list_changes(
+    run_id: int | None = None,
+    entity_type: str | None = None,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Field-level change log (created/updated/removed) from sync runs."""
+    changes = await cache.list_sync_changes(
+        session, run_id=run_id, entity_type=entity_type, limit=limit
+    )
+    return {
+        "items": [
+            {
+                "id": c.id,
+                "run_id": c.run_id,
+                "entity_type": c.entity_type,
+                "entity_id": c.entity_id,
+                "course_id": c.course_id,
+                "change_type": c.change_type,
+                "changed_fields": c.changed_fields,
+                "timestamp": c.timestamp.isoformat() if c.timestamp else None,
+            }
+            for c in changes
+        ],
+        "total": len(changes),
+    }
+
+
 @router.post("", dependencies=[Depends(verify_admin_token)])
 async def trigger_full_sync(background_tasks: BackgroundTasks) -> dict:
     background_tasks.add_task(_run_full_sync)
