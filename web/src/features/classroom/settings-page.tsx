@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, XCircle } from 'lucide-react'
+import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -8,9 +9,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { Main } from '@/components/layout/main'
-import { api } from '@/lib/api'
+import { api, type SchedulerStatus } from '@/lib/api'
 import { ClassroomHeader } from './layout-header'
 
 export function ClassroomSettingsPage() {
@@ -18,6 +22,20 @@ export function ClassroomSettingsPage() {
   const [googleStatus, setGoogleStatus] = useState<string | null>(null)
   const [pythonVersion, setPythonVersion] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Scheduler setting (persisted + live)
+  const [scheduler, setScheduler] = useState<SchedulerStatus | null>(null)
+  const [intervalInput, setIntervalInput] = useState('')
+  const [enabledInput, setEnabledInput] = useState(true)
+  const [savingScheduler, setSavingScheduler] = useState(false)
+  const [runningNow, setRunningNow] = useState(false)
+  const [schedulerMsg, setSchedulerMsg] = useState<string | null>(null)
+
+  const applyScheduler = (s: SchedulerStatus) => {
+    setScheduler(s)
+    setIntervalInput(String(s.interval_minutes))
+    setEnabledInput(s.enabled)
+  }
 
   useEffect(() => {
     Promise.all([api.health(), api.status()])
@@ -27,9 +45,53 @@ export function ClassroomSettingsPage() {
         setPythonVersion(s.python ?? null)
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+    api
+      .getScheduler()
+      .then(applyScheduler)
+      .catch((e) =>
+        setSchedulerMsg(e instanceof Error ? e.message : 'Failed to load scheduler')
+      )
   }, [])
 
+  const handleSaveScheduler = async () => {
+    setSavingScheduler(true)
+    setSchedulerMsg(null)
+    try {
+      const minutes = Number(intervalInput)
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+        throw new Error('Interval must be an integer between 0 and 1440 minutes')
+      }
+      const updated = await api.updateScheduler({
+        interval_minutes: minutes,
+        enabled: enabledInput,
+      })
+      applyScheduler(updated)
+      setSchedulerMsg('Saved')
+    } catch (e) {
+      setSchedulerMsg(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSavingScheduler(false)
+    }
+  }
+
+  const handleRunNow = async () => {
+    setRunningNow(true)
+    setSchedulerMsg(null)
+    try {
+      await api.triggerSync()
+      setSchedulerMsg('Sync triggered')
+    } catch (e) {
+      setSchedulerMsg(e instanceof Error ? e.message : 'Trigger failed')
+    } finally {
+      setRunningNow(false)
+    }
+  }
+
   const oauthOk = googleStatus === 'valid'
+  const schedulerDirty =
+    scheduler != null &&
+    (Number(intervalInput) !== scheduler.interval_minutes ||
+      enabledInput !== scheduler.enabled)
 
   return (
     <>
@@ -81,6 +143,77 @@ export function ClassroomSettingsPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Scheduler</CardTitle>
+            <CardDescription>
+              Automatic Classroom cache sync. Changes are saved to the database
+              and take effect immediately (persist across restarts).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div className='flex items-center justify-between'>
+              <div className='space-y-0.5'>
+                <Label htmlFor='scheduler-enabled'>Enabled</Label>
+                <p className='text-muted-foreground text-xs'>
+                  Turn the scheduled background sync on or off
+                </p>
+              </div>
+              <Switch
+                id='scheduler-enabled'
+                checked={enabledInput}
+                onCheckedChange={setEnabledInput}
+              />
+            </div>
+            <Separator />
+            <div className='flex flex-wrap items-end gap-3'>
+              <div className='space-y-1'>
+                <Label htmlFor='scheduler-interval'>Interval (minutes)</Label>
+                <Input
+                  id='scheduler-interval'
+                  type='number'
+                  min={0}
+                  max={1440}
+                  value={intervalInput}
+                  onChange={(e) => setIntervalInput(e.target.value)}
+                  className='w-32'
+                />
+              </div>
+              <Button
+                onClick={() => void handleSaveScheduler()}
+                disabled={savingScheduler || !schedulerDirty}
+              >
+                {savingScheduler ? 'Saving…' : 'Save'}
+              </Button>
+              <Button
+                variant='outline'
+                onClick={() => void handleRunNow()}
+                disabled={runningNow}
+              >
+                <RefreshCw className={runningNow ? 'animate-spin' : ''} />
+                Run now
+              </Button>
+            </div>
+            <div className='text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs'>
+              <span>
+                Status:{' '}
+                <Badge variant={scheduler?.job_scheduled ? 'secondary' : 'outline'}>
+                  {scheduler?.job_scheduled ? 'active' : 'idle'}
+                </Badge>
+              </span>
+              <span>
+                Next run:{' '}
+                {scheduler?.next_run_time
+                  ? new Date(scheduler.next_run_time).toLocaleString()
+                  : '—'}
+              </span>
+            </div>
+            {schedulerMsg && (
+              <p className='text-muted-foreground text-xs'>{schedulerMsg}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Setup instructions</CardTitle>
             <CardDescription>
               Required steps when credentials are missing or scopes change
@@ -102,12 +235,13 @@ export function ClassroomSettingsPage() {
             <div>
               <p className='font-medium'>2. Background sync interval</p>
               <p className='text-muted-foreground'>
-                Set{' '}
+                Configure the schedule in the <strong>Scheduler</strong> card
+                above (saved to the database).{' '}
                 <code className='rounded bg-muted px-1 py-0.5'>
                   CLASSROOM_SYNC_INTERVAL_MINUTES
                 </code>{' '}
                 in <code className='rounded bg-muted px-1 py-0.5'>.env</code>{' '}
-                (default 30). Set to 0 to disable automatic sync.
+                only seeds the initial default (30) on first run.
               </p>
             </div>
             <Separator />

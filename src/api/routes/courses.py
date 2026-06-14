@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.deps import get_db_session
@@ -68,13 +68,24 @@ async def get_classwork(
     course_id: str,
     limit: Optional[int] = None,
     offset: int = 0,
+    topic_id: Optional[str] = Query(
+        default=None,
+        description="Optional topic ID to filter coursework and materials (for Topic filter). Omit for all.",
+    ),
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     if not await cache.get_cached_course(session, course_id):
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
-    coursework = await cache.list_cached_coursework(session, course_id, limit=limit, offset=offset)
+
+    # Always return the full list of topics so the UI can build a complete "Topic filter"
     topics = await cache.list_cached_topics(session, course_id)
-    materials = await cache.list_cached_materials(session, course_id)
+
+    # coursework + materials can be filtered by the topic for efficient "Topic filter" views
+    coursework = await cache.list_cached_coursework(
+        session, course_id, limit=limit, offset=offset, topic_id=topic_id
+    )
+    materials = await cache.list_cached_materials(session, course_id, topic_id=topic_id)
+
     return {
         "coursework": [
             {
@@ -106,6 +117,7 @@ async def get_classwork(
             }
             for m in materials
         ],
+        "topic_filter": topic_id,  # echo back what filter was applied (null = all)
     }
 
 

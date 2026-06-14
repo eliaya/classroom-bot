@@ -1,12 +1,11 @@
 from __future__ import annotations
-import asyncio
 import logging
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import courses, health, sync
+from src.api.routes import courses, health, scheduler, sync
+from src.api.services.scheduler_service import SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
 
@@ -15,7 +14,7 @@ logger = logging.getLogger("classroom_sync.api")
 
 def create_app() -> FastAPI:
     setup_logging()
-    app = FastAPI(title="Classroom Bot API", version="0.2.0")
+    app = FastAPI(title="Classroom Bot API", version="0.3.0")
 
     origins = [o.strip() for o in settings.API_CORS_ORIGINS.split(",") if o.strip()]
     app.add_middleware(
@@ -29,34 +28,23 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(courses.router, prefix="/api")
     app.include_router(sync.router, prefix="/api")
+    app.include_router(scheduler.router, prefix="/api")
 
-    scheduler = AsyncIOScheduler()
+    scheduler_service = SchedulerService()
+    app.state.scheduler_service = scheduler_service
 
     @app.on_event("startup")
     async def on_startup() -> None:
         await init_db()
         logger.info("API database initialized")
+        from src.database import async_session_factory
 
-        if settings.CLASSROOM_SYNC_INTERVAL_MINUTES > 0:
-            from src.api.routes.sync import _run_full_sync
-
-            scheduler.add_job(
-                _run_full_sync,
-                "interval",
-                minutes=settings.CLASSROOM_SYNC_INTERVAL_MINUTES,
-                id="classroom_cache_sync",
-                replace_existing=True,
-            )
-            scheduler.start()
-            logger.info(
-                "Scheduled Classroom cache sync every %s minutes",
-                settings.CLASSROOM_SYNC_INTERVAL_MINUTES,
-            )
+        async with async_session_factory() as session:
+            await scheduler_service.apply_persisted_setting(session)
 
     @app.on_event("shutdown")
     async def on_shutdown() -> None:
-        if scheduler.running:
-            scheduler.shutdown(wait=False)
+        scheduler_service.shutdown()
 
     return app
 

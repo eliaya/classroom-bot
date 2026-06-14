@@ -1,8 +1,10 @@
 from __future__ import annotations
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -102,3 +104,11 @@ def normalize_database_url(database_url: str) -> str:
 settings.DATABASE_URL = normalize_database_url(settings.DATABASE_URL)
 
 logger = logging.getLogger("classroom_sync")
+
+
+# Japan (Tokyo) timezone helper for server times (as requested)
+TOKYO_TZ = ZoneInfo("Asia/Tokyo")
+
+def now_jst() -> datetime:
+    """Return current time in Asia/Tokyo timezone (server time)."""
+    return datetime.now(TOKYO_TZ)

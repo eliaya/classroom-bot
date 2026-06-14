@@ -52,4 +52,18 @@ All notable changes to this project are documented here.
 - Sync service and `/api/status` now surface the real underlying credential error (e.g. specific scope list or file path) instead of only the previous generic message.
 - 同步服务与状态接口会返回真实的凭证错误详情（例如具体缺失的 scope 或文件路径），而非仅显示通用“凭证缺失或无效”。
 
-## Unreleased
+## [0.3.0] - 2026-06-14
+
+### Added / 新增
+- `SchedulerService` (`src/api/services/scheduler_service.py`) — a dedicated service that owns the scheduled Classroom sync, unifying the manual and scheduled sync code path and exposing live control (`apply`, `status`, `run_once`).
+- 新增 `SchedulerService`：統一手動與排程同步的執行路徑，提供即時控制（`apply` / `status` / `run_once`）。
+- Standalone Scheduler Entry (`src/scheduler_entry.py`) — run the sync outside the API/bot process: `python -m src.scheduler_entry --once` (run once) or `--loop` (run on the configured interval). Useful as a dedicated scheduler container or cron target.
+- 新增獨立排程入口 `src/scheduler_entry.py`：`--once` 跑一次、`--loop` 依設定間隔持續執行，可作為獨立排程容器或 cron 目標。
+- WebUI Scheduler setting on the Settings page: toggle enabled, change the interval (minutes), see next run time, and trigger a run now. Changes are persisted to the database (`scheduler_settings` table) and take effect immediately, surviving restarts.
+- Web 設定頁新增 Scheduler 設定：可開關、調整間隔（分鐘）、查看下次執行時間並立即觸發。設定持久化於資料庫（`scheduler_settings`）、即時生效且重啟後保留。
+- `GET /api/scheduler` and `PATCH /api/scheduler` endpoints for reading and updating the scheduler configuration.
+- 新增 `GET /api/scheduler` 與 `PATCH /api/scheduler` 端點以讀取與更新排程設定。
+
+### Changed / 變更
+- `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
+- `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。

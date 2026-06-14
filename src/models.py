@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from typing import Any, Optional
 from sqlmodel import Field, SQLModel, UniqueConstraint
+from src.config import now_jst
 
 
 # --- Discord bot tables (unchanged) ---
@@ -34,7 +35,7 @@ class PostedAnnouncement(SQLModel, table=True):
     announcement_id: str = Field(index=True)
     course_id: str = Field(index=True)
     guild_id: int = Field(index=True)
-    posted_at: datetime = Field(default_factory=datetime.utcnow)
+    posted_at: datetime = Field(default_factory=now_jst)
 
 
 # --- Google Classroom cache tables ---
@@ -52,7 +53,7 @@ class ClassroomCourse(SQLModel, table=True):
     description_heading: Optional[str] = None
     description: Optional[str] = None
     raw_json: Optional[str] = None
-    synced_at: datetime = Field(default_factory=datetime.utcnow)
+    synced_at: datetime = Field(default_factory=now_jst)
 
 
 class ClassroomAnnouncement(SQLModel, table=True):
@@ -72,7 +73,7 @@ class ClassroomAnnouncement(SQLModel, table=True):
     update_time: Optional[str] = Field(default=None, index=True)
     alternate_link: Optional[str] = None
     raw_json: Optional[str] = None
-    synced_at: datetime = Field(default_factory=datetime.utcnow)
+    synced_at: datetime = Field(default_factory=now_jst)
 
 
 class ClassroomCoursework(SQLModel, table=True):
@@ -100,7 +101,7 @@ class ClassroomCoursework(SQLModel, table=True):
     update_time: Optional[str] = Field(default=None, index=True)
     alternate_link: Optional[str] = None
     raw_json: Optional[str] = None
-    synced_at: datetime = Field(default_factory=datetime.utcnow)
+    synced_at: datetime = Field(default_factory=now_jst)
 
 
 class ClassroomTopic(SQLModel, table=True):
@@ -115,7 +116,7 @@ class ClassroomTopic(SQLModel, table=True):
     name: Optional[str] = None
     update_time: Optional[str] = None
     raw_json: Optional[str] = None
-    synced_at: datetime = Field(default_factory=datetime.utcnow)
+    synced_at: datetime = Field(default_factory=now_jst)
 
 
 class ClassroomMaterial(SQLModel, table=True):
@@ -136,7 +137,7 @@ class ClassroomMaterial(SQLModel, table=True):
     update_time: Optional[str] = None
     alternate_link: Optional[str] = None
     raw_json: Optional[str] = None
-    synced_at: datetime = Field(default_factory=datetime.utcnow)
+    synced_at: datetime = Field(default_factory=now_jst)
 
 
 class ClassroomPerson(SQLModel, table=True):
@@ -153,7 +154,7 @@ class ClassroomPerson(SQLModel, table=True):
     email: Optional[str] = None
     photo_url: Optional[str] = None
     raw_json: Optional[str] = None
-    synced_at: datetime = Field(default_factory=datetime.utcnow)
+    synced_at: datetime = Field(default_factory=now_jst)
 
 
 class ClassroomSyncRun(SQLModel, table=True):
@@ -164,9 +165,25 @@ class ClassroomSyncRun(SQLModel, table=True):
     resource: str = Field(index=True)  # all | course | announcements | ...
     status: str = Field(default="running")  # running | success | error
     items_count: int = Field(default=0)
+    message: Optional[str] = Field(default=None)  # e.g. current activity for live progress
+    percent: Optional[int] = Field(default=None)  # 0-100 live progress percentage
     error_message: Optional[str] = None
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=now_jst)
     finished_at: Optional[datetime] = None
+
+
+class SchedulerSetting(SQLModel, table=True):
+    """Singleton row (id=1) holding the persisted SchedulerService config.
+
+    Seeded from CLASSROOM_SYNC_INTERVAL_MINUTES on first run; afterwards the
+    WebUI is the source of truth so changes survive restarts.
+    """
+    __tablename__ = "scheduler_settings"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    interval_minutes: int = Field(default=30)
+    enabled: bool = Field(default=True)
+    updated_at: datetime = Field(default_factory=now_jst)
 
 
 def dump_json(data: Any) -> str:

@@ -1,6 +1,6 @@
 # Classroom Bot / Google Classroom ⇄ Discord 同步機器人
 
-**v0.2.0** · [日本語](README.md) | [English](README.en.md)
+**v0.3.0** · [日本語](README.md) | [English](README.en.md)
 
 ## 概要
 
@@ -75,6 +75,21 @@ docker compose up -d --build
 docker compose ps
 docker compose logs -f bot
 ```
+
+## 排程（Scheduler）
+
+Classroom 快取的自動同步由 `SchedulerService` 管理。
+
+- **Web 設定**：在管理介面 **Settings** 頁的 **Scheduler** 卡可開關、調整間隔（分鐘）、查看下次執行時間並立即觸發同步。設定會持久化於資料庫（`scheduler_settings`），即時生效且重啟後保留。
+- **初始預設**：`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES`（預設 30）僅在首次啟動時作為種子值；之後以 Web 設定為準。
+- **獨立排程入口**（可作為獨立排程容器或 cron 目標）：
+
+  ```bash
+  python -m src.scheduler_entry --once   # 跑一次後結束
+  python -m src.scheduler_entry --loop   # 依設定間隔持續執行
+  ```
+
+- **API**：`GET /api/scheduler` 讀取狀態、`PATCH /api/scheduler` 更新設定。
 
 ## 文件
 

@@ -9,7 +9,12 @@ RUN pnpm install --frozen-lockfile
 
 COPY web/ ./
 
-RUN pnpm exec tsc -b && pnpm exec vite build
+# Inject a build timestamp so the running image is identifiable
+# (visible in the UI via VITE_BUILD_TIME and at /BUILD_INFO.txt).
+RUN BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" && \
+    pnpm exec tsc -b && \
+    VITE_BUILD_TIME="$BUILD_TIME" pnpm exec vite build && \
+    printf 'BUILD_TIME=%s\n' "$BUILD_TIME" > dist/BUILD_INFO.txt
 
 FROM nginx:1.27-alpine AS runtime
 

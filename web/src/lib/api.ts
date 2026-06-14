@@ -46,9 +46,37 @@ export type SyncRun = {
   resource: string
   status: string
   items_count: number
+  message?: string | null
+  percent?: number | null
   error_message?: string | null
   started_at?: string | null
   finished_at?: string | null
+}
+
+export type SchedulerStatus = {
+  enabled: boolean
+  interval_minutes: number
+  running: boolean
+  job_scheduled: boolean
+  next_run_time?: string | null
+}
+
+export type Topic = { id?: string; name?: string; [k: string]: unknown }
+export type ClassworkItem = {
+  id?: string
+  topic_id?: string | null
+  title?: string
+  work_type?: string
+  update_time?: string
+  alternate_link?: string
+  description?: string
+  [k: string]: unknown
+}
+export type ClassworkResponse = {
+  coursework: ClassworkItem[]
+  topics: Topic[]
+  materials: ClassworkItem[]
+  topic_filter?: string | null
 }
 
 export const api = {
@@ -57,6 +85,7 @@ export const api = {
     request<{
       google_credentials: string
       python?: string
+      version?: string
       google?: {
         token_exists: boolean
         client_secret_exists: boolean
@@ -67,18 +96,17 @@ export const api = {
         fix_hint?: string
       }
     }>('/status'),
+  version: () => request<{ version: string }>('/version'),
   listCourses: () => request<{ items: Course[]; total: number }>('/courses'),
   getCourse: (id: string) => request<Course>(`/courses/${id}`),
   getStream: (id: string, limit = 50, offset = 0) =>
     request<{ items: StreamItem[]; count: number }>(
       `/courses/${id}/stream?limit=${limit}&offset=${offset}`
     ),
-  getClasswork: (id: string) =>
-    request<{
-      coursework: Array<Record<string, unknown>>
-      topics: Array<Record<string, unknown>>
-      materials: Array<Record<string, unknown>>
-    }>(`/courses/${id}/classwork`),
+  getClasswork: (id: string, topicId?: string | null) => {
+    const qs = topicId ? `?topic_id=${encodeURIComponent(topicId)}` : ''
+    return request<ClassworkResponse>(`/courses/${id}/classwork${qs}`)
+  },
   getPeople: (id: string) =>
     request<{
       items: Array<{
@@ -89,8 +117,23 @@ export const api = {
       }>
       total: number
     }>(`/courses/${id}/people`),
-  syncStatus: () => request<{ runs: SyncRun[] }>('/sync/status'),
+  syncStatus: (params: { page?: number; limit?: number; search?: string; status?: string; resource?: string } = {}) => {
+    const searchParams = new URLSearchParams()
+    Object.entries(params).forEach(([k, v]) => {
+      if (v != null && v !== '') searchParams.append(k, String(v))
+    })
+    const qs = searchParams.toString()
+    return request<{ runs: SyncRun[]; total?: number; page?: number; limit?: number }>(`/sync/status${qs ? `?${qs}` : ''}`)
+  },
   triggerSync: () => request<{ status: string }>('/sync', { method: 'POST' }),
   triggerCourseSync: (courseId: string) =>
     request<{ status: string }>(`/sync/${courseId}`, { method: 'POST' }),
+  clearDeadRun: (runId: number) =>
+    request<{ status: string; run_id: number }>(`/sync/runs/${runId}/clear`, { method: 'POST' }),
+  getScheduler: () => request<SchedulerStatus>('/scheduler'),
+  updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>
+    request<SchedulerStatus>('/scheduler', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 }

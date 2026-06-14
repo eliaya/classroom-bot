@@ -1,6 +1,6 @@
 # Classroom Bot / Google Classroom ⇄ Discord Sync Bot
 
-**v0.2.0** · [日本語](README.md) | [繁體中文](README.zh-TW.md)
+**v0.3.0** · [日本語](README.md) | [繁體中文](README.zh-TW.md)
 
 ## Overview
 
@@ -75,6 +75,21 @@ docker compose up -d --build
 docker compose ps
 docker compose logs -f bot
 ```
+
+## Scheduler
+
+Automatic Classroom cache sync is managed by `SchedulerService`.
+
+- **Web setting**: the **Scheduler** card on the admin **Settings** page lets you toggle it on/off, change the interval (minutes), see the next run time, and trigger a run now. Changes are persisted to the database (`scheduler_settings`), take effect immediately, and survive restarts.
+- **Initial default**: `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` (default 30) only seeds the value on first run; afterwards the Web setting is the source of truth.
+- **Standalone Scheduler Entry** (use as a dedicated scheduler container or cron target):
+
+  ```bash
+  python -m src.scheduler_entry --once   # run once and exit
+  python -m src.scheduler_entry --loop   # run on the configured interval
+  ```
+
+- **API**: `GET /api/scheduler` to read status, `PATCH /api/scheduler` to update.
 
 ## Documentation
 

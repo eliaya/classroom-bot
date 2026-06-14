@@ -259,17 +259,21 @@ class GoogleClassroomService:
         self,
         course_id: str,
         *,
+        topic_id: Optional[str] = None,
         page_size: int = CLASSROOM_MAX_PAGE_SIZE,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch coursework from a course, sorted by updateTime descending.
 
         When ``limit`` is None, all pages are retrieved.
+        Pass ``topic_id`` to fetch only items assigned to that topic (Google Classroom topic filter).
         """
         def _sync_fetch() -> List[Dict[str, Any]]:
             def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
                 kwargs["courseId"] = course_id
                 kwargs["orderBy"] = "updateTime desc"
+                if topic_id:
+                    kwargs["topicId"] = topic_id
                 return service.courses().courseWork().list(**kwargs).execute()
 
             return self._fetch_paginated(
@@ -337,11 +341,15 @@ class GoogleClassroomService:
         self,
         course_id: str,
         *,
+        topic_id: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        """Fetch course work materials. Supports optional topic_id to filter content under a specific topic."""
         def _sync_fetch() -> List[Dict[str, Any]]:
             def fetch_page(service: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
                 kwargs["courseId"] = course_id
+                if topic_id:
+                    kwargs["topicId"] = topic_id
                 return service.courses().courseWorkMaterials().list(**kwargs).execute()
 
             return self._fetch_paginated(fetch_page, "courseWorkMaterial", limit=limit)

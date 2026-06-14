@@ -24,10 +24,46 @@ class ClassroomSyncService:
                 raise RuntimeError(detail)
 
             courses = await google_service.list_courses()
-            for course in courses:
-                total += await self._sync_course(session, course["id"], track_run=False)
+            total_courses = len(courses)
+
+            # Initial progress
+            await cache.update_sync_run_progress(
+                session, run,
+                percent=3,
+                message=f"Found {total_courses} courses. Starting full sync..."
+            )
+
+            for idx, course in enumerate(courses, 1):
+                cname = course.get("name") or str(course.get("id", ""))[:12]
+                # Pre-course progress
+                pre_pct = int(((idx - 1) / max(total_courses, 1)) * 100)
+                await cache.update_sync_run_progress(
+                    session, run,
+                    message=f"Syncing course {idx}/{total_courses}: {cname}",
+                    percent=max(5, min(92, pre_pct)),
+                )
+
+                added = await self._sync_course(session, course["id"], track_run=False)
+                total += added
+
+                # Post-course progress with accumulated items
+                post_pct = int((idx / max(total_courses, 1)) * 92)
+                await cache.update_sync_run_progress(
+                    session, run,
+                    items_count=total,
+                    message=f"Done {idx}/{total_courses}: {cname} (+{added} items, total {total})",
+                    percent=post_pct,
+                )
+
+            # Finalizing
+            await cache.update_sync_run_progress(
+                session, run,
+                percent=98,
+                message="Finalizing and committing cache..."
+            )
+
             await cache.finish_sync_run(session, run, status="success", items_count=total)
-            return {"status": "success", "courses": len(courses), "items": total}
+            return {"status": "success", "courses": total_courses, "items": total}
         except Exception as exc:
             logger.exception("Full classroom sync failed")
             await cache.finish_sync_run(session, run, status="error", items_count=total, error_message=str(exc))
@@ -41,7 +77,21 @@ class ClassroomSyncService:
                     "Google credentials missing or invalid."
                 )
                 raise RuntimeError(detail)
+
+            await cache.update_sync_run_progress(
+                session, run,
+                percent=5,
+                message=f"Starting sync for course {course_id}"
+            )
+
             count = await self._sync_course(session, course_id, track_run=False)
+
+            await cache.update_sync_run_progress(
+                session, run,
+                percent=95,
+                items_count=count,
+                message=f"Sync complete for course {course_id}"
+            )
             await cache.finish_sync_run(session, run, status="success", items_count=count)
             return {"status": "success", "course_id": course_id, "items": count}
         except Exception as exc:
@@ -60,6 +110,7 @@ class ClassroomSyncService:
         announcements = await google_service.fetch_announcements(course_id)
         count += await cache.upsert_announcements(session, course_id, announcements)
 
+        # Broad fetch first (captures uncategorized items + everything)
         coursework = await google_service.fetch_coursework(course_id)
         count += await cache.upsert_coursework(session, course_id, coursework)
 
@@ -68,6 +119,20 @@ class ClassroomSyncService:
 
         materials = await google_service.fetch_course_work_materials(course_id)
         count += await cache.upsert_materials(session, course_id, materials)
+
+        # Explicitly fetch content **under each topic** (using Google topicId filter)
+        # This guarantees that "Topic filter" contents are fully pulled into localhost cache,
+        # even if broad list has any visibility/state quirks.
+        for t in topics:
+            tid = t.get("id")
+            if tid:
+                t_cw = await google_service.fetch_coursework(course_id, topic_id=tid)
+                if t_cw:
+                    count += await cache.upsert_coursework(session, course_id, t_cw)
+
+                t_mat = await google_service.fetch_course_work_materials(course_id, topic_id=tid)
+                if t_mat:
+                    count += await cache.upsert_materials(session, course_id, t_mat)
 
         teachers = await google_service.fetch_teachers(course_id)
         count += await cache.upsert_people(session, course_id, "teacher", teachers)

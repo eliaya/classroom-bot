@@ -1,6 +1,6 @@
 # Classroom Bot / Google Classroom ⇄ Discord 同期ボット
 
-**v0.2.0** · [English](README.en.md) | [繁體中文](README.zh-TW.md)
+**v0.3.0** · [English](README.en.md) | [繁體中文](README.zh-TW.md)
 
 ## 概要
 
@@ -75,6 +75,21 @@ docker compose up -d --build
 docker compose ps
 docker compose logs -f bot
 ```
+
+## スケジューラー
+
+Classroom キャッシュの自動同期は `SchedulerService` が管理します。
+
+- **Web 設定**：管理画面の **Settings** ページにある **Scheduler** カードで、有効/無効の切り替え、間隔（分）の変更、次回実行時刻の確認、即時実行ができます。変更はデータベース（`scheduler_settings`）に永続化され、即時反映・再起動後も保持されます。
+- **初期デフォルト**：`.env` の `CLASSROOM_SYNC_INTERVAL_MINUTES`（既定 30）は初回起動時のシード値のみで、以降は Web 設定が優先されます。
+- **独立スケジューラーエントリ**（専用スケジューラーコンテナや cron のターゲットとして利用可）：
+
+  ```bash
+  python -m src.scheduler_entry --once   # 一度だけ実行して終了
+  python -m src.scheduler_entry --loop   # 設定された間隔で継続実行
+  ```
+
+- **API**：`GET /api/scheduler` で状態取得、`PATCH /api/scheduler` で更新。
 
 ## ドキュメント
 

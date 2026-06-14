@@ -3,9 +3,11 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.config import now_jst
 from src.models import (
     ClassroomAnnouncement,
     ClassroomCourse,
@@ -35,7 +37,7 @@ def _course_from_api(data: Dict[str, Any]) -> ClassroomCourse:
         description_heading=data.get("descriptionHeading"),
         description=data.get("description"),
         raw_json=dump_json(data),
-        synced_at=datetime.utcnow(),
+        synced_at=now_jst(),
     )
 
 
@@ -51,7 +53,7 @@ def _announcement_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomAnn
         update_time=data.get("updateTime"),
         alternate_link=data.get("alternateLink"),
         raw_json=dump_json(data),
-        synced_at=datetime.utcnow(),
+        synced_at=now_jst(),
     )
 
 
@@ -77,7 +79,7 @@ def _coursework_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomCours
         update_time=data.get("updateTime"),
         alternate_link=data.get("alternateLink"),
         raw_json=dump_json(data),
-        synced_at=datetime.utcnow(),
+        synced_at=now_jst(),
     )
 
 
@@ -88,7 +90,7 @@ def _topic_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomTopic:
         name=data.get("name"),
         update_time=data.get("updateTime"),
         raw_json=dump_json(data),
-        synced_at=datetime.utcnow(),
+        synced_at=now_jst(),
     )
 
 
@@ -105,7 +107,7 @@ def _material_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomMateria
         update_time=data.get("updateTime"),
         alternate_link=data.get("alternateLink"),
         raw_json=dump_json(data),
-        synced_at=datetime.utcnow(),
+        synced_at=now_jst(),
     )
 
 
@@ -122,7 +124,7 @@ def _person_from_api(course_id: str, role: str, data: Dict[str, Any]) -> Classro
         email=emails,
         photo_url=profile.get("photoUrl"),
         raw_json=dump_json(data),
-        synced_at=datetime.utcnow(),
+        synced_at=now_jst(),
     )
 
 
@@ -274,13 +276,20 @@ async def list_cached_coursework(
     *,
     limit: Optional[int] = None,
     offset: int = 0,
+    topic_id: Optional[str] = None,
 ) -> List[ClassroomCoursework]:
+    """List cached coursework for a course.
+
+    If ``topic_id`` is provided, only return items that belong to that topic.
+    Pass topic_id=None explicitly only has no special meaning here (use client-side for "uncategorized").
+    """
     stmt = (
         select(ClassroomCoursework)
         .where(ClassroomCoursework.course_id == course_id)
-        .order_by(ClassroomCoursework.update_time.desc())
-        .offset(offset)
     )
+    if topic_id is not None:
+        stmt = stmt.where(ClassroomCoursework.topic_id == topic_id)
+    stmt = stmt.order_by(ClassroomCoursework.update_time.desc()).offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
     result = await session.execute(stmt)
@@ -294,12 +303,18 @@ async def list_cached_topics(session: AsyncSession, course_id: str) -> List[Clas
     return list(result.scalars().all())
 
 
-async def list_cached_materials(session: AsyncSession, course_id: str) -> List[ClassroomMaterial]:
-    result = await session.execute(
-        select(ClassroomMaterial)
-        .where(ClassroomMaterial.course_id == course_id)
-        .order_by(ClassroomMaterial.update_time.desc())
-    )
+async def list_cached_materials(
+    session: AsyncSession,
+    course_id: str,
+    *,
+    topic_id: Optional[str] = None,
+) -> List[ClassroomMaterial]:
+    """List cached course work materials. Supports optional topic_id filter (for Topic filter use)."""
+    stmt = select(ClassroomMaterial).where(ClassroomMaterial.course_id == course_id)
+    if topic_id is not None:
+        stmt = stmt.where(ClassroomMaterial.topic_id == topic_id)
+    stmt = stmt.order_by(ClassroomMaterial.update_time.desc())
+    result = await session.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -407,13 +422,96 @@ async def finish_sync_run(
     run.status = status
     run.items_count = items_count
     run.error_message = error_message
-    run.finished_at = datetime.utcnow()
+    run.finished_at = now_jst()
+    # Success runs always finish at 100%. The transient "finalizing" step may
+    # have left percent at 98; normalize it so the UI never shows a stuck 98%.
+    if status == "success":
+        run.percent = 100
     session.add(run)
     await session.commit()
 
 
-async def latest_sync_runs(session: AsyncSession, limit: int = 20) -> List[ClassroomSyncRun]:
-    result = await session.execute(
-        select(ClassroomSyncRun).order_by(ClassroomSyncRun.started_at.desc()).limit(limit)
-    )
-    return list(result.scalars().all())
+async def update_sync_run_progress(
+    session: AsyncSession,
+    run: ClassroomSyncRun,
+    *,
+    items_count: Optional[int] = None,
+    message: Optional[str] = None,
+    percent: Optional[int] = None,
+) -> None:
+    """Live update a running sync record with progress info (message, percent, partial items)."""
+    if items_count is not None:
+        run.items_count = items_count
+    if message is not None:
+        run.message = message
+    if percent is not None:
+        run.percent = max(0, min(100, percent))
+    session.add(run)
+    await session.commit()
+
+
+async def latest_sync_runs(
+    session: AsyncSession,
+    limit: int = 20,
+    page: int = 1,
+    search: str | None = None,
+    status: str | None = None,
+    resource: str | None = None,
+) -> tuple[List[ClassroomSyncRun], int]:
+    """Return (runs, total) with optional server-side pagination, search and filtering.
+    Backward compatible: if no page/search provided, behaves like before (recent N items).
+    """
+    stmt = select(ClassroomSyncRun)
+    conditions = []
+    if status:
+        conditions.append(ClassroomSyncRun.status == status)
+    if resource:
+        conditions.append(ClassroomSyncRun.resource == resource)
+    if search:
+        like = f"%{search}%"
+        conditions.append(
+            or_(
+                ClassroomSyncRun.message.ilike(like),
+                ClassroomSyncRun.error_message.ilike(like),
+                ClassroomSyncRun.resource.ilike(like),
+            )
+        )
+    if conditions:
+        stmt = stmt.where(*conditions)
+
+    # total count
+    count_stmt = select(func.count()).select_from(ClassroomSyncRun)
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
+    total = (await session.execute(count_stmt)).scalar_one() or 0
+
+    # paginated data
+    offset = (page - 1) * limit
+    stmt = stmt.order_by(ClassroomSyncRun.started_at.desc()).offset(offset).limit(limit)
+    result = await session.execute(stmt)
+    runs = list(result.scalars().all())
+    return runs, total
+
+
+async def clear_dead_sync_run(
+    session: AsyncSession,
+    run_id: int,
+    *,
+    error_message: str = "Cleared manually — job was stuck/dead (no longer executing)",
+) -> bool:
+    """Force-clear a stuck 'running' sync job (e.g. after container crash or hung process).
+    Returns True if a running job was found and marked as error.
+    """
+    stmt = select(ClassroomSyncRun).where(ClassroomSyncRun.id == run_id)
+    result = await session.execute(stmt)
+    run = result.scalar_one_or_none()
+    if not run or run.status != "running":
+        return False
+
+    run.status = "error"
+    run.error_message = error_message
+    run.finished_at = now_jst()
+    # Do not clobber existing items_count / percent / message for audit trail
+    session.add(run)
+    await session.commit()
+    return True

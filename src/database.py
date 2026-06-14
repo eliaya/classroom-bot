@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 from typing import AsyncGenerator
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
@@ -37,6 +38,19 @@ async def init_db() -> None:
             # We import all models to ensure they are registered on SQLModel.metadata
             import src.models  # noqa: F401 — register all SQLModel tables
             await conn.run_sync(SQLModel.metadata.create_all)
+
+            # Lightweight migration for live progress columns (added for real-time progress bar).
+            # We use PRAGMA checks (SQLite-specific but safe here) + text() to avoid
+            # "Not an executable object" (SQLAlchemy 2.0+) and to avoid noisy duplicate-column exceptions.
+            async def _has_column(conn, table: str, column: str) -> bool:
+                res = await conn.execute(text(f"PRAGMA table_info({table})"))
+                # PRAGMA returns rows: (cid, name, type, notnull, dflt_value, pk)
+                names = [row[1] for row in res.fetchall()]
+                return column in names
+
+            for col_name, col_type in [("message", "TEXT"), ("percent", "INTEGER")]:
+                if not await _has_column(conn, "classroom_sync_runs", col_name):
+                    await conn.execute(text(f"ALTER TABLE classroom_sync_runs ADD COLUMN {col_name} {col_type}"))
         logger.info("Database initialized successfully.")
     except Exception as e:
         logger.critical(f"Failed to initialize database: {e}")
