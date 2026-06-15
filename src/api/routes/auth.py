@@ -84,7 +84,14 @@ async def start(origin: str = Query(..., description="Browser-visible web origin
         logger.exception("Failed to build OAuth authorization URL")
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"OAuth init failed: {exc}")
 
-    _PENDING[state] = {"redirect_uri": redirect_uri, "origin": origin}
+    # Persist the PKCE code_verifier generated for this flow; the callback builds
+    # a fresh Flow and must replay the same verifier or Google rejects the token
+    # exchange with "invalid_grant: Missing code verifier".
+    _PENDING[state] = {
+        "redirect_uri": redirect_uri,
+        "origin": origin,
+        "code_verifier": flow.code_verifier or "",
+    }
     return {"authorization_url": auth_url, "redirect_uri": redirect_uri, "state": state}
 
 
@@ -136,6 +143,10 @@ async def callback(
             redirect_uri=redirect_uri,
             state=state,
         )
+        # Replay the PKCE verifier captured in /start for this state.
+        verifier = pending.get("code_verifier")
+        if verifier:
+            flow.code_verifier = verifier
         flow.fetch_token(code=code)
         creds = flow.credentials
 

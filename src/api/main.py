@@ -4,6 +4,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src import __version__
 from src.api.routes import auth, bot, courses, health, scheduler, sync
 from src.api.services.scheduler_service import SchedulerService
 from src.config import settings, setup_logging
@@ -14,7 +15,7 @@ logger = logging.getLogger("classroom_sync.api")
 
 def create_app() -> FastAPI:
     setup_logging()
-    app = FastAPI(title="Classroom Bot API", version="0.5.0")
+    app = FastAPI(title="Classroom Bot API", version=__version__)
 
     origins = [o.strip() for o in settings.API_CORS_ORIGINS.split(",") if o.strip()]
     app.add_middleware(

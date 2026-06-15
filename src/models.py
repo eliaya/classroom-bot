@@ -160,6 +160,39 @@ class ClassroomMaterial(SQLModel, table=True):
     removed_at: Optional[datetime] = Field(default=None, index=True)
 
 
+class ClassroomAttachment(SQLModel, table=True):
+    """A single classwork attachment (coursework/material material) whose content
+    is fetched and cached locally during sync. Drive files are downloaded/exported
+    to disk; link/form/youtube items are stored as metadata only."""
+    __tablename__ = "classroom_attachments"
+    __table_args__ = (
+        UniqueConstraint("course_id", "item_type", "item_id", "ref_key", name="uq_attachment_ref"),
+    )
+
+    db_id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: str = Field(index=True)
+    item_type: str = Field(index=True)  # coursework | material
+    item_id: str = Field(index=True)
+    # Natural-key discriminator within an item: drive_file_id for Drive files,
+    # otherwise the source URL.
+    ref_key: str = Field(index=True)
+    source: str  # drive | link | form | youtube
+    drive_file_id: Optional[str] = None
+    title: Optional[str] = None
+    source_url: Optional[str] = None  # alternateLink / link url / form url
+    content_type: Optional[str] = None  # stored MIME type
+    file_size: Optional[int] = None  # bytes on disk (when downloaded)
+    local_path: Optional[str] = None  # relative path under ATTACHMENT_STORAGE_DIR
+    exported: bool = Field(default=False)  # True when a Google-native file was exported
+    fetch_status: str = Field(default="pending", index=True)  # pending|fetched|failed|skipped
+    error_message: Optional[str] = None
+    fetched_at: Optional[datetime] = None
+    raw_json: Optional[str] = None
+    synced_at: datetime = Field(default_factory=now_jst)
+    updated_at: Optional[datetime] = Field(default=None, index=True)
+    removed_at: Optional[datetime] = Field(default=None, index=True)
+
+
 class ClassroomPerson(SQLModel, table=True):
     __tablename__ = "classroom_people"
     __table_args__ = (

@@ -1,4 +1,10 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+
+/** Absolute URL for an attachment download path returned by the API
+ * (e.g. `/courses/{id}/attachments/{db_id}/download`). */
+export function fileUrl(path: string): string {
+  return `${API_BASE}${path}`
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = import.meta.env.VITE_ADMIN_API_TOKEN
@@ -70,6 +76,19 @@ export type BotStatus = {
 }
 
 export type Topic = { id?: string; name?: string; [k: string]: unknown }
+
+export type Attachment = {
+  id: number
+  source: 'drive' | 'link' | 'form' | 'youtube'
+  title?: string | null
+  source_url?: string | null
+  content_type?: string | null
+  file_size?: number | null
+  exported?: boolean
+  fetch_status: 'pending' | 'fetched' | 'failed' | 'skipped'
+  download_url?: string | null
+}
+
 export type ClassworkItem = {
   id?: string
   topic_id?: string | null
@@ -78,6 +97,7 @@ export type ClassworkItem = {
   update_time?: string
   alternate_link?: string
   description?: string
+  attachments?: Attachment[]
   [k: string]: unknown
 }
 export type ClassworkResponse = {
@@ -98,6 +118,7 @@ export const api = {
         token_exists: boolean
         client_secret_exists: boolean
         valid: boolean
+        drive_scope?: boolean
         missing_scopes?: string[]
         expired?: boolean | null
         error?: string | null

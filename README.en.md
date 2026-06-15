@@ -1,6 +1,6 @@
 # Classroom Bot / Google Classroom ⇄ Discord Sync Bot
 
-**v0.4.2** · [日本語](README.md) | [繁體中文](README.zh-TW.md)
+**v0.7.0** · [日本語](README.md) | [繁體中文](README.zh-TW.md)
 
 ## Overview
 
@@ -90,6 +90,19 @@ Automatic Classroom cache sync is managed by `SchedulerService`.
   ```
 
 - **API**: `GET /api/scheduler` to read status, `PATCH /api/scheduler` to update.
+
+## Classwork Attachment Sync
+
+During each sync, classwork (coursework/material) attachment content is fetched and cached locally. Drive files are downloaded (PDF / Excel) and Google-native files are exported (Docs → PDF, Sheets → XLSX) to `ATTACHMENT_STORAGE_DIR` (default `data/attachments/`), with metadata recorded in the `classroom_attachments` table. link / form / youtube items are stored as metadata only.
+
+- **Requires the Drive scope**: this feature uses the optional `drive.readonly` scope. **Existing tokens keep working and Classroom sync is unaffected.** Until you enable Drive, attachment downloads are skipped (status `skipped`). To enable, re-authorize on the host:
+
+  ```bash
+  python src/scripts/setup_google_auth.py
+  ```
+
+- **API**: `GET /api/courses/{id}/attachments` (list), `GET /api/courses/{id}/attachments/{db_id}/download` (serves the stored file).
+- **Settings**: `ATTACHMENT_SYNC_ENABLED` / `ATTACHMENT_STORAGE_DIR` / `ATTACHMENT_MAX_BYTES` / `ATTACHMENT_DOWNLOAD_RETRIES`.
 
 ## Documentation
 

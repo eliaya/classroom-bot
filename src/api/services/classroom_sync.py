@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.api.services.attachment_sync import attachment_sync_service
+from src.config import settings
 from src.google_service import google_service
 from src.models import (
     ClassroomCoursework,
@@ -236,6 +238,20 @@ class ClassroomSyncService:
 
         await session.commit()
         logger.info("Synced course %s (%d records)", course_id, count, extra={"job_id": run_id})
+
+        # Attachment content download runs AFTER the cache is durably committed so a
+        # download failure never rolls back or blocks the cache sync. It is fully
+        # self-contained (per-attachment try/except); we still guard the call so a
+        # commit/soft-delete error leaves the session usable for the next course.
+        if settings.ATTACHMENT_SYNC_ENABLED:
+            try:
+                await attachment_sync_service.sync_course_attachments(session, course_id)
+            except Exception:
+                logger.exception(
+                    "Attachment sync failed for course %s", course_id, extra={"job_id": run_id}
+                )
+                await session.rollback()
+
         return count
 
     async def _build_todos(

@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     CLASSROOM_SYNC_INTERVAL_MINUTES: int = 30
     API_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:8080"
 
+    # Classwork attachment content sync (downloads Drive attachments during sync).
+    # Requires the optional Drive scope (re-run setup_google_auth.py); when the
+    # scope is absent, downloads are skipped and Classroom sync is unaffected.
+    ATTACHMENT_SYNC_ENABLED: bool = True
+    ATTACHMENT_STORAGE_DIR: str = "/app/data/attachments"
+    ATTACHMENT_MAX_BYTES: int = 52_428_800  # 50 MB; larger files are skipped
+    ATTACHMENT_DOWNLOAD_RETRIES: int = 2
+
     # Reserved for the next phase: Gmail inbox notifications delivered to Discord.
     # These settings are intentionally inert until the Gmail sync service is implemented.
     GMAIL_NOTIFICATIONS_ENABLED: bool = False

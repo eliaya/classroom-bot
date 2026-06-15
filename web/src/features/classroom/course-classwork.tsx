@@ -10,7 +10,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { api, type ClassworkItem, type ClassworkResponse } from '@/lib/api'
+import {
+  api,
+  fileUrl,
+  type Attachment,
+  type ClassworkItem,
+  type ClassworkResponse,
+} from '@/lib/api'
 
 const UNCATEGORIZED = '__uncat__'
 
@@ -19,12 +25,33 @@ const UNCATEGORIZED = '__uncat__'
 // so a single list shows every sub-item under a topic.
 type UnifiedItem = ClassworkItem & { kind: 'coursework' | 'material' }
 
+function formatBytes(n?: number | null): string {
+  if (!n || n <= 0) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  let v = n
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`
+}
+
+const SOURCE_ICON: Record<Attachment['source'], string> = {
+  drive: '📁',
+  link: '🔗',
+  form: '📝',
+  youtube: '🎥',
+}
+
 export function CourseClassworkPage({ courseId }: { courseId: string }) {
   const [data, setData] = useState<ClassworkResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'classwork' | 'topics'>('classwork')
   // topic filter for the unified classwork view. null = show all
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null)
+  // the classwork item shown in the split-screen content panel. null = closed
+  const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null)
 
   const load = (topicId?: string | null) => {
     api
@@ -188,66 +215,95 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
           )}
         </div>
 
-        <div className='overflow-hidden rounded-md border'>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Topic</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className='w-12' />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredItems.map((row) => (
-                <TableRow key={`${row.kind}-${String(row.id)}`}>
-                  <TableCell className='font-medium'>{String(row.title || '—')}</TableCell>
-                  <TableCell>
-                    <span
-                      className={
-                        'inline-flex items-center rounded px-2 py-0.5 text-xs ' +
-                        (row.kind === 'material'
-                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                          : 'bg-muted')
-                      }
-                    >
-                      {String(row.work_type || '—')}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className='inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs'>
-                      {resolveTopicName(row.topic_id)}
-                    </span>
-                  </TableCell>
-                  <TableCell className='text-muted-foreground text-sm'>
-                    {String(row.update_time || '—')}
-                  </TableCell>
-                  <TableCell>
-                    {row.alternate_link && (
-                      <a
-                        href={String(row.alternate_link)}
-                        target='_blank'
-                        rel='noreferrer'
-                        className='text-primary text-xs underline'
-                      >
-                        open
-                      </a>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredItems.length === 0 && (
+        <div className='flex flex-col gap-3 lg:flex-row lg:items-start'>
+          <div
+            className={
+              'overflow-hidden rounded-md border ' +
+              (selectedItem ? 'lg:w-1/2' : 'w-full')
+            }
+          >
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className='text-muted-foreground'>
-                    {hasTopics
-                      ? 'No classwork matches this topic filter. (All data is cached locally.)'
-                      : 'No classwork in cache. Run a course sync.'}
-                  </TableCell>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Type</TableHead>
+                  {!selectedItem && <TableHead>Topic</TableHead>}
+                  {!selectedItem && <TableHead>Updated</TableHead>}
+                  <TableHead className='w-16' />
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredItems.map((row) => {
+                  const isSelected =
+                    selectedItem?.kind === row.kind && selectedItem?.id === row.id
+                  return (
+                    <TableRow
+                      key={`${row.kind}-${String(row.id)}`}
+                      onClick={() => setSelectedItem(row)}
+                      data-state={isSelected ? 'selected' : undefined}
+                      className='cursor-pointer'
+                    >
+                      <TableCell className='font-medium'>{String(row.title || '—')}</TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            'inline-flex items-center rounded px-2 py-0.5 text-xs ' +
+                            (row.kind === 'material'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                              : 'bg-muted')
+                          }
+                        >
+                          {String(row.work_type || '—')}
+                        </span>
+                      </TableCell>
+                      {!selectedItem && (
+                        <TableCell>
+                          <span className='inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs'>
+                            {resolveTopicName(row.topic_id)}
+                          </span>
+                        </TableCell>
+                      )}
+                      {!selectedItem && (
+                        <TableCell className='text-muted-foreground text-sm'>
+                          {String(row.update_time || '—')}
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          className='h-7 px-2 text-xs'
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedItem(row)
+                          }}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {filteredItems.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className='text-muted-foreground'>
+                      {hasTopics
+                        ? 'No classwork matches this topic filter. (All data is cached locally.)'
+                        : 'No classwork in cache. Run a course sync.'}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {selectedItem && (
+            <ClassworkDetail
+              item={selectedItem}
+              topicName={resolveTopicName(selectedItem.topic_id)}
+              onClose={() => setSelectedItem(null)}
+            />
+          )}
         </div>
 
         <p className='text-muted-foreground text-xs'>
@@ -295,5 +351,161 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
         </div>
       </TabsContent>
     </Tabs>
+  )
+}
+
+function ClassworkDetail({
+  item,
+  topicName,
+  onClose,
+}: {
+  item: UnifiedItem
+  topicName: string
+  onClose: () => void
+}) {
+  const attachments = item.attachments || []
+  const description = String(item.description || '').trim()
+
+  return (
+    <div className='flex max-h-[80vh] flex-col overflow-hidden rounded-md border lg:w-1/2'>
+      <div className='flex items-start justify-between gap-2 border-b p-3'>
+        <div className='min-w-0'>
+          <h3 className='truncate font-medium' title={String(item.title || '')}>
+            {String(item.title || 'Untitled')}
+          </h3>
+          <div className='text-muted-foreground mt-0.5 flex flex-wrap items-center gap-2 text-xs'>
+            <span className='rounded bg-muted px-1.5 py-0.5'>{String(item.work_type || '—')}</span>
+            <span className='rounded bg-muted px-1.5 py-0.5'>{topicName}</span>
+            {item.update_time && <span>{String(item.update_time)}</span>}
+          </div>
+        </div>
+        <Button variant='ghost' size='sm' className='h-7 px-2' onClick={onClose}>
+          ✕
+        </Button>
+      </div>
+
+      <div className='flex-1 space-y-4 overflow-auto p-3'>
+        {description ? (
+          <div className='text-sm whitespace-pre-wrap'>{description}</div>
+        ) : (
+          <p className='text-muted-foreground text-sm italic'>No description.</p>
+        )}
+
+        <div className='space-y-3'>
+          <p className='text-muted-foreground text-xs font-medium uppercase'>
+            Attachments ({attachments.length})
+          </p>
+          {attachments.length === 0 && (
+            <p className='text-muted-foreground text-sm'>No attachments.</p>
+          )}
+          {attachments.map((att) => (
+            <AttachmentView key={att.id} att={att} />
+          ))}
+        </div>
+
+        {item.alternate_link && (
+          <a
+            href={String(item.alternate_link)}
+            target='_blank'
+            rel='noreferrer'
+            className='text-muted-foreground inline-block text-xs underline'
+          >
+            Open in Google Classroom ↗
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AttachmentView({ att }: { att: Attachment }) {
+  const icon = SOURCE_ICON[att.source] || '📎'
+  const label = att.title || att.source
+
+  // Non-Drive items (link / form / youtube): just an external reference.
+  if (att.source !== 'drive') {
+    return (
+      <div className='rounded border p-2 text-sm'>
+        {att.source_url ? (
+          <a
+            href={att.source_url}
+            target='_blank'
+            rel='noreferrer'
+            className='text-primary underline'
+          >
+            {icon} {label} ↗
+          </a>
+        ) : (
+          <span>
+            {icon} {label}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // Drive file whose content was not cached locally — explain the state.
+  if (att.fetch_status !== 'fetched' || !att.download_url) {
+    const hint =
+      att.fetch_status === 'skipped'
+        ? 'Not downloaded (enable the Drive scope: re-run setup_google_auth.py).'
+        : att.fetch_status === 'failed'
+          ? 'Download failed during the last sync.'
+          : 'Not yet downloaded.'
+    return (
+      <div className='rounded border p-2 text-sm'>
+        <div className='font-medium'>
+          {icon} {label}
+        </div>
+        <div className='text-muted-foreground mt-0.5 text-xs'>{hint}</div>
+        {att.source_url && (
+          <a
+            href={att.source_url}
+            target='_blank'
+            rel='noreferrer'
+            className='text-primary text-xs underline'
+          >
+            Open original ↗
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  const url = fileUrl(att.download_url)
+  const mime = att.content_type || ''
+  const isPdf = mime === 'application/pdf'
+  const isImage = mime.startsWith('image/')
+
+  return (
+    <div className='rounded border p-2'>
+      <div className='mb-2 flex items-center justify-between gap-2 text-sm'>
+        <span className='min-w-0 truncate font-medium' title={label}>
+          {icon} {label}
+          {att.exported && (
+            <span className='text-muted-foreground ml-1 text-xs'>(exported)</span>
+          )}
+        </span>
+        <a
+          href={url}
+          download
+          className='text-primary shrink-0 text-xs underline'
+        >
+          Download{att.file_size ? ` (${formatBytes(att.file_size)})` : ''}
+        </a>
+      </div>
+
+      {isPdf && (
+        <iframe src={url} title={label} className='h-[60vh] w-full rounded border' />
+      )}
+      {isImage && (
+        <img src={url} alt={label} className='max-h-[60vh] w-full rounded border object-contain' />
+      )}
+      {!isPdf && !isImage && (
+        <p className='text-muted-foreground text-xs'>
+          {mime || 'Binary file'} — preview not available; use Download.
+        </p>
+      )}
+    </div>
   )
 }

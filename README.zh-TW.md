@@ -1,6 +1,6 @@
 # Classroom Bot / Google Classroom ⇄ Discord 同步機器人
 
-**v0.4.2** · [日本語](README.md) | [English](README.en.md)
+**v0.7.0** · [日本語](README.md) | [English](README.en.md)
 
 ## 概要
 
@@ -90,6 +90,19 @@ Classroom 快取的自動同步由 `SchedulerService` 管理。
   ```
 
 - **API**：`GET /api/scheduler` 讀取狀態、`PATCH /api/scheduler` 更新設定。
+
+## 課堂作業附件同步
+
+每次同步時，會將 classwork（作業／教材）的附件內容抓取並快取到本機。Drive 檔案會被下載（PDF／Excel），Google 原生格式會被匯出（文件 → PDF、試算表 → XLSX）存到 `ATTACHMENT_STORAGE_DIR`（預設 `data/attachments/`），metadata 記錄於 `classroom_attachments` 資料表。link／form／youtube 僅儲存 metadata。
+
+- **需要 Drive 權限**：此功能使用選用的 `drive.readonly` scope。**既有 token 照常運作，Classroom 同步不受影響。** 在啟用 Drive 前，附件下載會被略過（狀態 `skipped`）。啟用方式為在主機上重新授權：
+
+  ```bash
+  python src/scripts/setup_google_auth.py
+  ```
+
+- **API**：`GET /api/courses/{id}/attachments`（列表）、`GET /api/courses/{id}/attachments/{db_id}/download`（提供已儲存的檔案）。
+- **設定**：`ATTACHMENT_SYNC_ENABLED`／`ATTACHMENT_STORAGE_DIR`／`ATTACHMENT_MAX_BYTES`／`ATTACHMENT_DOWNLOAD_RETRIES`。
 
 ## 文件
 

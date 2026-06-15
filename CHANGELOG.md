@@ -68,6 +68,36 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.7.0] - 2026-06-15
+
+### Fixed / 修正
+- WebUI Google OAuth re-authorization no longer fails with `invalid_grant: Missing code verifier`. The PKCE `code_verifier` generated in `/auth/google/start` is now persisted and replayed in `/auth/google/callback`, so the token exchange succeeds and the token (including the `drive.readonly` scope) is saved correctly.
+- 修正 WebUI Google OAuth 重新授權會失敗於 `invalid_grant: Missing code verifier` 的問題。`/auth/google/start` 產生的 PKCE `code_verifier` 現在會被保存,並於 `/auth/google/callback` 換 token 時還原,token(含 `drive.readonly` scope)得以正確寫入。
+
+### Added / 新增
+- `GET /api/status` now reports `google.drive_scope` (true/false) so the Drive scope grant can be verified after re-authorizing.
+- `GET /api/status` 新增回傳 `google.drive_scope`(true/false),方便授權後確認是否已取得 Drive 權限。
+
+### Changed / 變更
+- The attachment `skipped` hint now gives precise guidance (enable the Drive API, add the `drive.readonly` scope on the OAuth consent screen, revoke the old grant, then re-authorize).
+- 附件 `skipped` 提示改為精準指引(啟用 Drive API、在 OAuth 同意畫面登記 `drive.readonly`、撤銷舊授權後重新授權)。
+
+## [0.6.0] - 2026-06-15
+
+### Added / 新增
+- Classwork attachment content is now downloaded and cached locally during sync. For every coursework/material item, Drive file attachments are downloaded (uploaded PDF/Excel) and Google-native files are exported (Docs → PDF, Sheets → XLSX) to disk under `ATTACHMENT_STORAGE_DIR` (`data/attachments/…`); link/form/youtube items are recorded as metadata only. Metadata (source URL, MIME type, file size, on-disk path, fetch status + timestamp) is stored in the new `classroom_attachments` table (migration `0003`). Downloads run after the cache is committed and are fully resilient (per-attachment retries; failures are recorded as `failed` and never block the rest of the sync).
+- 同步時會將 classwork 附件內容下載並快取到本機。每個作業/教材項目的 Drive 檔案會被下載(上傳的 PDF/Excel),Google 原生檔會被匯出(文件 → PDF、試算表 → XLSX)存到 `ATTACHMENT_STORAGE_DIR`(`data/attachments/…`);link/form/youtube 僅記錄 metadata。metadata(來源 URL、MIME 類型、檔案大小、本機路徑、抓取狀態與時間)存入新的 `classroom_attachments` 資料表(migration `0003`)。下載在快取提交後執行且具韌性(逐附件重試;失敗標記為 `failed` 且不影響其餘同步)。
+- New API: `GET /courses/{id}/attachments` (list) and `GET /courses/{id}/attachments/{db_id}/download` (streams the cached file with its stored MIME type). The `GET /courses/{id}/classwork` response now embeds an `attachments` array per item.
+- 新增 API:`GET /courses/{id}/attachments`(列表)與 `GET /courses/{id}/attachments/{db_id}/download`(以儲存的 MIME 串流快取檔)。`GET /courses/{id}/classwork` 回應現在每個項目內嵌 `attachments` 陣列。
+- Classwork table now opens a **split-screen content viewer** instead of redirecting to Google Classroom. Selecting a row (or "View") shows the item's description text and cached attachments side-by-side: PDFs/images preview inline, Excel/other files offer a download, and link/form/youtube items link out. "Open in Google Classroom" remains available as a secondary link inside the panel.
+- classwork 表格改為開啟**分割畫面內容檢視器**,不再跳轉至 Google Classroom。選取一列(或「View」)會並排顯示該項目的描述文字與已快取附件:PDF/圖片內嵌預覽、Excel 等檔案提供下載、link/form/youtube 則外連。面板內仍保留次要的「Open in Google Classroom」連結。
+- New settings: `ATTACHMENT_SYNC_ENABLED`, `ATTACHMENT_STORAGE_DIR`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_DOWNLOAD_RETRIES`.
+- 新增設定:`ATTACHMENT_SYNC_ENABLED`、`ATTACHMENT_STORAGE_DIR`、`ATTACHMENT_MAX_BYTES`、`ATTACHMENT_DOWNLOAD_RETRIES`。
+
+### Changed / 變更
+- Google OAuth scopes now include the optional `drive.readonly` scope, requested by `setup_google_auth.py`. **It is treated as optional**: scope validation still only requires the Classroom scopes, so existing tokens keep working and Classroom sync is unaffected. Until you re-run `python src/scripts/setup_google_auth.py` to grant Drive access, attachment downloads are skipped (status `skipped`).
+- Google OAuth scope 新增選用的 `drive.readonly`(由 `setup_google_auth.py` 請求)。**視為選用**:scope 驗證仍只要求 Classroom scopes,故既有 token 照常運作、Classroom 同步不受影響。在重新執行 `python src/scripts/setup_google_auth.py` 授予 Drive 權限前,附件下載會被略過(狀態 `skipped`)。
+
 ## [0.5.0] - 2026-06-15
 
 ### Fixed / 修正

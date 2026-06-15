@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import now_jst
 from src.models import (
     ClassroomAnnouncement,
+    ClassroomAttachment,
     ClassroomCourse,
     ClassroomCoursework,
     ClassroomMaterial,
@@ -28,6 +29,60 @@ logger = logging.getLogger("classroom_sync.cache")
 def _parse_materials(item: Dict[str, Any]) -> Optional[str]:
     materials = item.get("materials")
     return dump_json(materials) if materials else None
+
+
+def extract_attachments(materials: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """Normalize a Classroom ``materials`` array into attachment descriptors.
+
+    Generalizes ``embed_builder.parse_materials`` but additionally surfaces the
+    Drive ``fileId`` and the source URL so the content can be downloaded/exported.
+    Each descriptor carries a ``ref_key`` used as the natural-key discriminator
+    within an item (the Drive file id, or the source URL for non-Drive items).
+    """
+    out: List[Dict[str, Any]] = []
+    for mat in materials or []:
+        if "driveFile" in mat:
+            df = (mat.get("driveFile") or {}).get("driveFile") or {}
+            fid = df.get("id")
+            url = df.get("alternateLink")
+            out.append({
+                "source": "drive",
+                "drive_file_id": fid,
+                "title": df.get("title"),
+                "source_url": url,
+                "ref_key": fid or url or df.get("title") or "drive",
+            })
+        elif "youtubeVideo" in mat:
+            yt = mat.get("youtubeVideo") or {}
+            url = yt.get("alternateLink")
+            out.append({
+                "source": "youtube",
+                "drive_file_id": None,
+                "title": yt.get("title"),
+                "source_url": url,
+                "ref_key": url or yt.get("id") or "youtube",
+            })
+        elif "link" in mat:
+            ln = mat.get("link") or {}
+            url = ln.get("url")
+            out.append({
+                "source": "link",
+                "drive_file_id": None,
+                "title": ln.get("title"),
+                "source_url": url,
+                "ref_key": url or "link",
+            })
+        elif "form" in mat:
+            fm = mat.get("form") or {}
+            url = fm.get("formUrl")
+            out.append({
+                "source": "form",
+                "drive_file_id": None,
+                "title": fm.get("title"),
+                "source_url": url,
+                "ref_key": url or "form",
+            })
+    return out
 
 
 def _json_default(obj: Any) -> str:
@@ -535,6 +590,59 @@ async def list_cached_materials(
     if topic_id is not None:
         stmt = stmt.where(ClassroomMaterial.topic_id == topic_id)
     stmt = stmt.order_by(ClassroomMaterial.update_time.desc())
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+# Tracked fields for the attachment field-level diff. ``fetched_at`` is
+# operational metadata refreshed on every fetch, so it is excluded from the diff
+# (like raw_json/synced_at) to keep changed_fields meaningful.
+_ATTACHMENT_FIELDS = (
+    "source", "drive_file_id", "title", "source_url",
+    "content_type", "file_size", "local_path", "exported",
+    "fetch_status", "error_message",
+)
+
+
+async def upsert_attachment(
+    session: AsyncSession, row: ClassroomAttachment, *, run_id: Optional[int] = None
+) -> str:
+    """UpdateOrNew one attachment, keyed by (course_id, item_type, item_id, ref_key)."""
+    stmt = select(ClassroomAttachment).where(
+        ClassroomAttachment.course_id == row.course_id,
+        ClassroomAttachment.item_type == row.item_type,
+        ClassroomAttachment.item_id == row.item_id,
+        ClassroomAttachment.ref_key == row.ref_key,
+    )
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    status = await _apply(
+        session, existing, row, _ATTACHMENT_FIELDS,
+        entity_type="attachment", entity_id=f"{row.item_id}:{row.ref_key}",
+        course_id=row.course_id, run_id=run_id,
+    )
+    # Always refresh fetched_at onto the persisted row (excluded from the diff).
+    target = existing if existing is not None else row
+    target.fetched_at = row.fetched_at
+    return status
+
+
+async def get_attachment(session: AsyncSession, db_id: int) -> Optional[ClassroomAttachment]:
+    return await session.get(ClassroomAttachment, db_id)
+
+
+async def list_attachments(
+    session: AsyncSession,
+    course_id: str,
+    item_id: Optional[str] = None,
+    *,
+    include_removed: bool = False,
+) -> List[ClassroomAttachment]:
+    stmt = select(ClassroomAttachment).where(ClassroomAttachment.course_id == course_id)
+    if item_id is not None:
+        stmt = stmt.where(ClassroomAttachment.item_id == item_id)
+    if not include_removed:
+        stmt = stmt.where(ClassroomAttachment.removed_at.is_(None))
+    stmt = stmt.order_by(ClassroomAttachment.item_id, ClassroomAttachment.db_id)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 

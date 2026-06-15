@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import io
 import logging
 import os
 from typing import Any, Callable, Dict, List, Optional
@@ -7,11 +8,14 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 from src.config import settings
 
 logger = logging.getLogger("classroom_sync.google")
 
-SCOPES = [
+# Classroom scopes that are *required* for the core sync to work. The token is
+# considered invalid for sync if any of these are missing.
+REQUIRED_SCOPES = [
     "https://www.googleapis.com/auth/classroom.courses.readonly",
     "https://www.googleapis.com/auth/classroom.announcements.readonly",
     "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
@@ -21,6 +25,15 @@ SCOPES = [
     "https://www.googleapis.com/auth/classroom.profile.emails",
     "https://www.googleapis.com/auth/classroom.announcements",
 ]
+
+# Optional Drive scope used to download/export classwork attachment content.
+# It is intentionally NOT part of the required-scope validation: existing tokens
+# without it keep working (Classroom sync unaffected); attachment downloads are
+# simply skipped until the operator re-runs setup_google_auth.py to grant it.
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+
+# Full scope set requested by the OAuth setup flow (Classroom + optional Drive).
+SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE]
 
 CLASSROOM_MAX_PAGE_SIZE = 30
 
@@ -34,7 +47,24 @@ class GoogleClassroomService:
 
     def _missing_scopes(self, granted: Optional[List[str]]) -> List[str]:
         granted_set = set(granted or [])
-        return [scope for scope in SCOPES if scope not in granted_set]
+        return [scope for scope in REQUIRED_SCOPES if scope not in granted_set]
+
+    def has_drive_scope(self) -> bool:
+        """Whether the loaded credentials were granted the optional Drive scope.
+
+        Attachment download/export is only attempted when this is True; otherwise
+        downloads are skipped so the operator can re-run setup_google_auth.py.
+        """
+        creds = self.creds
+        if not creds:
+            try:
+                token_path = settings.GOOGLE_TOKEN_FILE
+                if not os.path.exists(token_path):
+                    return False
+                creds = Credentials.from_authorized_user_file(token_path)
+            except Exception:
+                return False
+        return DRIVE_SCOPE in (creds.scopes or [])
 
     def credential_status(self) -> dict[str, Any]:
         """Return non-secret diagnostics for admin UI and /api/status."""
@@ -166,6 +196,64 @@ class GoogleClassroomService:
             if not self.load_credentials():
                 raise ConnectionError("Google Classroom API connection failed: Missing or invalid credentials.")
         return build("classroom", "v1", credentials=self.creds)
+
+    def _get_drive_service(self) -> Any:
+        """Builds and returns the sync Google Drive API resource client."""
+        if not self.creds or not self.creds.valid:
+            if not self.load_credentials():
+                raise ConnectionError("Google Drive API connection failed: Missing or invalid credentials.")
+        return build("drive", "v3", credentials=self.creds)
+
+    async def get_drive_file_metadata(self, file_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch lightweight Drive file metadata (id, name, mimeType, size)."""
+        def _sync_get() -> Dict[str, Any]:
+            service = self._get_drive_service()
+            return service.files().get(
+                fileId=file_id, fields="id,name,mimeType,size",
+                supportsAllDrives=True,
+            ).execute()
+
+        try:
+            return await asyncio.to_thread(_sync_get)
+        except Exception as e:
+            logger.error(f"Failed to fetch Drive metadata for '{file_id}': {e}")
+            raise e
+
+    async def download_drive_file(self, file_id: str) -> bytes:
+        """Download a binary Drive file (uploaded PDF/XLSX/etc.) as raw bytes."""
+        def _sync_download() -> bytes:
+            service = self._get_drive_service()
+            request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            return buffer.getvalue()
+
+        try:
+            return await asyncio.to_thread(_sync_download)
+        except Exception as e:
+            logger.error(f"Failed to download Drive file '{file_id}': {e}")
+            raise e
+
+    async def export_drive_file(self, file_id: str, export_mime: str) -> bytes:
+        """Export a Google-native file (Docs/Sheets/Slides) to the given MIME type."""
+        def _sync_export() -> bytes:
+            service = self._get_drive_service()
+            request = service.files().export_media(fileId=file_id, mimeType=export_mime)
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            return buffer.getvalue()
+
+        try:
+            return await asyncio.to_thread(_sync_export)
+        except Exception as e:
+            logger.error(f"Failed to export Drive file '{file_id}' as '{export_mime}': {e}")
+            raise e
 
     def _fetch_paginated(
         self,

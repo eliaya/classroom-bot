@@ -19,6 +19,7 @@ async def health() -> dict:
 @router.get("/status")
 async def status() -> dict:
     creds = google_service.credential_status()
+    creds["drive_scope"] = google_service.has_drive_scope()
     return {
         "google_credentials": "valid" if creds["valid"] else "missing",
         "google": creds,
