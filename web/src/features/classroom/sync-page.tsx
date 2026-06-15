@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, XCircle } from 'lucide-react'
+import { RefreshCw, XCircle, Eye, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -32,6 +39,7 @@ export function SyncPage() {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [credentialError, setCredentialError] = useState<string | null>(null)
+  const [detailRun, setDetailRun] = useState<SyncRun | null>(null)
 
   // Pagination and filter states (10 per page + search/filter)
   const [page, setPage] = useState(1)
@@ -133,6 +141,16 @@ export function SyncPage() {
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to clear dead job')
+    }
+  }
+
+  const handleDeleteRun = async (runId: number) => {
+    try {
+      await api.deleteRun(runId)
+      if (detailRun?.id === runId) setDetailRun(null)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete run')
     }
   }
 
@@ -327,10 +345,24 @@ export function SyncPage() {
                     {run.course_id || '—'}
                   </TableCell>
                   <TableCell>
-                    <RunStatusBadge status={run.status}>
-                      {run.status}
-                      {isStaleRunning(run) && ' (stuck?)'}
-                    </RunStatusBadge>
+                    <div className='flex items-center gap-1.5'>
+                      <RunStatusBadge status={run.status}>
+                        {run.status}
+                        {isStaleRunning(run) && ' (stuck?)'}
+                      </RunStatusBadge>
+                      {(run.error_message || run.message) && (
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className='h-6 w-6 text-muted-foreground'
+                          onClick={() => setDetailRun(run)}
+                          aria-label='View run detail'
+                          title='View detail (status message / error)'
+                        >
+                          <Eye className='h-4 w-4' />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {displayPercent != null ? (
@@ -369,18 +401,36 @@ export function SyncPage() {
                             ? `started ${formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}`
                             : '—'}
                       </span>
-                      {/* A stuck job (running >30min with no finish) automatically
-                          surfaces a clickable X icon to manually release it. */}
-                      {isStaleRunning(run) && (
+                      {/* Any 'running' job can be force-released here (e.g. after a
+                          crash/restart left it dangling). Jobs running >30min are
+                          additionally flagged as likely stuck via the title text. */}
+                      {run.status === 'running' && (
                         <Button
                           variant='ghost'
                           size='icon'
                           className='text-destructive h-6 w-6'
                           onClick={() => void handleClearDead(run.id)}
                           aria-label='Clear stuck job'
-                          title='This job has been running >30min with no finish — likely stuck. Click to release it (marks it as error so new syncs can start).'
+                          title={
+                            isStaleRunning(run)
+                              ? 'This job has been running >30min with no finish — likely stuck. Click to release it (marks it as error so new syncs can start).'
+                              : 'Force-release this running job (marks it as error so a new sync can be triggered). Use if it is actually dead after a crash/restart.'
+                          }
                         >
                           <XCircle className='h-4 w-4' />
+                        </Button>
+                      )}
+                      {/* Finished (error/success) runs can be deleted from history. */}
+                      {run.status !== 'running' && (
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className='text-destructive h-6 w-6'
+                          onClick={() => void handleDeleteRun(run.id)}
+                          aria-label='Delete run from history'
+                          title='Delete this run from history.'
+                        >
+                          <Trash2 className='h-4 w-4' />
                         </Button>
                       )}
                     </div>
@@ -436,6 +486,46 @@ export function SyncPage() {
             </div>
           </div>
         )}
+
+        {/* Run detail dialog — surfaces the full error/status message that the
+            table otherwise truncates or hides. */}
+        <Dialog open={!!detailRun} onOpenChange={(open) => !open && setDetailRun(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                Run #{detailRun?.id} — {detailRun?.resource}
+                {detailRun?.course_id ? ` (${detailRun.course_id})` : ''}
+              </DialogTitle>
+              <DialogDescription>
+                Status: {detailRun?.status}
+              </DialogDescription>
+            </DialogHeader>
+            <div className='space-y-3 text-sm'>
+              {detailRun?.error_message && (
+                <div>
+                  <div className='mb-1 font-medium text-destructive'>Error</div>
+                  <pre className='max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-destructive/10 p-3 text-xs text-destructive'>
+                    {detailRun.error_message}
+                  </pre>
+                </div>
+              )}
+              {detailRun?.message && (
+                <div>
+                  <div className='mb-1 font-medium'>Last message</div>
+                  <pre className='max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-3 text-xs'>
+                    {detailRun.message}
+                  </pre>
+                </div>
+              )}
+              <div className='grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground'>
+                <div>Items: <span className='tabular-nums text-foreground'>{detailRun?.items_count}</span></div>
+                <div>Percent: <span className='tabular-nums text-foreground'>{detailRun?.percent ?? '—'}</span></div>
+                <div>Started: <span className='text-foreground'>{detailRun?.started_at ? new Date(detailRun.started_at).toLocaleString() : '—'}</span></div>
+                <div>Finished: <span className='text-foreground'>{detailRun?.finished_at ? new Date(detailRun.finished_at).toLocaleString() : '—'}</span></div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </Main>
     </>
   )

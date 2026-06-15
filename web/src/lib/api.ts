@@ -138,6 +138,8 @@ export const api = {
     request<{ status: string }>(`/sync/${courseId}`, { method: 'POST' }),
   clearDeadRun: (runId: number) =>
     request<{ status: string; run_id: number }>(`/sync/runs/${runId}/clear`, { method: 'POST' }),
+  deleteRun: (runId: number) =>
+    request<{ status: string; run_id: number }>(`/sync/runs/${runId}`, { method: 'DELETE' }),
   botStatus: () => request<BotStatus>('/bot/status'),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>

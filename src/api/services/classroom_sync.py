@@ -43,6 +43,10 @@ class ClassroomSyncService:
 
     async def sync_all(self, session: AsyncSession) -> dict:
         run = await cache.start_sync_run(session, resource="all")
+        # Capture the PK once. After a per-course rollback the `run` ORM instance
+        # is expired, and touching run.id in a sync context (e.g. a log call)
+        # would trigger a lazy reload outside the async greenlet -> crash.
+        run_id = run.id
         total = 0
         try:
             if not google_service.load_credentials():
@@ -75,13 +79,18 @@ class ClassroomSyncService:
                 # Per-course atomicity: a failing course rolls back only its own
                 # writes and the sync continues with the next course (idempotent retry).
                 try:
-                    added = await self._sync_course(session, course["id"], track_run=False, run_id=run.id)
+                    added = await self._sync_course(session, course["id"], track_run=False, run_id=run_id)
                     total += added
                     post_msg = f"Done {idx}/{total_courses}: {cname} (+{added} items, total {total})"
                 except Exception as course_exc:
                     await session.rollback()
+                    # rollback() expires every ORM instance (even with
+                    # expire_on_commit=False). Refresh `run` so the subsequent
+                    # progress/finish writes operate on a live object instead of
+                    # lazily reloading mid-operation.
+                    await session.refresh(run)
                     errors.append(f"{cname}: {course_exc}")
-                    logger.exception("Course sync failed for %s", course["id"], extra={"job_id": run.id})
+                    logger.exception("Course sync failed for %s", course["id"], extra={"job_id": run_id})
                     post_msg = f"Failed {idx}/{total_courses}: {cname} ({course_exc})"
 
                 # Post-course progress with accumulated items
@@ -181,7 +190,7 @@ class ClassroomSyncService:
         # This guarantees that "Topic filter" contents are fully pulled into localhost cache,
         # even if the broad list has any visibility/state quirks.
         for t in topics:
-            tid = t.get("id")
+            tid = t.get("topicId")
             if tid:
                 t_cw = await google_service.fetch_coursework(course_id, topic_id=tid)
                 if t_cw:
@@ -215,7 +224,7 @@ class ClassroomSyncService:
         )
         await cache.soft_delete_missing(
             session, ClassroomTopic, course_id=course_id, run_id=run_id,
-            seen_ids={t["id"] for t in topics if t.get("id")},
+            seen_ids={t["topicId"] for t in topics if t.get("topicId")},
             id_attr="id", entity_type="topic",
         )
         await cache.soft_delete_missing(

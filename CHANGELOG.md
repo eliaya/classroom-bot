@@ -68,6 +68,24 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.4.1] - 2026-06-15
+
+### Fixed / 修正
+- Topics are now actually stored: Google Classroom Topic objects are keyed by `topicId` (not `id`), but the record builder, per-topic content fetch loop, and soft-delete all read `id`, so every topic was skipped/dropped. All topic handling now uses `topicId`. Test fixtures corrected to the real API shape (this mismatch is why the bug slipped past tests).
+- 修正主題實際無法寫入:Google Classroom Topic 物件的主鍵是 `topicId`(非 `id`),但記錄建立、逐主題內容抓取、軟刪除都讀 `id`,導致所有主題被略過/捨棄。全部改用 `topicId`;測試資料同步更正為真實 API 結構(此不一致正是先前測試沒抓到的原因)。
+- Full sync no longer aborts entirely when one course fails: the per-course error handler accessed an expired ORM `run` instance after `session.rollback()`, raising `greenlet_spawn has not been called` and killing the whole run. The run id is now captured once and the `run` object is refreshed after rollback.
+- 修正單一課程失敗會拖垮整個同步：per-course 錯誤處理在 `session.rollback()` 後存取已失效的 ORM `run` 物件，觸發 `greenlet_spawn has not been called` 導致整體中斷。改為先快取 run id，並於 rollback 後 refresh `run`。
+- Record builders are now resilient to API items missing `id`: such items are skipped with a warning instead of raising `KeyError('id')` and aborting the whole course (announcements/coursework/topics/materials).
+- 記錄建立流程對缺少 `id` 的 API 項目具容錯性：改為記錄警告並略過該項目，不再丟出 `KeyError('id')` 中斷整門課（公告／作業／主題／教材）。
+
+### Added / 新增
+- Sync page: a **view-detail** (eye) action on each run reveals the full status/error message in a dialog, so failed runs are no longer opaque.
+- 同步頁：每筆紀錄新增**查看詳情**（眼睛）動作,以對話框顯示完整狀態/錯誤訊息,失敗紀錄不再無從得知原因。
+- Sync page: any **running** job can be force-released (clear), and finished (error/success) runs can be **deleted** from history (`DELETE /api/sync/runs/{id}`).
+- 同步頁：任何 **running** 任務皆可強制釋放（clear），已結束（error/success）的紀錄可從歷史**刪除**（`DELETE /api/sync/runs/{id}`）。
+- Added the `classroom.topics.readonly` OAuth scope so `courses.topics.list` no longer returns 403 (topics now sync after re-auth).
+- 新增 `classroom.topics.readonly` OAuth scope，`courses.topics.list` 不再回傳 403（重新授權後即可同步主題）。
+
 ## [0.4.0] - 2026-06-14
 
 ### Added / 新增

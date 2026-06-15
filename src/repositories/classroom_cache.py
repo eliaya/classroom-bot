@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +21,8 @@ from src.models import (
     ClassroomTopic,
     dump_json,
 )
+
+logger = logging.getLogger("classroom_sync.cache")
 
 
 def _parse_materials(item: Dict[str, Any]) -> Optional[str]:
@@ -222,8 +225,9 @@ def _coursework_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomCours
 
 
 def _topic_from_api(course_id: str, data: Dict[str, Any]) -> ClassroomTopic:
+    # Google Classroom Topic objects are keyed by "topicId" (not "id").
     return ClassroomTopic(
-        id=data["id"],
+        id=data["topicId"],
         course_id=course_id,
         name=data.get("name"),
         update_time=data.get("updateTime"),
@@ -323,7 +327,12 @@ async def upsert_course(session: AsyncSession, data: Dict[str, Any], *, run_id: 
 async def upsert_announcements(
     session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
 ) -> int:
+    skipped = 0
     for item in items:
+        if not item.get("id"):
+            logger.warning("Skipping announcement without id in course %s", course_id)
+            skipped += 1
+            continue
         row = _announcement_from_api(course_id, item)
         stmt = select(ClassroomAnnouncement).where(
             ClassroomAnnouncement.id == row.id,
@@ -334,13 +343,18 @@ async def upsert_announcements(
             session, existing, row, _ANNOUNCEMENT_FIELDS,
             entity_type="announcement", entity_id=row.id, course_id=course_id, run_id=run_id,
         )
-    return len(items)
+    return len(items) - skipped
 
 
 async def upsert_coursework(
     session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
 ) -> int:
+    skipped = 0
     for item in items:
+        if not item.get("id"):
+            logger.warning("Skipping coursework without id in course %s", course_id)
+            skipped += 1
+            continue
         row = _coursework_from_api(course_id, item)
         stmt = select(ClassroomCoursework).where(
             ClassroomCoursework.id == row.id,
@@ -351,13 +365,18 @@ async def upsert_coursework(
             session, existing, row, _COURSEWORK_FIELDS,
             entity_type="coursework", entity_id=row.id, course_id=course_id, run_id=run_id,
         )
-    return len(items)
+    return len(items) - skipped
 
 
 async def upsert_topics(
     session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
 ) -> int:
+    skipped = 0
     for item in items:
+        if not item.get("topicId"):
+            logger.warning("Skipping topic without topicId in course %s", course_id)
+            skipped += 1
+            continue
         row = _topic_from_api(course_id, item)
         stmt = select(ClassroomTopic).where(
             ClassroomTopic.id == row.id,
@@ -368,13 +387,18 @@ async def upsert_topics(
             session, existing, row, _TOPIC_FIELDS,
             entity_type="topic", entity_id=row.id, course_id=course_id, run_id=run_id,
         )
-    return len(items)
+    return len(items) - skipped
 
 
 async def upsert_materials(
     session: AsyncSession, course_id: str, items: List[Dict[str, Any]], *, run_id: Optional[int] = None
 ) -> int:
+    skipped = 0
     for item in items:
+        if not item.get("id"):
+            logger.warning("Skipping material without id in course %s", course_id)
+            skipped += 1
+            continue
         row = _material_from_api(course_id, item)
         stmt = select(ClassroomMaterial).where(
             ClassroomMaterial.id == row.id,
@@ -385,7 +409,7 @@ async def upsert_materials(
             session, existing, row, _MATERIAL_FIELDS,
             entity_type="material", entity_id=row.id, course_id=course_id, run_id=run_id,
         )
-    return len(items)
+    return len(items) - skipped
 
 
 async def upsert_people(
@@ -744,5 +768,22 @@ async def clear_dead_sync_run(
     run.finished_at = now_jst()
     # Do not clobber existing items_count / percent / message for audit trail
     session.add(run)
+    await session.commit()
+    return True
+
+
+async def delete_sync_run(session: AsyncSession, run_id: int) -> bool:
+    """Delete a finished (error/success) sync run from history.
+
+    Refuses to delete a job that is still 'running' — use clear_dead_sync_run to
+    release a stuck running job first. Returns True if a row was deleted.
+    """
+    stmt = select(ClassroomSyncRun).where(ClassroomSyncRun.id == run_id)
+    result = await session.execute(stmt)
+    run = result.scalar_one_or_none()
+    if not run or run.status == "running":
+        return False
+
+    await session.delete(run)
     await session.commit()
     return True

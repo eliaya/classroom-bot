@@ -123,3 +123,20 @@ async def clear_dead_sync_run(
             detail="Run not found or is not in 'running' state",
         )
     return {"status": "cleared", "run_id": run_id}
+
+
+@router.delete("/runs/{run_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_sync_run(
+    run_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Delete a finished (error/success) sync run from history.
+    Running jobs cannot be deleted — clear them first.
+    """
+    deleted = await cache.delete_sync_run(session, run_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Run not found or is still 'running' (clear it first)",
+        )
+    return {"status": "deleted", "run_id": run_id}

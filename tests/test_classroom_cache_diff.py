@@ -68,7 +68,7 @@ async def test_field_change_logs_updated_with_changed_fields(session):
 @pytest.mark.asyncio
 async def test_soft_delete_marks_missing_and_logs_removed(session):
     await cache.upsert_topics(
-        session, "c1", [{"id": "t1", "name": "One"}, {"id": "t2", "name": "Two"}], run_id=1
+        session, "c1", [{"topicId": "t1", "name": "One"}, {"topicId": "t2", "name": "Two"}], run_id=1
     )
     await session.commit()
 
@@ -90,7 +90,7 @@ async def test_soft_delete_marks_missing_and_logs_removed(session):
 
 @pytest.mark.asyncio
 async def test_resurrect_clears_removed_at(session):
-    await cache.upsert_topics(session, "c1", [{"id": "t1", "name": "One"}], run_id=1)
+    await cache.upsert_topics(session, "c1", [{"topicId": "t1", "name": "One"}], run_id=1)
     await session.commit()
     await cache.soft_delete_missing(
         session, ClassroomTopic, course_id="c1", seen_ids=set(),
@@ -99,7 +99,7 @@ async def test_resurrect_clears_removed_at(session):
     await session.commit()
 
     # Reappears upstream → upsert should clear removed_at.
-    await cache.upsert_topics(session, "c1", [{"id": "t1", "name": "One"}], run_id=3)
+    await cache.upsert_topics(session, "c1", [{"topicId": "t1", "name": "One"}], run_id=3)
     await session.commit()
 
     listed = await cache.list_cached_topics(session, "c1")

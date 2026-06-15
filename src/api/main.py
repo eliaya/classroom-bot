@@ -14,7 +14,7 @@ logger = logging.getLogger("classroom_sync.api")
 
 def create_app() -> FastAPI:
     setup_logging()
-    app = FastAPI(title="Classroom Bot API", version="0.4.0")
+    app = FastAPI(title="Classroom Bot API", version="0.4.1")
 
     origins = [o.strip() for o in settings.API_CORS_ORIGINS.split(",") if o.strip()]
     app.add_middleware(

@@ -16,13 +16,14 @@ from src.repositories import classroom_cache as cache
 
 COURSE_ID = "848965722858"
 
+# Google Classroom Topic objects are keyed by "topicId" (not "id").
 TOPICS = [
-    {"id": "tp1", "name": "31-課題", "updateTime": "2026-06-10T00:00:00.000Z"},
-    {"id": "tp2", "name": "32-宿題"},
-    {"id": "tp3", "name": "33-テスト"},
-    {"id": "tp4", "name": "34-プロジェクト"},
-    {"id": "tp5", "name": "35-参考資料"},
-    {"id": "tp6", "name": "36-その他"},
+    {"topicId": "tp1", "name": "31-課題", "updateTime": "2026-06-10T00:00:00.000Z"},
+    {"topicId": "tp2", "name": "32-宿題"},
+    {"topicId": "tp3", "name": "33-テスト"},
+    {"topicId": "tp4", "name": "34-プロジェクト"},
+    {"topicId": "tp5", "name": "35-参考資料"},
+    {"topicId": "tp6", "name": "36-その他"},
 ]
 
 COURSEWORK = [
@@ -139,3 +140,59 @@ async def test_resync_updates_and_removes(session, mock_google, monkeypatch):
     assert any(
         c.change_type == "updated" and c.entity_type == "coursework" for c in changes
     )
+
+
+@pytest.mark.asyncio
+async def test_sync_all_survives_one_failing_course(session, mock_google, monkeypatch):
+    """Regression: a per-course failure must not crash the whole run.
+
+    Previously the except-handler logged extra={"job_id": run.id} right after
+    session.rollback() expired the `run` instance, which lazily reloaded run.id
+    in a sync context and raised 'greenlet_spawn has not been called', killing
+    the entire sync and masking the real per-course error."""
+    from src.google_service import google_service as gs
+
+    monkeypatch.setattr(
+        gs, "list_courses",
+        AsyncMock(return_value=[{"id": "good", "name": "OK"}, {"id": "bad", "name": "Boom"}]),
+    )
+
+    async def flaky_get_course(course_id):
+        if course_id == "bad":
+            raise RuntimeError("simulated upstream failure")
+        return {"id": course_id, "name": "OK"}
+
+    monkeypatch.setattr(gs, "get_course", flaky_get_course)
+
+    result = await classroom_sync_service.sync_all(session)
+
+    # The run completes (not crashed): one course failed, one succeeded.
+    assert result["status"] == "success"
+    assert result["failed_courses"] == 1
+    assert result["courses"] == 2
+
+    # The run is persisted with the real per-course error surfaced (no greenlet error).
+    runs, _ = await cache.latest_sync_runs(session, limit=5)
+    last = runs[0]
+    assert last.status == "success"
+    assert "simulated upstream failure" in (last.error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_coursework_without_id_is_skipped_not_fatal(session, mock_google, monkeypatch):
+    """Regression: a single API item missing 'id' must not abort the whole course
+    with KeyError('id'). It is skipped (and logged) while valid items still sync."""
+    from src.google_service import google_service as gs
+
+    bad_then_good = [{"title": "no-id ghost"}, dict(COURSEWORK[0])]
+
+    async def fake_coursework(course_id, *, topic_id=None, **kw):
+        return [] if topic_id is not None else bad_then_good
+
+    monkeypatch.setattr(gs, "fetch_coursework", fake_coursework)
+
+    result = await classroom_sync_service.sync_course(session, COURSE_ID)
+    assert result["status"] == "success"
+
+    coursework = await cache.list_cached_coursework(session, COURSE_ID)
+    assert {c.id for c in coursework} == {"cw1"}  # the id-less item was skipped
