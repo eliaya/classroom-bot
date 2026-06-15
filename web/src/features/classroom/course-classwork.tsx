@@ -10,15 +10,20 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { api, type ClassworkResponse } from '@/lib/api'
+import { api, type ClassworkItem, type ClassworkResponse } from '@/lib/api'
 
 const UNCATEGORIZED = '__uncat__'
+
+// A unified classwork row: coursework keeps its real work_type (ASSIGNMENT,
+// SHORT_ANSWER_QUESTION, ...); materials are folded in with work_type 'MATERIAL'
+// so a single list shows every sub-item under a topic.
+type UnifiedItem = ClassworkItem & { kind: 'coursework' | 'material' }
 
 export function CourseClassworkPage({ courseId }: { courseId: string }) {
   const [data, setData] = useState<ClassworkResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'coursework' | 'topics' | 'materials'>('coursework')
-  // topic filter for the Assignments (coursework) view. null = show all
+  const [tab, setTab] = useState<'classwork' | 'topics'>('classwork')
+  // topic filter for the unified classwork view. null = show all
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null)
 
   const load = (topicId?: string | null) => {
@@ -35,8 +40,8 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
     load()
   }, [courseId])
 
-  // Build lookup + filter options + counts (all data is already local after one fetch)
-  const { topicMap, filterOptions, filteredCoursework, filteredMaterials, topicCounts } = useMemo(() => {
+  // Build lookup + filter options + counts + the unified item list.
+  const { topicMap, filterOptions, filteredItems, topicCounts } = useMemo(() => {
     const tMap: Record<string, string> = {}
     const counts: Record<string, number> = { [UNCATEGORIZED]: 0 }
 
@@ -47,23 +52,30 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
       }
     })
 
-    // count coursework per topic (from the full local set when no server filter active)
-    const cwSource = data?.coursework || []
-    cwSource.forEach((cw) => {
-      const tid = cw.topic_id ? String(cw.topic_id) : UNCATEGORIZED
-      if (counts[tid] !== undefined) counts[tid] = (counts[tid] || 0) + 1
-      else counts[tid] = 1
-    })
+    // Merge coursework + materials into one list. A topic's sub-items include
+    // BOTH assignments/questions AND materials (the "資料公開 / View material"
+    // entries), so they are counted and listed together.
+    const cwItems: UnifiedItem[] = (data?.coursework || []).map((c) => ({
+      ...c,
+      kind: 'coursework',
+      work_type: c.work_type || 'COURSEWORK',
+    }))
+    const matItems: UnifiedItem[] = (data?.materials || []).map((m) => ({
+      ...m,
+      kind: 'material',
+      work_type: 'MATERIAL',
+    }))
+    const allItems = [...cwItems, ...matItems].sort((a, b) =>
+      String(b.update_time || '').localeCompare(String(a.update_time || ''))
+    )
 
-    // also count materials into same buckets (for completeness)
-    ;(data?.materials || []).forEach((m) => {
-      const tid = m.topic_id ? String(m.topic_id) : UNCATEGORIZED
-      // we only surface counts for coursework primarily, but still track
-      if (!counts[tid]) counts[tid] = 0
-    })
+    const bump = (tid: string) => {
+      counts[tid] = (counts[tid] || 0) + 1
+    }
+    allItems.forEach((it) => bump(it.topic_id ? String(it.topic_id) : UNCATEGORIZED))
 
     const options: Array<{ value: string | null; label: string; count?: number }> = [
-      { value: null, label: 'All topics', count: cwSource.length },
+      { value: null, label: 'All topics', count: allItems.length },
     ]
     ;(data?.topics || []).forEach((t) => {
       const id = String(t.id || '')
@@ -80,30 +92,19 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
     })
 
     // Apply client-side topic filter (works even when server returned full set)
-    let fCw = cwSource
+    let fItems = allItems
     if (selectedTopicId !== null) {
       if (selectedTopicId === UNCATEGORIZED) {
-        fCw = cwSource.filter((c) => !c.topic_id)
+        fItems = allItems.filter((c) => !c.topic_id)
       } else {
-        fCw = cwSource.filter((c) => String(c.topic_id || '') === selectedTopicId)
-      }
-    }
-
-    // materials filtered similarly (for the Materials tab when using same selection)
-    let fMat = data?.materials || []
-    if (selectedTopicId !== null) {
-      if (selectedTopicId === UNCATEGORIZED) {
-        fMat = fMat.filter((m) => !m.topic_id)
-      } else {
-        fMat = fMat.filter((m) => String(m.topic_id || '') === selectedTopicId)
+        fItems = allItems.filter((c) => String(c.topic_id || '') === selectedTopicId)
       }
     }
 
     return {
       topicMap: tMap,
       filterOptions: options,
-      filteredCoursework: fCw,
-      filteredMaterials: fMat,
+      filteredItems: fItems,
       topicCounts: counts,
     }
   }, [data, selectedTopicId])
@@ -113,20 +114,9 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
     return topicMap[String(tid)] || String(tid)
   }
 
-  const handleTopicFilterChange = (val: string | null) => {
-    setSelectedTopicId(val)
-    // If user wants server-side filtering for the chosen topic (except the synthetic "no topic"), we can reload.
-    // For "All" and "No topic" we keep client-side on the full local data.
-    if (val && val !== UNCATEGORIZED) {
-      // optional: reload with server filter for this topic (keeps payload smaller)
-      // load(val)
-      // For simplicity and "全部抓取到localhost" we keep the full local set and just filter here.
-    }
-  }
-
   const selectTopicAndSwitch = (tid: string | null) => {
     setSelectedTopicId(tid)
-    setTab('coursework')
+    setTab('classwork')
   }
 
   const resetFilter = () => setSelectedTopicId(null)
@@ -141,20 +131,19 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
     <Tabs
       value={tab}
       onValueChange={(v) => {
-        if (v === 'coursework' || v === 'topics' || v === 'materials') {
+        if (v === 'classwork' || v === 'topics') {
           setTab(v)
         }
       }}
     >
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <TabsList>
-          <TabsTrigger value='coursework'>Assignments</TabsTrigger>
+          <TabsTrigger value='classwork'>Classwork</TabsTrigger>
           <TabsTrigger value='topics'>Topics</TabsTrigger>
-          <TabsTrigger value='materials'>Materials</TabsTrigger>
         </TabsList>
 
         {/* Quick filter status */}
-        {tab === 'coursework' && selectedTopicId !== null && (
+        {tab === 'classwork' && selectedTopicId !== null && (
           <div className='flex items-center gap-2 text-sm'>
             <span className='text-muted-foreground'>Filtered by:</span>
             <span className='rounded bg-muted px-2 py-0.5 font-medium'>
@@ -167,7 +156,7 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
         )}
       </div>
 
-      <TabsContent value='coursework' className='mt-4 space-y-3'>
+      <TabsContent value='classwork' className='mt-4 space-y-3'>
         {/* Topic Filter control (the main feature requested) */}
         <div className='flex flex-wrap items-center gap-2'>
           <span className='text-muted-foreground mr-1 text-sm font-medium'>Topic filter:</span>
@@ -180,7 +169,7 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
                 key={String(opt.value)}
                 variant={isActive ? 'default' : 'outline'}
                 size='sm'
-                onClick={() => handleTopicFilterChange(opt.value)}
+                onClick={() => setSelectedTopicId(opt.value)}
                 className='h-8'
               >
                 {opt.label}
@@ -211,10 +200,21 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(filteredCoursework || []).map((row) => (
-                <TableRow key={String(row.id)}>
+              {filteredItems.map((row) => (
+                <TableRow key={`${row.kind}-${String(row.id)}`}>
                   <TableCell className='font-medium'>{String(row.title || '—')}</TableCell>
-                  <TableCell>{String(row.work_type || '—')}</TableCell>
+                  <TableCell>
+                    <span
+                      className={
+                        'inline-flex items-center rounded px-2 py-0.5 text-xs ' +
+                        (row.kind === 'material'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                          : 'bg-muted')
+                      }
+                    >
+                      {String(row.work_type || '—')}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     <span className='inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs'>
                       {resolveTopicName(row.topic_id)}
@@ -237,12 +237,12 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
                   </TableCell>
                 </TableRow>
               ))}
-              {filteredCoursework.length === 0 && (
+              {filteredItems.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className='text-muted-foreground'>
                     {hasTopics
-                      ? 'No assignments match this topic filter. (All data is cached locally.)'
-                      : 'No assignments in cache. Run a course sync.'}
+                      ? 'No classwork matches this topic filter. (All data is cached locally.)'
+                      : 'No classwork in cache. Run a course sync.'}
                   </TableCell>
                 </TableRow>
               )}
@@ -251,7 +251,7 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
         </div>
 
         <p className='text-muted-foreground text-xs'>
-          All topics and their classwork items are fetched into the local cache during sync (including per-topic content via Google Classroom topic filter).
+          All topics and their classwork items (assignments, questions, and materials) are fetched into the local cache during sync. Items are grouped by each item's own topic; materials are tagged as <span className='font-medium'>MATERIAL</span>.
         </p>
       </TabsContent>
 
@@ -270,10 +270,10 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
                   <CardTitle className='text-base'>{String(t.name || tid)}</CardTitle>
                 </CardHeader>
                 <CardContent className='text-muted-foreground -mt-1 text-sm'>
-                  {count} assignment{count === 1 ? '' : 's'} in cache
+                  {count} item{count === 1 ? '' : 's'} in cache (coursework + materials)
                   <div className='mt-2'>
                     <Button variant='outline' size='sm' onClick={(e) => { e.stopPropagation(); selectTopicAndSwitch(tid) }}>
-                      Filter assignments by this topic
+                      Filter classwork by this topic
                     </Button>
                   </div>
                 </CardContent>
@@ -292,62 +292,6 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
           >
             Show uncategorized / no-topic items
           </Button>
-        </div>
-      </TabsContent>
-
-      <TabsContent value='materials' className='mt-4 space-y-3'>
-        {/* Reuse the same topic filter selection for materials */}
-        <div className='flex flex-wrap items-center gap-2 text-sm'>
-          <span className='text-muted-foreground'>Topic filter (applies to this view too):</span>
-          <Button variant={selectedTopicId === null ? 'default' : 'outline'} size='sm' onClick={() => setSelectedTopicId(null)}>
-            All
-          </Button>
-          {(data?.topics || []).map((t) => {
-            const tid = String(t.id || '')
-            const active = selectedTopicId === tid
-            return (
-              <Button key={tid} variant={active ? 'default' : 'outline'} size='sm' onClick={() => setSelectedTopicId(tid)}>
-                {String(t.name || tid)}
-              </Button>
-            )
-          })}
-          <Button
-            variant={selectedTopicId === UNCATEGORIZED ? 'default' : 'outline'}
-            size='sm'
-            onClick={() => setSelectedTopicId(UNCATEGORIZED)}
-          >
-            No topic
-          </Button>
-        </div>
-
-        <div className='grid gap-3 sm:grid-cols-2'>
-          {(filteredMaterials || []).map((m) => (
-            <Card key={String(m.id)}>
-              <CardHeader>
-                <CardTitle className='text-base'>
-                  {String(m.title || 'Material')}
-                  {m.topic_id && (
-                    <span className='ml-2 align-middle text-xs text-muted-foreground'>
-                      ({resolveTopicName(m.topic_id)})
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className='text-muted-foreground text-sm'>
-                {String(m.description || '')}
-                {m.alternate_link && (
-                  <div className='mt-2'>
-                    <a href={String(m.alternate_link)} target='_blank' rel='noreferrer' className='text-primary text-xs underline'>
-                      open in Classroom
-                    </a>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-          {filteredMaterials.length === 0 && (
-            <p className='text-muted-foreground text-sm'>No materials match the current topic filter (or none cached yet).</p>
-          )}
         </div>
       </TabsContent>
     </Tabs>

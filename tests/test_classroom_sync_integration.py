@@ -69,10 +69,10 @@ def mock_google(monkeypatch):
     monkeypatch.setattr(gs, "fetch_students", AsyncMock(return_value=[]))
     monkeypatch.setattr(gs, "list_student_submissions", AsyncMock(return_value=SUBMISSIONS))
 
-    async def fake_coursework(course_id, *, topic_id=None, **kw):
-        return [] if topic_id is not None else COURSEWORK
+    async def fake_coursework(course_id, **kw):
+        return COURSEWORK
 
-    async def fake_materials(course_id, *, topic_id=None, **kw):
+    async def fake_materials(course_id, **kw):
         return []
 
     monkeypatch.setattr(gs, "fetch_coursework", fake_coursework)
@@ -122,8 +122,8 @@ async def test_resync_updates_and_removes(session, mock_google, monkeypatch):
 
     new_cw = [dict(COURSEWORK[0], title="課題1（更新）"), COURSEWORK[1]]
 
-    async def fake_coursework(course_id, *, topic_id=None, **kw):
-        return [] if topic_id is not None else new_cw
+    async def fake_coursework(course_id, **kw):
+        return new_cw
 
     monkeypatch.setattr(gs, "fetch_coursework", fake_coursework)
 
@@ -186,8 +186,8 @@ async def test_coursework_without_id_is_skipped_not_fatal(session, mock_google, 
 
     bad_then_good = [{"title": "no-id ghost"}, dict(COURSEWORK[0])]
 
-    async def fake_coursework(course_id, *, topic_id=None, **kw):
-        return [] if topic_id is not None else bad_then_good
+    async def fake_coursework(course_id, **kw):
+        return bad_then_good
 
     monkeypatch.setattr(gs, "fetch_coursework", fake_coursework)
 

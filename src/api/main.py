@@ -4,7 +4,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import bot, courses, health, scheduler, sync
+from src.api.routes import auth, bot, courses, health, scheduler, sync
 from src.api.services.scheduler_service import SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
@@ -14,7 +14,7 @@ logger = logging.getLogger("classroom_sync.api")
 
 def create_app() -> FastAPI:
     setup_logging()
-    app = FastAPI(title="Classroom Bot API", version="0.4.1")
+    app = FastAPI(title="Classroom Bot API", version="0.5.0")
 
     origins = [o.strip() for o in settings.API_CORS_ORIGINS.split(",") if o.strip()]
     app.add_middleware(
@@ -30,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(sync.router, prefix="/api")
     app.include_router(scheduler.router, prefix="/api")
     app.include_router(bot.router, prefix="/api")
+    app.include_router(auth.router, prefix="/api")
 
     scheduler_service = SchedulerService()
     app.state.scheduler_service = scheduler_service

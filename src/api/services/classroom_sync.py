@@ -172,7 +172,10 @@ class ClassroomSyncService:
         announcements = await google_service.fetch_announcements(course_id)
         count += await cache.upsert_announcements(session, course_id, announcements, run_id=run_id)
 
-        # Broad fetch first (captures uncategorized items + everything)
+        # One broad list per resource already returns every item with its topicId
+        # embedded, so topics are reconstructed from these. The Classroom API's
+        # courseWork/courseWorkMaterials list endpoints do not accept a topicId
+        # filter in this client, so there is no per-topic re-fetch.
         coursework = await google_service.fetch_coursework(course_id)
         count += await cache.upsert_coursework(session, course_id, coursework, run_id=run_id)
 
@@ -185,22 +188,6 @@ class ClassroomSyncService:
         # Track every id we observed upstream so soft-delete can mark the rest as removed.
         seen_cw = {cw["id"] for cw in coursework if cw.get("id")}
         seen_mat = {m["id"] for m in materials if m.get("id")}
-
-        # Explicitly fetch content **under each topic** (using Google topicId filter)
-        # This guarantees that "Topic filter" contents are fully pulled into localhost cache,
-        # even if the broad list has any visibility/state quirks.
-        for t in topics:
-            tid = t.get("topicId")
-            if tid:
-                t_cw = await google_service.fetch_coursework(course_id, topic_id=tid)
-                if t_cw:
-                    count += await cache.upsert_coursework(session, course_id, t_cw, run_id=run_id)
-                    seen_cw.update(cw["id"] for cw in t_cw if cw.get("id"))
-
-                t_mat = await google_service.fetch_course_work_materials(course_id, topic_id=tid)
-                if t_mat:
-                    count += await cache.upsert_materials(session, course_id, t_mat, run_id=run_id)
-                    seen_mat.update(m["id"] for m in t_mat if m.get("id"))
 
         teachers = await google_service.fetch_teachers(course_id)
         count += await cache.upsert_people(session, course_id, "teacher", teachers, run_id=run_id)

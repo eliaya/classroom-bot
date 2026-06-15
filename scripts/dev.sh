@@ -60,22 +60,8 @@ fi
 # ── Start all services via Docker Compose ──────────────────────────────────────
 # We start the full stack (api, bot, web) so the web service (nginx on :8080) is available.
 # For active UI development, we additionally start the Vite dev server locally (port 5173 with HMR).
-# Use --no-build to skip rebuilding images.
-SKIP_BUILD=0
-for arg in "$@"; do
-  [ "$arg" = "--no-build" ] && SKIP_BUILD=1
-done
 
-echo -e "${BLUE}Starting all services (api + bot + web) via Docker Compose...${NC}"
-
-BUILD_FLAG=""
-if [ "$SKIP_BUILD" != "1" ]; then
-  BUILD_FLAG="--build"
-fi
-
-echo -e "${BLUE}Running: $COMPOSE up -d $BUILD_FLAG${NC}"
-
-$COMPOSE up -d $BUILD_FLAG || {
+$COMPOSE up -d --build --force-recreate || {
   echo -e "${RED}Failed to start services with 'docker compose up'.${NC}"
   echo -e "Check the output above for build or configuration errors."
   echo -e "Common fixes:"

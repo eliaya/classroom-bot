@@ -105,6 +105,10 @@ export const api = {
       }
     }>('/status'),
   version: () => request<{ version: string }>('/version'),
+  googleAuthStart: (origin: string) =>
+    request<{ authorization_url: string; redirect_uri: string; state: string }>(
+      `/auth/google/start?origin=${encodeURIComponent(origin)}`
+    ),
   listCourses: () => request<{ items: Course[]; total: number }>('/courses'),
   getCourse: (id: string) => request<Course>(`/courses/${id}`),
   getStream: (id: string, limit = 50, offset = 0) =>

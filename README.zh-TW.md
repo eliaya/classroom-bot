@@ -1,6 +1,6 @@
 # Classroom Bot / Google Classroom ⇄ Discord 同步機器人
 
-**v0.4.1** · [日本語](README.md) | [English](README.en.md)
+**v0.4.2** · [日本語](README.md) | [English](README.en.md)
 
 ## 概要
 

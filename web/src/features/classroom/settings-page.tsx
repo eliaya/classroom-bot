@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react'
+import { CheckCircle2, KeyRound, RefreshCw, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,10 +19,28 @@ import { Main } from '@/components/layout/main'
 import { api, type SchedulerStatus } from '@/lib/api'
 import { ClassroomHeader } from './layout-header'
 
+type GoogleDetail = {
+  token_exists: boolean
+  client_secret_exists: boolean
+  valid: boolean
+  missing_scopes?: string[]
+  expired?: boolean | null
+  error?: string | null
+}
+
+// The browser-visible URL Google redirects back to after consent. Must be
+// registered as an authorized redirect URI on the OAuth client in the console.
+const callbackUri =
+  typeof window !== 'undefined'
+    ? `${window.location.origin}/api/auth/google/callback`
+    : ''
+
 export function ClassroomSettingsPage() {
   const [health, setHealth] = useState<string | null>(null)
   const [googleStatus, setGoogleStatus] = useState<string | null>(null)
+  const [googleDetail, setGoogleDetail] = useState<GoogleDetail | null>(null)
   const [pythonVersion, setPythonVersion] = useState<string | null>(null)
+  const [authorizing, setAuthorizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Scheduler setting (persisted + live)
@@ -37,14 +57,31 @@ export function ClassroomSettingsPage() {
     setEnabledInput(s.enabled)
   }
 
-  useEffect(() => {
+  const loadStatus = () =>
     Promise.all([api.health(), api.status()])
       .then(([h, s]) => {
         setHealth(h.status)
         setGoogleStatus(s.google_credentials)
+        setGoogleDetail((s.google as GoogleDetail) ?? null)
         setPythonVersion(s.python ?? null)
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+
+  useEffect(() => {
+    // Handle the redirect back from the Google OAuth callback.
+    const params = new URLSearchParams(window.location.search)
+    const authResult = params.get('auth')
+    if (authResult === 'success') {
+      toast.success('Google authorization complete')
+    } else if (authResult === 'error') {
+      toast.error(`Google authorization failed: ${params.get('reason') ?? 'unknown'}`)
+    }
+    if (authResult) {
+      // Strip the query params so a refresh doesn't re-toast.
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    void loadStatus()
     api
       .getScheduler()
       .then(applyScheduler)
@@ -52,6 +89,18 @@ export function ClassroomSettingsPage() {
         setSchedulerMsg(e instanceof Error ? e.message : 'Failed to load scheduler')
       )
   }, [])
+
+  const handleAuthorize = async () => {
+    setAuthorizing(true)
+    try {
+      const { authorization_url } = await api.googleAuthStart(window.location.origin)
+      // Full-page redirect to Google's consent screen; the callback returns here.
+      window.location.href = authorization_url
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to start authorization')
+      setAuthorizing(false)
+    }
+  }
 
   const handleSaveScheduler = async () => {
     setSavingScheduler(true)
@@ -128,15 +177,49 @@ export function ClassroomSettingsPage() {
               <CardTitle>Google OAuth</CardTitle>
               <CardDescription>Classroom API credentials</CardDescription>
             </CardHeader>
-            <CardContent className='flex items-center gap-2'>
-              {oauthOk ? (
-                <CheckCircle2 className='h-5 w-5 text-green-600' />
-              ) : (
-                <XCircle className='h-5 w-5 text-destructive' />
+            <CardContent className='flex flex-col gap-3'>
+              <div className='flex items-center gap-2'>
+                {oauthOk ? (
+                  <CheckCircle2 className='h-5 w-5 text-green-600' />
+                ) : (
+                  <XCircle className='h-5 w-5 text-destructive' />
+                )}
+                <Badge variant={oauthOk ? 'secondary' : 'destructive'}>
+                  {googleStatus || 'unknown'}
+                </Badge>
+                {googleDetail?.expired ? (
+                  <Badge variant='outline'>expired</Badge>
+                ) : null}
+              </div>
+              {googleDetail?.missing_scopes &&
+                googleDetail.missing_scopes.length > 0 && (
+                  <p className='text-muted-foreground text-xs'>
+                    Missing scopes: {googleDetail.missing_scopes.length}. Re-authorize
+                    to grant them.
+                  </p>
+                )}
+              {!oauthOk && googleDetail?.error && (
+                <p className='text-muted-foreground text-xs break-all'>
+                  {googleDetail.error}
+                </p>
               )}
-              <Badge variant={oauthOk ? 'secondary' : 'destructive'}>
-                {googleStatus || 'unknown'}
-              </Badge>
+              <Button
+                onClick={() => void handleAuthorize()}
+                disabled={authorizing || googleDetail?.client_secret_exists === false}
+                className='w-fit'
+              >
+                <KeyRound className={authorizing ? 'animate-pulse' : ''} />
+                {authorizing
+                  ? 'Redirecting…'
+                  : oauthOk
+                    ? 'Re-authorize'
+                    : 'Authorize with Google'}
+              </Button>
+              {googleDetail?.client_secret_exists === false && (
+                <p className='text-destructive text-xs'>
+                  client_secret.json not found — upload your Web OAuth client first.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -220,16 +303,25 @@ export function ClassroomSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4 text-sm'>
-            <div>
-              <p className='font-medium'>1. Authorize Google OAuth</p>
+            <div className='flex flex-col gap-2'>
+              <p className='font-medium'>1. Authorize Google OAuth (no terminal needed)</p>
               <p className='text-muted-foreground'>
-                Run{' '}
-                <code className='rounded bg-muted px-1 py-0.5'>
-                  python src/scripts/setup_google_auth.py
-                </code>{' '}
-                on the host to refresh tokens with Classroom scopes (rosters,
-                coursework, materials).
+                Click <strong>Authorize with Google</strong> in the Google OAuth
+                card above and complete consent. The token is written
+                automatically — no host script required.
               </p>
+              <Alert>
+                <AlertTitle>One-time Google Cloud setup</AlertTitle>
+                <AlertDescription>
+                  <p>
+                    Add this exact <strong>Authorized redirect URI</strong> to
+                    your Web OAuth client in the Google Cloud Console:
+                  </p>
+                  <code className='rounded bg-muted px-1 py-0.5 break-all'>
+                    {callbackUri}
+                  </code>
+                </AlertDescription>
+              </Alert>
             </div>
             <Separator />
             <div>

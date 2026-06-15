@@ -68,6 +68,32 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.5.0] - 2026-06-15
+
+### Fixed / 修正
+- Topic sub-items (assignments, questions, materials) now sync completely. The Classroom `courseWork.list` / `courseWorkMaterials.list` endpoints do not accept a `topicId` filter in this client, so the previous per-topic re-fetch loop raised `Got an unexpected keyword argument topicId` and silently fetched nothing. The broad list already returns every item with its own `topicId`, so the redundant loop and the dead `topic_id` parameters were removed; topic grouping is now derived from each item's `topicId`.
+- Topic 底下的子項目(作業、提問、教材)現在完整同步。Classroom 的 `courseWork.list` / `courseWorkMaterials.list` 端點在此 client 不接受 `topicId` 篩選,先前逐主題重抓的迴圈會丟出 `Got an unexpected keyword argument topicId` 而靜默抓不到資料。廣抓清單本就帶各自的 `topicId`,故移除冗餘迴圈與失效的 `topic_id` 參數,改由每筆項目的 `topicId` 分組。
+- Topic filter counts now include materials, not just coursework. Topics holding only materials (e.g. 資料公開) no longer wrongly show 0.
+- Topic filter 的計數現在含教材,不再只算作業。只有教材的 Topic(如「資料公開」)不再錯誤顯示 0。
+
+### Changed / 變更
+- Course classwork view is now a single unified list: coursework and materials are merged into one filterable table, with materials tagged as `MATERIAL`. The separate Materials tab was removed (Classwork + Topics tabs remain).
+- 課程 classwork 視圖改為單一統一清單:作業與教材合併為一個可篩選表格,教材標記為 `MATERIAL`。移除獨立的 Materials 分頁(保留 Classwork + Topics 兩分頁)。
+- `scripts/dev.sh` now starts services with `docker compose up -d --build --force-recreate` to guarantee a fresh build each run.
+- `scripts/dev.sh` 改用 `docker compose up -d --build --force-recreate` 啟動服務,確保每次都是最新建置。
+
+## [0.4.2] - 2026-06-15
+
+### Added / 新增
+- In-browser Google authorization: the **Settings → Google OAuth** card now has an **Authorize with Google** (and **Re-authorize**) button that runs the full OAuth consent flow in the WebUI and writes `token.json` automatically — no host terminal or `setup_google_auth.py` required. New API: `GET /api/auth/google/start` and `GET /api/auth/google/callback`.
+- 瀏覽器內完成 Google 授權:**設定 → Google OAuth** 卡片新增 **Authorize with Google**(及 **Re-authorize**)按鈕,直接在 WebUI 跑完整 OAuth 同意流程並自動寫入 `token.json`,**不需**在主機終端執行 `setup_google_auth.py`。新增 API:`GET /api/auth/google/start`、`GET /api/auth/google/callback`。
+- Settings page surfaces OAuth detail (missing scopes / expired / error) and shows the exact **Authorized redirect URI** to register on the Google Cloud OAuth client.
+- 設定頁顯示 OAuth 細節(缺少 scope／過期／錯誤),並顯示需在 Google Cloud OAuth client 註冊的確切 **Authorized redirect URI**。
+
+### Note / 注意
+- The Web OAuth client must list `{web-origin}/api/auth/google/callback` as an authorized redirect URI, and the web origin must be in `API_CORS_ORIGINS`.
+- Web OAuth client 需將 `{web-origin}/api/auth/google/callback` 加入授權重新導向 URI,且該 web origin 須在 `API_CORS_ORIGINS` 內。
+
 ## [0.4.1] - 2026-06-15
 
 ### Fixed / 修正
