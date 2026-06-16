@@ -4,6 +4,7 @@ import {
   RefreshCw,
   Settings,
   Command,
+  ClipboardList,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -33,6 +34,11 @@ export const sidebarData: SidebarData = {
           title: 'Courses',
           url: '/courses',
           icon: GraduationCap,
+        },
+        {
+          title: 'To-do',
+          url: '/todos',
+          icon: ClipboardList,
         },
         {
           title: 'Sync',

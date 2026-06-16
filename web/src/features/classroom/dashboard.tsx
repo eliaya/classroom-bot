@@ -47,7 +47,6 @@ export function ClassroomDashboard() {
   const [errorCount, setErrorCount] = useState(0)
   const [recentRuns, setRecentRuns] = useState<SyncRun[]>([])
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null)
-  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = async () => {
@@ -74,33 +73,15 @@ export function ClassroomDashboard() {
     void load()
   }, [])
 
-  const handleSync = async () => {
-    setSyncing(true)
-    try {
-      await api.triggerSync()
-      await load()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sync failed')
-    } finally {
-      setSyncing(false)
-    }
-  }
-
   return (
     <>
       <ClassroomHeader fixed />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div className='flex flex-wrap items-end justify-between gap-2'>
-          <div>
-            <h2 className='text-2xl font-bold tracking-tight'>Dashboard</h2>
-            <p className='text-muted-foreground'>
-              Google Classroom data cached in local SQLite
-            </p>
-          </div>
-          <Button onClick={() => void handleSync()} disabled={syncing}>
-            <RefreshCw className={syncing ? 'animate-spin' : ''} />
-            {syncing ? 'Syncing…' : 'Sync all courses'}
-          </Button>
+        <div>
+          <h2 className='text-2xl font-bold tracking-tight'>Dashboard</h2>
+          <p className='text-muted-foreground'>
+            Google Classroom data cached in local SQLite
+          </p>
         </div>
 
         {error && (

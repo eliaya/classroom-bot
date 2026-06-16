@@ -107,6 +107,15 @@ export type ClassworkResponse = {
   topic_filter?: string | null
 }
 
+export type TodoItem = {
+  item_id: string
+  course_id: string
+  title?: string | null
+  due_date?: string | null
+  status?: string | null
+  course_work_link?: string | null
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
   status: () =>
@@ -165,6 +174,13 @@ export const api = {
     request<{ status: string; run_id: number }>(`/sync/runs/${runId}/clear`, { method: 'POST' }),
   deleteRun: (runId: number) =>
     request<{ status: string; run_id: number }>(`/sync/runs/${runId}`, { method: 'DELETE' }),
+  listTodos: (params: { status?: string; course_id?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.status) qs.append('status', params.status)
+    if (params.course_id) qs.append('course_id', params.course_id)
+    const q = qs.toString()
+    return request<{ items: TodoItem[]; total: number }>(`/todos${q ? `?${q}` : ''}`)
+  },
   botStatus: () => request<BotStatus>('/bot/status'),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>

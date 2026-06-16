@@ -36,10 +36,6 @@ def _todo_due_iso(cw: Dict[str, Any]) -> Optional[str]:
         return None
 
 
-# Submission states that still require the student's attention (i.e. real to-dos).
-_OPEN_TODO_STATES = {"NEW", "CREATED", "RECLAIMED_BY_STUDENT"}
-
-
 class ClassroomSyncService:
     """Pulls full Google Classroom data into the shared SQLite cache."""
 
@@ -267,9 +263,6 @@ class ClassroomSyncService:
             if not cw_id:
                 continue
             state = sub.get("state")
-            # Only open (not turned-in/returned) submissions count as to-dos.
-            if state not in _OPEN_TODO_STATES:
-                continue
             cw = cw_by_id.get(cw_id, {})
             todos.append({
                 "user_id": "me",

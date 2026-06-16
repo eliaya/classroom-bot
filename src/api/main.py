@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src import __version__
-from src.api.routes import auth, bot, courses, health, scheduler, sync
+from src.api.routes import auth, bot, courses, health, scheduler, sync, todos
 from src.api.services.scheduler_service import SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix="/api")
     app.include_router(courses.router, prefix="/api")
+    app.include_router(todos.router, prefix="/api")
     app.include_router(sync.router, prefix="/api")
     app.include_router(scheduler.router, prefix="/api")
     app.include_router(bot.router, prefix="/api")

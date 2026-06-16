@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
@@ -37,11 +38,86 @@ function formatBytes(n?: number | null): string {
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-const SOURCE_ICON: Record<Attachment['source'], string> = {
-  drive: '📁',
-  link: '🔗',
-  form: '📝',
-  youtube: '🎥',
+// SVG icons for each attachment source type
+function IconDrive({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox='0 0 24 24' fill='none' aria-hidden='true'>
+      <path d='M7.71 3 2 13l4.29 7h11.42L22 13 16.29 3H7.71Z' fill='#4285F4' />
+      <path d='m2 13 4.29 7H22L16.29 13H2Z' fill='#34A853' opacity='.9' />
+      <path d='M7.71 3 2 13h6.25L16.29 3H7.71Z' fill='#FBBC05' opacity='.9' />
+    </svg>
+  )
+}
+
+function IconYouTube({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox='0 0 24 24' aria-hidden='true'>
+      <path
+        d='M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8Z'
+        fill='#FF0000'
+      />
+      <path d='M9.6 15.6V8.4L15.8 12 9.6 15.6Z' fill='#fff' />
+    </svg>
+  )
+}
+
+function IconForm({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox='0 0 24 24' fill='none' aria-hidden='true'>
+      <rect width='24' height='24' rx='3' fill='#673AB7' />
+      <path d='M7 8h10M7 12h10M7 16h6' stroke='#fff' strokeWidth='1.8' strokeLinecap='round' />
+    </svg>
+  )
+}
+
+function IconLink({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+      <path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71' />
+      <path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' />
+    </svg>
+  )
+}
+
+function IconPdf({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox='0 0 24 24' fill='none' aria-hidden='true'>
+      <rect width='24' height='24' rx='3' fill='#E53E3E' />
+      <text x='3' y='17' fontSize='10' fontWeight='bold' fill='#fff' fontFamily='sans-serif'>PDF</text>
+    </svg>
+  )
+}
+
+function IconImage({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+      <rect x='3' y='3' width='18' height='18' rx='2' />
+      <circle cx='9' cy='9' r='2' />
+      <path d='m21 15-5-5L5 21' />
+    </svg>
+  )
+}
+
+function IconGoogleClassroom({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox='0 0 192 192' fill='none' aria-hidden='true'>
+      <rect width='192' height='192' rx='24' fill='#1EA362' />
+      <rect x='24' y='32' width='144' height='96' rx='8' fill='white' />
+      <circle cx='96' cy='80' r='24' fill='#1EA362' />
+      <path d='M56 152h80' stroke='white' strokeWidth='12' strokeLinecap='round' />
+    </svg>
+  )
+}
+
+function AttachmentIcon({ att }: { att: Attachment }) {
+  if (att.source === 'youtube') return <IconYouTube />
+  if (att.source === 'form') return <IconForm />
+  if (att.source === 'link') return <IconLink />
+  // Drive — pick icon by MIME type
+  const mime = att.content_type || ''
+  if (mime === 'application/pdf') return <IconPdf />
+  if (mime.startsWith('image/')) return <IconImage />
+  return <IconDrive />
 }
 
 export function CourseClassworkPage({ courseId }: { courseId: string }) {
@@ -50,6 +126,7 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
   const [tab, setTab] = useState<'classwork' | 'topics'>('classwork')
   // topic filter for the unified classwork view. null = show all
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null)
+  const [showAllTopics, setShowAllTopics] = useState(false)
   // the classwork item shown in the split-screen content panel. null = closed
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null)
 
@@ -164,10 +241,13 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
       }}
     >
       <div className='flex flex-wrap items-center justify-between gap-2'>
-        <TabsList>
-          <TabsTrigger value='classwork'>Classwork</TabsTrigger>
-          <TabsTrigger value='topics'>Topics</TabsTrigger>
-        </TabsList>
+        <div className='flex items-center gap-2'>
+          <span className='text-muted-foreground text-sm'>Viewing by:</span>
+          <TabsList>
+            <TabsTrigger value='classwork'>Classwork</TabsTrigger>
+            <TabsTrigger value='topics'>Topics</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Quick filter status */}
         {tab === 'classwork' && selectedTopicId !== null && (
@@ -184,10 +264,17 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
       </div>
 
       <TabsContent value='classwork' className='mt-4 space-y-3'>
-        {/* Topic Filter control (the main feature requested) */}
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-muted-foreground mr-1 text-sm font-medium'>Topic filter:</span>
-          {filterOptions.map((opt) => {
+        {/* Topic Filter control */}
+        {(() => {
+          // filterOptions: [All topics, ...topics, No topic]
+          const allTopicsOpt = filterOptions[0]
+          const noTopicOpt = filterOptions[filterOptions.length - 1]
+          const topicOpts = filterOptions.slice(1, filterOptions.length - 1)
+          const VISIBLE_COUNT = 3
+          const visibleTopics = showAllTopics ? topicOpts : topicOpts.slice(0, VISIBLE_COUNT)
+          const hiddenCount = topicOpts.length - VISIBLE_COUNT
+
+          const renderBtn = (opt: typeof filterOptions[0]) => {
             const isActive =
               (opt.value === null && selectedTopicId === null) ||
               (opt.value === selectedTopicId)
@@ -207,13 +294,41 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
                 )}
               </Button>
             )
-          })}
-          {selectedTopicId !== null && (
-            <Button variant='ghost' size='sm' onClick={resetFilter} className='h-8'>
-              Show all
-            </Button>
-          )}
-        </div>
+          }
+
+          return (
+            <div className='flex flex-wrap items-center gap-2'>
+              <span className='text-muted-foreground mr-1 text-sm font-medium'>Latest topics:</span>
+              {renderBtn(allTopicsOpt)}
+              {visibleTopics.map(renderBtn)}
+              {(showAllTopics || hiddenCount <= 0) && renderBtn(noTopicOpt)}
+              {topicOpts.length > VISIBLE_COUNT && (
+                <button
+                  type='button'
+                  onClick={() => setShowAllTopics((v) => !v)}
+                  className='text-muted-foreground hover:text-foreground flex h-8 items-center gap-1 rounded border px-2 text-xs transition-colors'
+                  title={showAllTopics ? 'Show fewer topics' : `Show ${hiddenCount} more topic${hiddenCount === 1 ? '' : 's'}`}
+                >
+                  {showAllTopics ? (
+                    <svg xmlns='http://www.w3.org/2000/svg' className='h-3.5 w-3.5' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                      <path d='m18 15-6-6-6 6' />
+                    </svg>
+                  ) : (
+                    <svg xmlns='http://www.w3.org/2000/svg' className='h-3.5 w-3.5' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                      <path d='m6 9 6 6 6-6' />
+                    </svg>
+                  )}
+                  {showAllTopics ? 'Less' : `+${hiddenCount} more`}
+                </button>
+              )}
+              {selectedTopicId !== null && (
+                <Button variant='ghost' size='sm' onClick={resetFilter} className='h-8'>
+                  Reset
+                </Button>
+              )}
+            </div>
+          )
+        })()}
 
         <div className='flex flex-col gap-3 lg:flex-row lg:items-start'>
           <div
@@ -306,9 +421,6 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
           )}
         </div>
 
-        <p className='text-muted-foreground text-xs'>
-          All topics and their classwork items (assignments, questions, and materials) are fetched into the local cache during sync. Items are grouped by each item's own topic; materials are tagged as <span className='font-medium'>MATERIAL</span>.
-        </p>
       </TabsContent>
 
       <TabsContent value='topics' className='mt-4'>
@@ -374,9 +486,7 @@ function ClassworkDetail({
             {String(item.title || 'Untitled')}
           </h3>
           <div className='text-muted-foreground mt-0.5 flex flex-wrap items-center gap-2 text-xs'>
-            <span className='rounded bg-muted px-1.5 py-0.5'>{String(item.work_type || '—')}</span>
             <span className='rounded bg-muted px-1.5 py-0.5'>{topicName}</span>
-            {item.update_time && <span>{String(item.update_time)}</span>}
           </div>
         </div>
         <Button variant='ghost' size='sm' className='h-7 px-2' onClick={onClose}>
@@ -403,48 +513,41 @@ function ClassworkDetail({
           ))}
         </div>
 
-        {item.alternate_link && (
-          <a
-            href={String(item.alternate_link)}
-            target='_blank'
-            rel='noreferrer'
-            className='text-muted-foreground inline-block text-xs underline'
-          >
-            Open in Google Classroom ↗
-          </a>
-        )}
       </div>
     </div>
   )
 }
 
 function AttachmentView({ att }: { att: Attachment }) {
-  const icon = SOURCE_ICON[att.source] || '📎'
   const label = att.title || att.source
 
-  // Non-Drive items (link / form / youtube): just an external reference.
+  // Non-Drive items: external link only.
   if (att.source !== 'drive') {
     return (
-      <div className='rounded border p-2 text-sm'>
-        {att.source_url ? (
-          <a
-            href={att.source_url}
-            target='_blank'
-            rel='noreferrer'
-            className='text-primary underline'
-          >
-            {icon} {label} ↗
-          </a>
-        ) : (
-          <span>
-            {icon} {label}
-          </span>
-        )}
+      <div className='flex items-center gap-2 rounded border p-2 text-sm'>
+        <AttachmentIcon att={att} />
+        <div className='min-w-0 flex-1'>
+          {att.source_url ? (
+            <a href={att.source_url} target='_blank' rel='noreferrer' className='text-primary truncate underline'>
+              {label} ↗
+            </a>
+          ) : (
+            <span className='truncate'>{label}</span>
+          )}
+          <div className='mt-0.5 flex items-center gap-2'>
+            <a href={att.source_url || undefined} target='_blank' rel='noreferrer' className='text-muted-foreground transition-opacity hover:opacity-80'>
+              <IconGoogleClassroom className='size-4' />
+            </a>
+            <Badge variant='outline' className='text-[10px]'>
+              {att.source}
+            </Badge>
+          </div>
+        </div>
       </div>
     )
   }
 
-  // Drive file whose content was not cached locally — explain the state.
+  // Drive file not cached locally.
   if (att.fetch_status !== 'fetched' || !att.download_url) {
     const hint =
       att.fetch_status === 'skipped'
@@ -454,18 +557,14 @@ function AttachmentView({ att }: { att: Attachment }) {
           : 'Not yet downloaded.'
     return (
       <div className='rounded border p-2 text-sm'>
-        <div className='font-medium'>
-          {icon} {label}
+        <div className='flex items-center gap-2 font-medium'>
+          <AttachmentIcon att={att} />
+          <span className='truncate'>{label}</span>
         </div>
         <div className='text-muted-foreground mt-0.5 text-xs'>{hint}</div>
         {att.source_url && (
-          <a
-            href={att.source_url}
-            target='_blank'
-            rel='noreferrer'
-            className='text-primary text-xs underline'
-          >
-            Open original ↗
+          <a href={att.source_url} target='_blank' rel='noreferrer' className='text-primary text-xs underline'>
+            Open in Drive ↗
           </a>
         )}
       </div>
@@ -473,39 +572,31 @@ function AttachmentView({ att }: { att: Attachment }) {
   }
 
   const url = fileUrl(att.download_url)
-  const mime = att.content_type || ''
-  const isPdf = mime === 'application/pdf'
-  const isImage = mime.startsWith('image/')
 
   return (
-    <div className='rounded border p-2'>
-      <div className='mb-2 flex items-center justify-between gap-2 text-sm'>
-        <span className='min-w-0 truncate font-medium' title={label}>
-          {icon} {label}
-          {att.exported && (
-            <span className='text-muted-foreground ml-1 text-xs'>(exported)</span>
-          )}
-        </span>
-        <a
-          href={url}
-          download
-          className='text-primary shrink-0 text-xs underline'
-        >
-          Download{att.file_size ? ` (${formatBytes(att.file_size)})` : ''}
-        </a>
+    <div className='flex items-center justify-between gap-2 rounded border p-2 text-sm'>
+      <div className='flex min-w-0 items-center gap-2'>
+        <AttachmentIcon att={att} />
+        <div className='min-w-0 flex-1'>
+          <span className='truncate font-medium' title={label}>
+            {label}
+            {att.exported && <span className='text-muted-foreground ml-1 text-xs'>(exported)</span>}
+          </span>
+          <div className='mt-0.5 flex items-center gap-2'>
+            <Badge variant='outline' className='text-[10px]'>
+              {att.source}
+            </Badge>
+            {att.source_url && (
+              <a href={att.source_url} target='_blank' rel='noreferrer' className='text-primary text-xs underline'>
+                Open ↗
+              </a>
+            )}
+            <a href={url} download className='text-primary text-xs underline'>
+              Download{att.file_size ? ` (${formatBytes(att.file_size)})` : ''}
+            </a>
+          </div>
+        </div>
       </div>
-
-      {isPdf && (
-        <iframe src={url} title={label} className='h-[60vh] w-full rounded border' />
-      )}
-      {isImage && (
-        <img src={url} alt={label} className='max-h-[60vh] w-full rounded border object-contain' />
-      )}
-      {!isPdf && !isImage && (
-        <p className='text-muted-foreground text-xs'>
-          {mime || 'Binary file'} — preview not available; use Download.
-        </p>
-      )}
     </div>
   )
 }

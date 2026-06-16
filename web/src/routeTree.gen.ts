@@ -22,6 +22,7 @@ import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as authOtpRouteImport } from './routes/(auth)/otp'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
+import { Route as AuthenticatedTodosIndexRouteImport } from './routes/_authenticated/todos/index'
 import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authenticated/sync/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedCoursesIndexRouteImport } from './routes/_authenticated/courses/index'
@@ -97,6 +98,11 @@ const AuthenticatedSettingsRouteRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTodosIndexRoute = AuthenticatedTodosIndexRouteImport.update({
+  id: '/todos/',
+  path: '/todos/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSyncIndexRoute = AuthenticatedSyncIndexRouteImport.update({
   id: '/sync/',
   path: '/sync/',
@@ -169,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/courses/': typeof AuthenticatedCoursesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/sync/': typeof AuthenticatedSyncIndexRoute
+  '/todos/': typeof AuthenticatedTodosIndexRoute
   '/courses/$courseId/classwork': typeof AuthenticatedCoursesCourseIdClassworkRoute
   '/courses/$courseId/people': typeof AuthenticatedCoursesCourseIdPeopleRoute
   '/courses/$courseId/stream': typeof AuthenticatedCoursesCourseIdStreamRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByTo {
   '/courses': typeof AuthenticatedCoursesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/sync': typeof AuthenticatedSyncIndexRoute
+  '/todos': typeof AuthenticatedTodosIndexRoute
   '/courses/$courseId/classwork': typeof AuthenticatedCoursesCourseIdClassworkRoute
   '/courses/$courseId/people': typeof AuthenticatedCoursesCourseIdPeopleRoute
   '/courses/$courseId/stream': typeof AuthenticatedCoursesCourseIdStreamRoute
@@ -215,6 +223,7 @@ export interface FileRoutesById {
   '/_authenticated/courses/': typeof AuthenticatedCoursesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/sync/': typeof AuthenticatedSyncIndexRoute
+  '/_authenticated/todos/': typeof AuthenticatedTodosIndexRoute
   '/_authenticated/courses/$courseId/classwork': typeof AuthenticatedCoursesCourseIdClassworkRoute
   '/_authenticated/courses/$courseId/people': typeof AuthenticatedCoursesCourseIdPeopleRoute
   '/_authenticated/courses/$courseId/stream': typeof AuthenticatedCoursesCourseIdStreamRoute
@@ -240,6 +249,7 @@ export interface FileRouteTypes {
     | '/courses/'
     | '/settings/'
     | '/sync/'
+    | '/todos/'
     | '/courses/$courseId/classwork'
     | '/courses/$courseId/people'
     | '/courses/$courseId/stream'
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/courses'
     | '/settings'
     | '/sync'
+    | '/todos'
     | '/courses/$courseId/classwork'
     | '/courses/$courseId/people'
     | '/courses/$courseId/stream'
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/_authenticated/courses/'
     | '/_authenticated/settings/'
     | '/_authenticated/sync/'
+    | '/_authenticated/todos/'
     | '/_authenticated/courses/$courseId/classwork'
     | '/_authenticated/courses/$courseId/people'
     | '/_authenticated/courses/$courseId/stream'
@@ -398,6 +410,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/todos/': {
+      id: '/_authenticated/todos/'
+      path: '/todos'
+      fullPath: '/todos/'
+      preLoaderRoute: typeof AuthenticatedTodosIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sync/': {
       id: '/_authenticated/sync/'
       path: '/sync'
@@ -509,6 +528,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedCoursesIndexRoute: typeof AuthenticatedCoursesIndexRoute
   AuthenticatedSyncIndexRoute: typeof AuthenticatedSyncIndexRoute
+  AuthenticatedTodosIndexRoute: typeof AuthenticatedTodosIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -519,6 +539,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedCoursesIndexRoute: AuthenticatedCoursesIndexRoute,
   AuthenticatedSyncIndexRoute: AuthenticatedSyncIndexRoute,
+  AuthenticatedTodosIndexRoute: AuthenticatedTodosIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

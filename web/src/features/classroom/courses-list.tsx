@@ -12,6 +12,7 @@ export function CoursesListPage() {
   const navigate = route.useNavigate()
   const [courses, setCourses] = useState<Course[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
 
   useEffect(() => {
     api
@@ -23,7 +24,7 @@ export function CoursesListPage() {
   return (
     <>
       <ClassroomHeader fixed />
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+      <Main fluid className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div>
           <h2 className='text-2xl font-bold tracking-tight'>Courses</h2>
           <p className='text-muted-foreground'>
@@ -33,7 +34,13 @@ export function CoursesListPage() {
         {error && (
           <p className='text-destructive text-sm'>{error}</p>
         )}
-        <CoursesTable data={courses} search={search} navigate={navigate} />
+        <CoursesTable
+          data={courses}
+          search={search}
+          navigate={navigate}
+          selectedCourse={selectedCourse}
+          onSelectCourse={setSelectedCourse}
+        />
       </Main>
     </>
   )

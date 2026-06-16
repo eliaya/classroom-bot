@@ -29,17 +29,7 @@ export function CourseStreamPage({ courseId }: { courseId: string }) {
           <CardContent className='text-muted-foreground text-sm'>
             <p className='mb-2 whitespace-pre-wrap'>{item.text || '—'}</p>
             <p>Updated: {item.update_time || '—'}</p>
-            {item.alternate_link && (
-              <a
-                className='text-primary underline'
-                href={item.alternate_link}
-                target='_blank'
-                rel='noreferrer'
-              >
-                Open in Classroom
-              </a>
-            )}
-          </CardContent>
+                      </CardContent>
         </Card>
       ))}
       {!items.length && (

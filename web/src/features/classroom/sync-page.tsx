@@ -185,7 +185,7 @@ export function SyncPage() {
           </div>
           <Button onClick={() => void handleSync()} disabled={isLiveSyncing}>
             <RefreshCw className={isLiveSyncing ? 'animate-spin' : ''} />
-            {isLiveSyncing ? 'Syncing…' : 'Trigger full sync'}
+            {isLiveSyncing ? 'Syncing…' : 'Sync Now'}
           </Button>
         </div>
 
