@@ -116,6 +116,41 @@ export type TodoItem = {
   course_work_link?: string | null
 }
 
+export type SearchResultKind =
+  | 'course'
+  | 'coursework'
+  | 'material'
+  | 'announcement'
+
+export type SearchCategoryKey = 'course' | 'classwork' | 'stream'
+
+export type SearchResult = {
+  kind: SearchResultKind
+  course_id: string
+  course_name?: string | null
+  item_id?: string | null
+  title: string
+  subtitle?: string | null
+  snippet?: string | null
+  attachment?: string | null
+  alternate_link?: string | null
+  url: string
+}
+
+export type SearchCategory = {
+  key: SearchCategoryKey
+  label: string
+  total: number
+  has_more: boolean
+  items: SearchResult[]
+}
+
+export type SearchResponse = {
+  query: string
+  limit: number
+  categories: SearchCategory[]
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
   status: () =>
@@ -181,6 +216,10 @@ export const api = {
     const q = qs.toString()
     return request<{ items: TodoItem[]; total: number }>(`/todos${q ? `?${q}` : ''}`)
   },
+  search: (q: string, limit = 5) =>
+    request<SearchResponse>(
+      `/search?q=${encodeURIComponent(q)}&limit=${limit}`
+    ),
   botStatus: () => request<BotStatus>('/bot/status'),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>

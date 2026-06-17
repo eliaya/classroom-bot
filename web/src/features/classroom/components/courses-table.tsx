@@ -12,8 +12,14 @@ import {
 } from '@tanstack/react-table'
 import {
   BookOpen,
-  Radio, Users,
+  FileText,
+  HardDrive,
+  Link as LinkIcon,
+  Radio,
+  Users,
+  Video,
 } from 'lucide-react'
+import { GoogleClassroomIcon } from '@/assets/custom/icon-google-classroom'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
 import {
@@ -33,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DataTableToolbar } from '@/components/data-table'
 import {
   api,
+  fileUrl,
       type ClassworkItem,
   type ClassworkResponse,
   type Course,
@@ -64,6 +71,27 @@ const SECTION_NAV: SectionDef[] = [
   { key: 'people',    label: 'People',    Icon: Users },
 ]
 
+// Icon for an attachment based on its source type.
+function AttachmentIcon({
+  source,
+  className,
+}: {
+  source?: 'drive' | 'link' | 'form' | 'youtube' | null
+  className?: string
+}) {
+  switch (source) {
+    case 'youtube':
+      return <Video className={cn('text-red-600', className)} />
+    case 'form':
+      return <FileText className={cn('text-violet-600', className)} />
+    case 'link':
+      return <LinkIcon className={cn('text-blue-600', className)} />
+    case 'drive':
+    default:
+      return <HardDrive className={cn('text-emerald-600', className)} />
+  }
+}
+
 const COLUMN_VISIBILITY_KEY = 'courses-table:column-visibility'
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = { room: false }
 
@@ -76,19 +104,6 @@ function loadColumnVisibility(): VisibilityState {
   return DEFAULT_COLUMN_VISIBILITY
 }
 
-
-// ─── Shared icons ─────────────────────────────────────────────────────────────
-
-function IconGoogleClassroom({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox='0 0 192 192' fill='none' aria-hidden='true'>
-      <rect width='192' height='192' rx='24' fill='#1EA362' />
-      <rect x='24' y='32' width='144' height='96' rx='8' fill='white' />
-      <circle cx='96' cy='80' r='24' fill='#1EA362' />
-      <path d='M56 152h80' stroke='white' strokeWidth='12' strokeLinecap='round' />
-    </svg>
-  )
-}
 
 // ─── CoursesTable (main export) ───────────────────────────────────────────────
 
@@ -162,7 +177,7 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
     <div className='flex flex-col gap-4'>
       <DataTableToolbar table={table} searchPlaceholder='Filter courses…' searchKey='name' />
       <div className='flex flex-col gap-3 lg:flex-row lg:items-start'>
-        <div className={cn('overflow-hidden rounded-md border', selectedCourse ? 'lg:w-2/5' : 'w-full')}>
+        <div className={cn('overflow-hidden rounded-md border', selectedCourse ? 'lg:w-1/2' : 'w-full')}>
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
@@ -242,9 +257,14 @@ function InlineClasswork({
   const [data, setData] = useState<ClassworkResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(10)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const PAGE_SIZE = 10
 
   useEffect(() => {
     setLoading(true)
+    setVisibleCount(10)
     api
       .getClasswork(courseId)
       .then((d) => { setData(d); setError(null) })
@@ -265,6 +285,27 @@ function InlineClasswork({
     if (!loading) onCountChange?.(items.length)
   }, [loading, items.length, onCountChange])
 
+  // Infinite scroll (client-side progressive reveal after initial async load)
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && visibleCount < items.length && !isLoadingMore) {
+          setIsLoadingMore(true)
+          // Simulate async load of next batch
+          setTimeout(() => {
+            setVisibleCount((c) => Math.min(c + PAGE_SIZE, items.length))
+            setIsLoadingMore(false)
+          }, 250)
+        }
+      },
+      { threshold: 0.1 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [visibleCount, items.length, isLoadingMore])
+
   return (
     <>
       {loading ? (
@@ -277,47 +318,90 @@ function InlineClasswork({
         <p className='p-4 text-sm text-muted-foreground'>No classwork in cache. Run a sync.</p>
       ) : (
         <ScrollArea className='flex-1 min-h-0'>
-          {items.map((item, idx) => {
-            const attCount = item.attachments?.length ?? 0
-            const isMaterial = item._kind === 'material'
-            const typeLabel = isMaterial ? 'Attachment' : String(item.work_type || 'Coursework')
-            const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
-            const description = String(item.description || '').trim()
-            const hasGcLink = !isMaterial && item.alternate_link
-            return (
-              <div key={`${item._kind}-${String(item.id)}`}>
-                {idx > 0 && <Separator />}
-                <div className='flex w-full items-start gap-3 px-4 py-3 text-left'>
-                  <div className='min-w-0 flex-1'>
+          <div>
+            {items.slice(0, visibleCount).map((item, idx) => {
+              const attCount = item.attachments?.length ?? 0
+              const isMaterial = item._kind === 'material'
+              const typeLabel = isMaterial ? 'Attachment' : String(item.work_type || 'Coursework')
+              const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
+              const description = String(item.description || '').trim()
+              const hasGcLink = !isMaterial && item.alternate_link
+              return (
+                <div key={`${item._kind}-${String(item.id)}`}>
+                  {idx > 0 && <Separator />}
+                  <div className='px-4 py-4 text-left'>
                     <p className='truncate text-sm font-medium leading-snug'>
                       {String(item.title || '—')}
                     </p>
+
+                    {/* $type, $date, $file-counts as labels BELOW title (label style) */}
+                    <div className='mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground'>
+                      <span className='rounded bg-muted px-1.5 py-0.5'>{typeLabel}</span>
+                      {dateStr && <span className='rounded bg-muted px-1.5 py-0.5'>{dateStr}</span>}
+                      {attCount > 0 && <span className='rounded bg-muted px-1.5 py-0.5'>{attCount} files</span>}
+                    </div>
+
+                    {/* For Material: directly show downloaded attachment http urls (as Contents) */}
+                    {isMaterial && attCount > 0 && (
+                      <div className='mt-2 flex flex-col gap-0.5'>
+                        {item.attachments
+                          ?.filter((a) => a.download_url)
+                          .map((att, i) => (
+                            <a
+                              key={i}
+                              href={fileUrl(att.download_url!)}
+                              target='_blank'
+                              rel='noreferrer'
+                              className='flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
+                              title={att.title || ''}
+                            >
+                              <AttachmentIcon
+                                source={att.source}
+                                className='size-3 shrink-0'
+                              />
+                              <span className='truncate'>
+                                {att.title || 'Attachment file'}
+                              </span>
+                            </a>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* For non-Material: show "Open in Google Classroom ↗" text URL (no SVG icon) */}
+                    {hasGcLink && (
+                      <div className='mt-2'>
+                        <a
+                          href={item.alternate_link!}
+                          target='_blank'
+                          rel='noreferrer'
+                          className='inline-flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
+                        >
+                          <GoogleClassroomIcon className='size-3.5 shrink-0' />
+                          Open in Google Classroom ↗
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Description (plain, no accordion) */}
                     {description && (
-                      <p className='mt-1 text-[11px] text-muted-foreground whitespace-pre-wrap'>
+                      <p className='mt-2 text-sm text-muted-foreground whitespace-pre-wrap'>
                         {description}
                       </p>
                     )}
                   </div>
-                  <div className='mt-0.5 shrink-0 flex flex-col items-end gap-0.5 text-[10px] text-muted-foreground tabular-nums'>
-                    <span>{typeLabel}</span>
-                    {dateStr && <span>{dateStr}</span>}
-                    {attCount > 0 && <span>{attCount} files</span>}
-                    {hasGcLink && (
-                      <a
-                        href={item.alternate_link!}
-                        target='_blank'
-                        rel='noreferrer'
-                        className='text-primary hover:opacity-80'
-                        title='Open in Google Classroom'
-                      >
-                        <IconGoogleClassroom className='size-4' />
-                      </a>
-                    )}
-                  </div>
                 </div>
+              )
+            })}
+
+            {visibleCount < items.length && <div ref={sentinelRef} className='h-1' />}
+            {isLoadingMore && (
+              <div className='px-4 py-2'>
+                {[...Array(2)].map((_, i) => (
+                  <Skeleton key={i} className='my-1 h-10 w-full rounded-md' />
+                ))}
               </div>
-            )
-          })}
+            )}
+          </div>
         </ScrollArea>
       )}
     </>
@@ -333,22 +417,49 @@ function InlineStream({
   courseId: string
   onCountChange?: (count: number) => void
 }) {
-  const [items, setItems] = useState<StreamItem[]>([])
+  const [data, setData] = useState<{ items: StreamItem[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(10)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const PAGE_SIZE = 10
 
   useEffect(() => {
     setLoading(true)
+    setVisibleCount(10)
     api
-      .getStream(courseId)
-      .then((r) => { setItems(r.items); setError(null) })
+      .getStream(courseId, 100) // load reasonable amount for client-side infinite; real pagination possible via limit/offset
+      .then((r) => { setData({ items: r.items }); setError(null) })
       .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
       .finally(() => setLoading(false))
   }, [courseId])
 
+  const items = useMemo<StreamItem[]>(() => data?.items || [], [data])
+
   useEffect(() => {
     if (!loading) onCountChange?.(items.length)
   }, [loading, items.length, onCountChange])
+
+  // Infinite scroll (client-side progressive reveal after initial async load)
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && visibleCount < items.length && !isLoadingMore) {
+          setIsLoadingMore(true)
+          setTimeout(() => {
+            setVisibleCount((c) => Math.min(c + PAGE_SIZE, items.length))
+            setIsLoadingMore(false)
+          }, 250)
+        }
+      },
+      { threshold: 0.1 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [visibleCount, items.length, isLoadingMore])
 
   return (
     <>
@@ -362,44 +473,61 @@ function InlineStream({
         <p className='p-4 text-sm text-muted-foreground'>No stream items in cache.</p>
       ) : (
         <ScrollArea className='flex-1 min-h-0'>
-          {items.map((item, idx) => {
-            const typeLabel = item.type === 'announcement' ? 'Announcement' : String(item.work_type || 'Assignment')
-            const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
-            const description = String(item.text || '').trim()
-            const hasGcLink = !!item.alternate_link
-            return (
-              <div key={`${item.type}-${item.id}`}>
-                {idx > 0 && <Separator />}
-                <div className='flex w-full items-start gap-3 px-4 py-3 text-left'>
-                  <div className='min-w-0 flex-1'>
+          <div>
+            {items.slice(0, visibleCount).map((item, idx) => {
+              const typeLabel = item.type === 'announcement' ? 'Announcement' : String(item.work_type || 'Assignment')
+              const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
+              const description = String(item.text || '').trim()
+              const hasGcLink = !!item.alternate_link
+              return (
+                <div key={`${item.type}-${item.id}`}>
+                  {idx > 0 && <Separator />}
+                  <div className='px-4 py-4 text-left'>
                     <p className='truncate text-sm font-medium leading-snug'>
                       {String(item.title || '—')}
                     </p>
+
+                    {/* $type, $date as labels BELOW title (label style) */}
+                    <div className='mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground'>
+                      <span className='rounded bg-muted px-1.5 py-0.5'>{typeLabel}</span>
+                      {dateStr && <span className='rounded bg-muted px-1.5 py-0.5'>{dateStr}</span>}
+                    </div>
+
+                    {/* non-Material (stream items): show "Open in Google Classroom ↗" text URL (no SVG icon) */}
+                    {hasGcLink && (
+                      <div className='mt-2'>
+                        <a
+                          href={item.alternate_link!}
+                          target='_blank'
+                          rel='noreferrer'
+                          className='inline-flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
+                        >
+                          <GoogleClassroomIcon className='size-3.5 shrink-0' />
+                          Open in Google Classroom ↗
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Description (plain, no accordion) */}
                     {description && (
-                      <p className='mt-1 text-[11px] text-muted-foreground whitespace-pre-wrap'>
+                      <p className='mt-2 text-sm text-muted-foreground whitespace-pre-wrap'>
                         {description}
                       </p>
                     )}
                   </div>
-                  <div className='mt-0.5 shrink-0 flex flex-col items-end gap-0.5 text-[10px] text-muted-foreground tabular-nums'>
-                    <span>{typeLabel}</span>
-                    {dateStr && <span>{dateStr}</span>}
-                    {hasGcLink && (
-                      <a
-                        href={item.alternate_link!}
-                        target='_blank'
-                        rel='noreferrer'
-                        className='text-primary hover:opacity-80'
-                        title='Open in Google Classroom'
-                      >
-                        <IconGoogleClassroom className='size-4' />
-                      </a>
-                    )}
-                  </div>
                 </div>
+              )
+            })}
+
+            {visibleCount < items.length && <div ref={sentinelRef} className='h-1' />}
+            {isLoadingMore && (
+              <div className='px-4 py-2'>
+                {[...Array(2)].map((_, i) => (
+                  <Skeleton key={i} className='my-1 h-10 w-full rounded-md' />
+                ))}
               </div>
-            )
-          })}
+            )}
+          </div>
         </ScrollArea>
       )}
     </>
@@ -514,7 +642,7 @@ function CourseDetail({
   const onPeopleCount = useCallback((n: number) => setCount('people', n), [setCount])
 
   return (
-    <div className='flex h-[80vh] flex-col overflow-hidden rounded-md border lg:w-3/5'>
+    <div className='flex max-h-[80vh] h-[80vh] flex-col overflow-hidden rounded-md border lg:w-1/2'>
       {/* Header */}
       <div className='flex items-start justify-between gap-2 border-b p-3'>
         <div className='min-w-0'>
@@ -552,13 +680,22 @@ function CourseDetail({
         onValueChange={(v) => setTab(v as SectionKey)}
         className='flex min-h-0 flex-1 flex-col overflow-hidden gap-0'
       >
-        <TabsList className='w-full justify-start rounded-none border-b bg-transparent px-2 py-7'>
+        <TabsList className='w-full justify-start rounded-none border-b bg-transparent px-2 py-5'>
           {SECTION_NAV.map(({ key, label, Icon }) => (
-            <TabsTrigger key={key} value={key} className='gap-1.5'>
+            <TabsTrigger key={key} value={key} className='gap-3 px-6 py-6'>
               <Icon className='size-3.5' />
               {label}
               {counts[key] !== undefined && (
-                <span className='rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground'>
+                <span
+                  className={
+                    'rounded px-1.5 py-0.5 text-[10px] tabular-nums ' +
+                    (key === 'classwork'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                      : key === 'stream'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300')
+                  }
+                >
                   {counts[key]}
                 </span>
               )}
@@ -566,15 +703,18 @@ function CourseDetail({
           ))}
         </TabsList>
 
-        {tab === 'classwork' && (
+        {/* Always mount all tab contents so counts/badges auto-populate on open (without needing to click tab first).
+            Only the active one is visible. 
+            Wrappers are flex containers so the inner ScrollArea (flex-1) gets proper height constraint for scrolling to work. */}
+        <div className={tab === 'classwork' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'}>
           <InlineClasswork courseId={course.id} onCountChange={onClassworkCount} />
-        )}
-        {tab === 'stream' && (
+        </div>
+        <div className={tab === 'stream' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'}>
           <InlineStream courseId={course.id} onCountChange={onStreamCount} />
-        )}
-        {tab === 'people' && (
+        </div>
+        <div className={tab === 'people' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'}>
           <InlinePeople courseId={course.id} onCountChange={onPeopleCount} />
-        )}
+        </div>
       </Tabs>
     </div>
   )

@@ -656,6 +656,183 @@ async def list_cached_people(session: AsyncSession, course_id: str) -> List[Clas
     return list(result.scalars().all())
 
 
+def _snippet(text: Optional[str], query: str, *, width: int = 80) -> Optional[str]:
+    """Return a short context window around the first case-insensitive match."""
+    if not text:
+        return None
+    lo = text.lower().find(query.lower())
+    if lo < 0:
+        return text[:width] + ("…" if len(text) > width else "")
+    start = max(0, lo - width // 3)
+    end = min(len(text), lo + len(query) + (2 * width) // 3)
+    s = text[start:end].strip()
+    return ("…" if start > 0 else "") + s + ("…" if end < len(text) else "")
+
+
+# Upper bound on rows fetched per category, regardless of the display ``limit``.
+# Keeps totals/"More" meaningful without unbounded scans on the cache DB.
+_SEARCH_CAP = 50
+
+
+async def search_all(
+    session: AsyncSession,
+    query: str,
+    *,
+    limit: int = 5,
+) -> Dict[str, Any]:
+    """Full-text search across cached classroom content, grouped into three
+    categories: Course, Classworks (coursework + materials, incl. attachment
+    names), and Stream (announcements).
+
+    Case-insensitive substring matching over the most relevant text columns.
+    Returns ``{"query", "limit", "categories": [{key, label, total, has_more,
+    items}, ...]}``. Each item carries a ``kind`` plus the fields the web UI
+    needs to render and navigate. ``total`` is capped at ``_SEARCH_CAP``.
+    """
+    q = query.strip()
+    course_items: List[Dict[str, Any]] = []
+    classwork_items: List[Dict[str, Any]] = []
+    stream_items: List[Dict[str, Any]] = []
+
+    def _categories() -> List[Dict[str, Any]]:
+        defs = (
+            ("course", "Course", course_items),
+            ("classwork", "Classworks", classwork_items),
+            ("stream", "Stream", stream_items),
+        )
+        return [
+            {
+                "key": key,
+                "label": label,
+                "total": len(items),
+                "has_more": len(items) > limit,
+                "items": items[:limit] if items else [],
+            }
+            for key, label, items in defs
+        ]
+
+    if not q:
+        return {"query": query, "limit": limit, "categories": _categories()}
+
+    like = f"%{q.lower()}%"
+    ql = q.lower()
+
+    # Course id -> name map for labeling child results.
+    courses = await list_cached_courses(session)
+    course_name = {c.id: c.name for c in courses}
+
+    # ── Course: name / section / room / description ──────────────────────────
+    for c in courses:
+        hay = " ".join(filter(None, [c.name, c.section, c.room, c.description])).lower()
+        if ql in hay:
+            course_items.append({
+                "kind": "course",
+                "course_id": c.id,
+                "course_name": c.name,
+                "title": c.name,
+                "subtitle": c.section or c.room or None,
+                "alternate_link": c.alternate_link,
+                "url": f"/courses/{c.id}/stream",
+            })
+            if len(course_items) >= _SEARCH_CAP:
+                break
+
+    # ── Classworks: coursework + materials, matched by title/description OR by
+    #    the name of one of their attachments ($AttachmentName) ───────────────
+    att_rows = (await session.execute(
+        select(ClassroomAttachment)
+        .where(
+            ClassroomAttachment.removed_at.is_(None),
+            func.lower(ClassroomAttachment.title).like(like),
+        )
+        .limit(_SEARCH_CAP)
+    )).scalars().all()
+    att_cw_ids = {a.item_id for a in att_rows if a.item_type == "coursework"}
+    att_mat_ids = {a.item_id for a in att_rows if a.item_type == "material"}
+    att_title: Dict[tuple, str] = {}
+    for a in att_rows:
+        if a.title:
+            att_title.setdefault((a.item_type, a.item_id), a.title)
+
+    cw_conds = [
+        func.lower(ClassroomCoursework.title).like(like),
+        func.lower(ClassroomCoursework.description).like(like),
+    ]
+    if att_cw_ids:
+        cw_conds.append(ClassroomCoursework.id.in_(att_cw_ids))
+    cw_rows = (await session.execute(
+        select(ClassroomCoursework)
+        .where(ClassroomCoursework.removed_at.is_(None), or_(*cw_conds))
+        .order_by(ClassroomCoursework.update_time.desc())
+        .limit(_SEARCH_CAP)
+    )).scalars().all()
+    for row in cw_rows:
+        att_name = att_title.get(("coursework", row.id))
+        classwork_items.append({
+            "kind": "coursework",
+            "course_id": row.course_id,
+            "course_name": course_name.get(row.course_id),
+            "item_id": row.id,
+            "title": row.title or "(untitled)",
+            "snippet": _snippet(row.description, q)
+            or (f"Attachment: {att_name}" if att_name else None),
+            "attachment": att_name,
+            "alternate_link": row.alternate_link,
+            "url": f"/courses/{row.course_id}/classwork",
+        })
+
+    mat_conds = [
+        func.lower(ClassroomMaterial.title).like(like),
+        func.lower(ClassroomMaterial.description).like(like),
+    ]
+    if att_mat_ids:
+        mat_conds.append(ClassroomMaterial.id.in_(att_mat_ids))
+    mat_rows = (await session.execute(
+        select(ClassroomMaterial)
+        .where(ClassroomMaterial.removed_at.is_(None), or_(*mat_conds))
+        .order_by(ClassroomMaterial.update_time.desc())
+        .limit(_SEARCH_CAP)
+    )).scalars().all()
+    for row in mat_rows:
+        att_name = att_title.get(("material", row.id))
+        classwork_items.append({
+            "kind": "material",
+            "course_id": row.course_id,
+            "course_name": course_name.get(row.course_id),
+            "item_id": row.id,
+            "title": row.title or "(untitled)",
+            "snippet": _snippet(row.description, q)
+            or (f"Attachment: {att_name}" if att_name else None),
+            "attachment": att_name,
+            "alternate_link": row.alternate_link,
+            "url": f"/courses/{row.course_id}/classwork",
+        })
+    classwork_items = classwork_items[:_SEARCH_CAP]
+
+    # ── Stream: announcements (text) ─────────────────────────────────────────
+    ann_rows = (await session.execute(
+        select(ClassroomAnnouncement)
+        .where(
+            ClassroomAnnouncement.removed_at.is_(None),
+            func.lower(ClassroomAnnouncement.text).like(like),
+        )
+        .order_by(ClassroomAnnouncement.update_time.desc())
+        .limit(_SEARCH_CAP)
+    )).scalars().all()
+    for row in ann_rows:
+        stream_items.append({
+            "kind": "announcement",
+            "course_id": row.course_id,
+            "course_name": course_name.get(row.course_id),
+            "title": _snippet(row.text, q, width=48) or "Announcement",
+            "snippet": _snippet(row.text, q),
+            "alternate_link": row.alternate_link,
+            "url": f"/courses/{row.course_id}/stream",
+        })
+
+    return {"query": query, "limit": limit, "categories": _categories()}
+
+
 async def list_cached_todos(
     session: AsyncSession,
     course_id: Optional[str] = None,

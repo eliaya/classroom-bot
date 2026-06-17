@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { SearchIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSearch } from '@/context/search-provider'
@@ -9,9 +10,30 @@ export function Search({
   ...props
 }: React.ComponentProps<'button'> & { placeholder?: string }) {
   const { setOpen } = useSearch()
+  const [expanded, setExpanded] = useState(false)
+
+  // Collapsed default: a single search icon button.
+  if (!expanded) {
+    return (
+      <Button
+        {...props}
+        variant='outline'
+        size='icon'
+        aria-label='Search'
+        aria-keyshortcuts='Meta+K Control+K'
+        className={cn('size-8 shadow-none', className)}
+        onClick={() => setExpanded(true)}
+      >
+        <SearchIcon size={16} aria-hidden='true' />
+      </Button>
+    )
+  }
+
+  // Expanded: full search bar. Clicking opens the command palette; blur collapses.
   return (
     <Button
       {...props}
+      autoFocus
       variant='outline'
       className={cn(
         'group relative h-8 w-full flex-1 justify-start rounded-md bg-muted/25 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:w-40 sm:pe-12 md:flex-none lg:w-52 xl:w-64',
@@ -19,6 +41,7 @@ export function Search({
       )}
       aria-keyshortcuts='Meta+K Control+K'
       onClick={() => setOpen(true)}
+      onBlur={() => setExpanded(false)}
     >
       <SearchIcon
         aria-hidden='true'

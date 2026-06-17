@@ -20,12 +20,8 @@ type ClassroomHeaderProps = {
 export function ClassroomHeader({ topNav, fixed }: ClassroomHeaderProps) {
   return (
     <Header fixed={fixed}>
-      {topNav ? (
-        <TopNav links={topNav} className='me-auto' />
-      ) : (
-        <Search className='me-auto' />
-      )}
-      {topNav && <Search />}
+      {topNav && <TopNav links={topNav} className='me-auto' />}
+      <Search className={topNav ? undefined : 'ms-auto'} />
       <ThemeSwitch />
       <ConfigDrawer />
       <ProfileDropdown />

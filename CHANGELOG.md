@@ -68,6 +68,30 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.8.0] - 2026-06-17
+
+### Added / 新增
+- Whole-app full-text search. The header search bar (and `⌘K` command palette) now searches cached content via a new `GET /api/search?q=&limit=` endpoint, with results grouped into **Course / Classworks / Stream** categories (Classworks also matches attachment names). Each category shows up to 5 hits with a "More…" link to a dedicated `/search` results page; quick-action page navigation is preserved.
+- 全 App 全文搜尋。Header 搜尋列(及 `⌘K` 命令面板)透過新的 `GET /api/search?q=&limit=` 端點搜尋快取內容,結果分為 **Course / Classworks / Stream** 三類(Classworks 亦比對附件名稱)。每類最多顯示 5 筆並提供「More…」連結至獨立的 `/search` 結果頁;原本的快速跳頁功能保留。
+- Search results in the Classworks category open the target course's classwork page with its split-screen detail panel auto-expanded (via `?item=&kind=` params).
+- Classworks 類別的搜尋結果會打開對應課程的 classwork 頁並自動展開分割畫面詳情面板(透過 `?item=&kind=` 參數)。
+- To-do page is now a **Kanban board** (Missing / To do / Submitted columns). Each column shows 10 cards by default and lazy-loads 10 more on scroll (per-column infinite scroll).
+- To-do 頁改為 **看板(Kanban)**(Missing / To do / Submitted 三欄)。每欄預設顯示 10 筆,捲動時每次非同步補載 10 筆(各欄獨立無限捲動)。
+- Classwork "Topics" view now uses a **masonry layout**.
+- Classwork「Topics」檢視改為**瀑布流(masonry)版面**。
+- Split-screen detail panels show per-attachment file-type icons, and Google Classroom links use the Classroom logo.
+- 分割畫面詳情面板依附件類型顯示檔案圖示,Google Classroom 連結改用 Classroom logo。
+
+### Changed / 變更
+- Header redesign: the search bar collapses to a single icon (expands on click) and sits left of the theme switch; the sidebar trigger moved into the sidebar header (replacing the team switcher); the user profile menu was trimmed to Profile + Sign out; the main content title sits higher.
+- Header 重新設計:搜尋列收合為單一圖示(點擊展開)並移至主題切換鈕左側;sidebar 觸發鈕移入 sidebar 標題列(取代 team switcher);使用者選單精簡為 Profile + Sign out;主內容標題上移。
+- The `/courses` split-screen detail panel CSS was aligned with the classwork detail panel (50/50 split).
+- `/courses` 分割畫面詳情面板 CSS 與 classwork 詳情面板對齊(50/50 分割)。
+
+### Fixed / 修正
+- Command palette no longer crashes (`forEach` of undefined) when editing/clearing the query: cmdk's built-in filter is disabled and result item `value`s are stable, so server-matched results are never hidden and rapid edits are safe.
+- 命令面板在編輯/清空關鍵字時不再崩潰(`forEach` of undefined):停用 cmdk 內建過濾、搜尋結果項目 `value` 改為穩定值,server 命中結果不會被濾掉且快速編輯安全。
+
 ## [0.7.0] - 2026-06-15
 
 ### Fixed / 修正

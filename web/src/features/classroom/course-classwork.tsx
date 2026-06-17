@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -120,7 +120,15 @@ function AttachmentIcon({ att }: { att: Attachment }) {
   return <IconDrive />
 }
 
-export function CourseClassworkPage({ courseId }: { courseId: string }) {
+export function CourseClassworkPage({
+  courseId,
+  initialItemId,
+  initialKind,
+}: {
+  courseId: string
+  initialItemId?: string
+  initialKind?: 'coursework' | 'material'
+}) {
   const [data, setData] = useState<ClassworkResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'classwork' | 'topics'>('classwork')
@@ -143,6 +151,35 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
   useEffect(() => {
     load()
   }, [courseId])
+
+  // When arriving from a search result (e.g. classwork category), auto-open the
+  // split-screen detail panel for the targeted item once data has loaded.
+  const autoOpenedRef = useRef(false)
+  useEffect(() => {
+    if (!initialItemId || autoOpenedRef.current || !data) return
+    const pools: UnifiedItem[] = [
+      ...(data.coursework || []).map((c) => ({
+        ...c,
+        kind: 'coursework' as const,
+        work_type: c.work_type || 'COURSEWORK',
+      })),
+      ...(data.materials || []).map((m) => ({
+        ...m,
+        kind: 'material' as const,
+        work_type: 'MATERIAL',
+      })),
+    ]
+    const match = pools.find(
+      (it) =>
+        String(it.id) === String(initialItemId) &&
+        (!initialKind || it.kind === initialKind)
+    )
+    if (match) {
+      setSelectedItem(match)
+      setTab('classwork')
+      autoOpenedRef.current = true
+    }
+  }, [data, initialItemId, initialKind])
 
   // Build lookup + filter options + counts + the unified item list.
   const { topicMap, filterOptions, filteredItems, topicCounts } = useMemo(() => {
@@ -424,14 +461,14 @@ export function CourseClassworkPage({ courseId }: { courseId: string }) {
       </TabsContent>
 
       <TabsContent value='topics' className='mt-4'>
-        <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+        <div className='gap-3 [column-fill:_balance] columns-1 sm:columns-2 lg:columns-3'>
           {(data?.topics || []).map((t) => {
             const tid = String(t.id || '')
             const count = topicCounts[tid] || 0
             return (
               <Card
                 key={tid}
-                className='cursor-pointer transition hover:border-primary/60'
+                className='mb-3 break-inside-avoid cursor-pointer transition hover:border-primary/60'
                 onClick={() => selectTopicAndSwitch(tid)}
               >
                 <CardHeader className='pb-2'>

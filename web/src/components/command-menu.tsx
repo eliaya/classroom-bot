@@ -1,6 +1,23 @@
 import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRight, ChevronRight, Laptop, Moon, Sun } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  ChevronRight,
+  FileText,
+  GraduationCap,
+  Laptop,
+  Megaphone,
+  MoreHorizontal,
+  Moon,
+  Sun,
+} from 'lucide-react'
+import {
+  api,
+  type SearchCategory,
+  type SearchResult,
+  type SearchResultKind,
+} from '@/lib/api'
 import { useSearch } from '@/context/search-provider'
 import { useTheme } from '@/context/theme-provider'
 import {
@@ -15,10 +32,20 @@ import {
 import { sidebarData } from './layout/data/sidebar-data'
 import { ScrollArea } from './ui/scroll-area'
 
+const KIND_ICON: Record<SearchResultKind, React.ElementType> = {
+  course: GraduationCap,
+  coursework: BookOpen,
+  material: FileText,
+  announcement: Megaphone,
+}
+
 export function CommandMenu() {
   const navigate = useNavigate()
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
+  const [query, setQuery] = React.useState('')
+  const [categories, setCategories] = React.useState<SearchCategory[]>([])
+  const [searching, setSearching] = React.useState(false)
 
   const runCommand = React.useCallback(
     (command: () => unknown) => {
@@ -28,35 +55,173 @@ export function CommandMenu() {
     [setOpen]
   )
 
+  // Navigate to a search result. Classwork items carry the item id/kind so the
+  // classwork page can auto-open its split-screen detail panel.
+  const goToResult = React.useCallback(
+    (result: SearchResult) => {
+      if (
+        (result.kind === 'coursework' || result.kind === 'material') &&
+        result.item_id
+      ) {
+        navigate({
+          to: result.url,
+          search: { item: result.item_id, kind: result.kind },
+        })
+        return
+      }
+      navigate({ to: result.url })
+    },
+    [navigate]
+  )
+
+  // Reset query state whenever the palette is closed.
+  React.useEffect(() => {
+    if (!open) {
+      setQuery('')
+      setCategories([])
+    }
+  }, [open])
+
+  // Debounced full-text search across the whole app's cached content.
+  React.useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) {
+      setCategories([])
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    let cancelled = false
+    const handle = setTimeout(() => {
+      api
+        .search(q, 5)
+        .then((r) => {
+          if (!cancelled) setCategories(r?.categories ?? [])
+        })
+        .catch(() => {
+          if (!cancelled) setCategories([])
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false)
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [query])
+
+  const hasResults = categories.some((c) => (c.items?.length ?? 0) > 0)
+
+  // cmdk's built-in filter is disabled (shouldFilter={false}) so that
+  // server-matched results are never hidden and item `value`s can stay stable
+  // (a query-dependent value crashes cmdk on rapid edits). We filter the static
+  // quick-action nav items ourselves.
+  const navQuery = query.trim().toLowerCase()
+  const matchesNav = (title: string) =>
+    navQuery.length < 2 || title.toLowerCase().includes(navQuery)
+
   return (
-    <CommandDialog modal open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder='Type a command or search...' />
+    <CommandDialog
+      modal
+      open={open}
+      onOpenChange={setOpen}
+      shouldFilter={false}
+    >
+      <CommandInput
+        placeholder='Search the app or jump to a page...'
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
         <ScrollArea type='hover' className='h-72 pe-1'>
-          <CommandEmpty>No results found.</CommandEmpty>
-          {sidebarData.navGroups.map((group) => (
-            <CommandGroup key={group.title} heading={group.title}>
-              {group.items.map((navItem, i) => {
-                if (navItem.url)
-                  return (
-                    <CommandItem
-                      key={`${navItem.url}-${i}`}
-                      value={navItem.title}
-                      onSelect={() => {
-                        runCommand(() => navigate({ to: navItem.url }))
-                      }}
-                    >
-                      <div className='flex size-4 items-center justify-center'>
-                        <ArrowRight className='size-2 text-muted-foreground/80' />
-                      </div>
-                      {navItem.title}
-                    </CommandItem>
-                  )
+          <CommandEmpty>
+            {searching ? 'Searching…' : 'No results found.'}
+          </CommandEmpty>
 
-                return navItem.items?.map((subItem, i) => (
+          {hasResults && (
+            <>
+              {categories
+                .filter((category) => (category.items?.length ?? 0) > 0)
+                .map((category) => (
+                  <CommandGroup
+                    key={category.key}
+                    heading={`${category.label} (${category.total})`}
+                  >
+                    {category.items.map((result, i) => {
+                      const Icon = KIND_ICON[result.kind]
+                      return (
+                        <CommandItem
+                          key={`${category.key}-${result.course_id}-${i}`}
+                          value={`result-${category.key}-${result.course_id}-${i}`}
+                          onSelect={() => {
+                            runCommand(() => goToResult(result))
+                          }}
+                        >
+                          <Icon className='text-muted-foreground' />
+                          <div className='flex min-w-0 flex-col'>
+                            <span className='truncate'>{result.title}</span>
+                            <span className='truncate text-xs text-muted-foreground'>
+                              {[result.course_name, result.subtitle || result.snippet]
+                                .filter(Boolean)
+                                .join(' — ')}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      )
+                    })}
+                    {category.has_more && (
+                      <CommandItem
+                        value={`more-${category.key}`}
+                        onSelect={() => {
+                          runCommand(() =>
+                            navigate({
+                              to: '/search',
+                              search: { q: query, category: category.key },
+                            })
+                          )
+                        }}
+                      >
+                        <MoreHorizontal className='text-muted-foreground' />
+                        <span>
+                          More {category.label.toLowerCase()} results…
+                        </span>
+                      </CommandItem>
+                    )}
+                  </CommandGroup>
+                ))}
+              <CommandSeparator />
+            </>
+          )}
+
+          {sidebarData.navGroups.map((group) => {
+            const items = group.items.flatMap((navItem, i) => {
+              if (navItem.url) {
+                if (!matchesNav(navItem.title)) return []
+                return [
                   <CommandItem
-                    key={`${navItem.title}-${subItem.url}-${i}`}
-                    value={`${navItem.title}-${subItem.url}`}
+                    key={`${navItem.url}-${i}`}
+                    value={`nav-${navItem.url}-${i}`}
+                    onSelect={() => {
+                      runCommand(() => navigate({ to: navItem.url }))
+                    }}
+                  >
+                    <div className='flex size-4 items-center justify-center'>
+                      <ArrowRight className='size-2 text-muted-foreground/80' />
+                    </div>
+                    {navItem.title}
+                  </CommandItem>,
+                ]
+              }
+
+              return (navItem.items ?? [])
+                .filter((subItem) =>
+                  matchesNav(`${navItem.title} ${subItem.title}`)
+                )
+                .map((subItem, j) => (
+                  <CommandItem
+                    key={`${navItem.title}-${subItem.url}-${j}`}
+                    value={`nav-${navItem.title}-${subItem.url}-${j}`}
                     onSelect={() => {
                       runCommand(() => navigate({ to: subItem.url }))
                     }}
@@ -67,9 +232,15 @@ export function CommandMenu() {
                     {navItem.title} <ChevronRight /> {subItem.title}
                   </CommandItem>
                 ))
-              })}
-            </CommandGroup>
-          ))}
+            })
+
+            if (items.length === 0) return null
+            return (
+              <CommandGroup key={group.title} heading={group.title}>
+                {items}
+              </CommandGroup>
+            )
+          })}
           <CommandSeparator />
           <CommandGroup heading='Theme'>
             <CommandItem onSelect={() => runCommand(() => setTheme('light'))}>

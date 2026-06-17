@@ -5,18 +5,21 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarRail,
+  SidebarTrigger,
 } from '@/components/ui/sidebar'
-// import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
-import { TeamSwitcher } from './team-switcher'
 import { api } from '@/lib/api'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const [version, setVersion] = useState<string | null>(null)
+  const team = sidebarData.teams[0]
 
   useEffect(() => {
     api
@@ -32,11 +35,26 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
-        <TeamSwitcher teams={sidebarData.teams} />
-
-        {/* Replace <TeamSwitch /> with the following <AppTitle />
-         /* if you want to use the normal app title instead of TeamSwitch dropdown */}
-        {/* <AppTitle /> */}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size='lg'
+              className='hover:bg-transparent active:bg-transparent'
+              asChild
+            >
+              <div>
+                <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
+                  <team.logo className='size-4' />
+                </div>
+                <div className='grid flex-1 text-start text-sm leading-tight'>
+                  <span className='truncate font-semibold'>{team.name}</span>
+                  <span className='truncate text-xs'>{team.plan}</span>
+                </div>
+                <SidebarTrigger className='ms-auto' />
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         {sidebarData.navGroups.map((props) => (
