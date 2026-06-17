@@ -33,6 +33,32 @@ class Settings(BaseSettings):
     CLASSROOM_SYNC_INTERVAL_MINUTES: int = 30
     API_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:8080"
 
+    # Max number of courses fetched concurrently during a full sync. The network
+    # fetch phase runs in parallel (bounded by this); DB persistence stays serial
+    # to avoid SQLite write contention.
+    CLASSROOM_SYNC_CONCURRENCY: int = 4
+
+    # Event-driven sync via Google Classroom push notifications (Cloud Pub/Sub
+    # pull subscription). Disabled by default; requires GCP setup — see
+    # docs/push-sync-setup.md. When disabled the system behaves exactly as before
+    # (Scheduler-driven polling only).
+    CLASSROOM_PUSH_ENABLED: bool = False
+    GOOGLE_PUBSUB_PROJECT: str = ""
+    GOOGLE_PUBSUB_TOPIC: str = ""          # projects/<proj>/topics/<topic>
+    GOOGLE_PUBSUB_SUBSCRIPTION: str = ""   # projects/<proj>/subscriptions/<sub>
+    GOOGLE_PUBSUB_CREDENTIALS: str = ""    # service account JSON path (pull auth)
+    # Registrations expire (~7 days); renew on this cadence via the scheduler.
+    CLASSROOM_PUSH_RENEW_HOURS: int = 24
+    # Coalesce bursts of notifications for the same course before re-syncing.
+    CLASSROOM_PUSH_DEBOUNCE_SECONDS: int = 15
+
+    # Lightweight announcement (stream) polling. Classroom has no push feed for
+    # announcements, so a cheap announcements-only poll (1 list call per course)
+    # gives near-instant stream updates without a full sync. Independent of push;
+    # complements it (push covers classwork, this covers the stream).
+    CLASSROOM_ANNOUNCEMENT_POLL_ENABLED: bool = False
+    CLASSROOM_ANNOUNCEMENT_POLL_SECONDS: int = 120
+
     # Classwork attachment content sync (downloads Drive attachments during sync).
     # Requires the optional Drive scope (re-run setup_google_auth.py); when the
     # scope is absent, downloads are skipped and Classroom sync is unaffected.
@@ -95,6 +121,9 @@ class JsonLogFormatter(logging.Formatter):
         job_id = getattr(record, "job_id", None)
         if job_id is not None:
             payload["job_id"] = job_id
+        category = getattr(record, "category", None)
+        if category is not None:
+            payload["category"] = category
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
         return _json.dumps(payload, ensure_ascii=False)

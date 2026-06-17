@@ -77,6 +77,27 @@ class ClassroomSyncBot(commands.Bot):
         self.scheduler.start()
         logger.info(f"Background Sync Daemon scheduled to check for classroom updates every {interval} minutes.")
 
+    async def on_app_command_completion(self, interaction, command) -> None:
+        """Audit every successfully-completed slash command (category=discord)."""
+        try:
+            from src.database import async_session_factory
+            from src.repositories import audit_log
+
+            user = getattr(interaction, "user", None)
+            actor = f"{user}" if user else None
+            guild = getattr(interaction, "guild", None)
+            async with async_session_factory() as session:
+                await audit_log.record(
+                    session,
+                    category="discord",
+                    action=f"discord.command:{getattr(command, 'qualified_name', command)}",
+                    actor=actor,
+                    target=str(getattr(guild, "name", None) or "DM"),
+                    status="ok",
+                )
+        except Exception:  # noqa: BLE001 — auditing must never break the command
+            logger.warning("Discord command audit failed", exc_info=True)
+
     async def _write_heartbeat(self, status: str, detail: str | None = None) -> None:
         """Best-effort write of the bot status to the shared DB."""
         try:

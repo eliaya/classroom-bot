@@ -95,6 +95,19 @@ async def start(origin: str = Query(..., description="Browser-visible web origin
     return {"authorization_url": auth_url, "redirect_uri": redirect_uri, "state": state}
 
 
+async def _audit_login(status_str: str, origin: str, error: str | None) -> None:
+    """Record the Google OAuth login outcome to the audit trail (category=api)."""
+    from src.database import async_session_factory
+    from src.repositories import audit_log
+
+    async with async_session_factory() as session:
+        await audit_log.record(
+            session, category="api", action="auth.login",
+            actor="admin", target=origin, status=status_str,
+            detail={"error": error} if error else None,
+        )
+
+
 @router.get("/callback")
 async def callback(
     state: str = Query(...),
@@ -159,8 +172,10 @@ async def callback(
         google_service.creds = None
         google_service.last_credential_error = None
         logger.info("Google OAuth token written via WebUI flow to %s", token_path)
+        await _audit_login("ok", origin, None)
     except Exception as exc:
         logger.exception("WebUI OAuth callback failed")
+        await _audit_login("error", origin, str(exc))
         return RedirectResponse(
             _settings_url(origin, auth="error", reason=str(exc)),
             status_code=status.HTTP_302_FOUND,

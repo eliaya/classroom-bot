@@ -538,6 +538,22 @@ async def list_cached_announcements(
     return list(result.scalars().all())
 
 
+async def announcement_signature(
+    session: AsyncSession, course_id: str
+) -> tuple[int, Optional[str]]:
+    """Cheap change-detection signature for a course's announcements:
+    ``(active_count, max_update_time)``. The announcement poller compares this
+    against the freshly-fetched list to skip writes when nothing changed."""
+    res = await session.execute(
+        select(func.count(), func.max(ClassroomAnnouncement.update_time)).where(
+            ClassroomAnnouncement.course_id == course_id,
+            ClassroomAnnouncement.removed_at.is_(None),
+        )
+    )
+    count, max_update = res.one()
+    return int(count or 0), max_update
+
+
 async def list_cached_coursework(
     session: AsyncSession,
     course_id: str,

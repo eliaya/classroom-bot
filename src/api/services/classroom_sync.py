@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -56,48 +57,75 @@ class ClassroomSyncService:
             courses = await google_service.list_courses()
             total_courses = len(courses)
 
-            # Initial progress
             await cache.update_sync_run_progress(
                 session, run,
                 percent=3,
-                message=f"Found {total_courses} courses. Starting full sync..."
+                message=f"Found {total_courses} courses. Fetching in parallel..."
             )
 
+            # ── Phase A: fetch every course's resources in parallel (network only,
+            # no DB). Bounded by CLASSROOM_SYNC_CONCURRENCY; this is where almost
+            # all the wall-clock time used to be spent serially. ──────────────
+            sem = asyncio.Semaphore(max(1, settings.CLASSROOM_SYNC_CONCURRENCY))
+
+            async def _fetch_one(i: int, course: Dict[str, Any]):
+                async with sem:
+                    try:
+                        return i, await self._fetch_course_bundle(course["id"], course), None
+                    except Exception as exc:  # noqa: BLE001 — captured per course
+                        return i, None, exc
+
+            bundles: list[Optional[dict]] = [None] * total_courses
+            fetch_errors: list[Optional[Exception]] = [None] * total_courses
+            tasks = [asyncio.create_task(_fetch_one(i, c)) for i, c in enumerate(courses)]
+            done = 0
+            for fut in asyncio.as_completed(tasks):
+                i, bundle, err = await fut
+                bundles[i] = bundle
+                fetch_errors[i] = err
+                done += 1
+                await cache.update_sync_run_progress(
+                    session, run,
+                    percent=3 + int((done / max(total_courses, 1)) * 50),
+                    message=f"Fetched {done}/{total_courses} courses...",
+                )
+
+            # ── Phase B: persist each course serially (avoids SQLite write
+            # contention). A failing course rolls back only its own writes. ───
             errors: list[str] = []
             for idx, course in enumerate(courses, 1):
                 cname = course.get("name") or str(course.get("id", ""))[:12]
-                # Pre-course progress
-                pre_pct = int(((idx - 1) / max(total_courses, 1)) * 100)
-                await cache.update_sync_run_progress(
-                    session, run,
-                    message=f"Syncing course {idx}/{total_courses}: {cname}",
-                    percent=max(5, min(92, pre_pct)),
-                )
+                bundle = bundles[idx - 1]
+                fetch_err = fetch_errors[idx - 1]
 
-                # Per-course atomicity: a failing course rolls back only its own
-                # writes and the sync continues with the next course (idempotent retry).
-                try:
-                    added = await self._sync_course(session, course["id"], track_run=False, run_id=run_id)
-                    total += added
-                    post_msg = f"Done {idx}/{total_courses}: {cname} (+{added} items, total {total})"
-                except Exception as course_exc:
-                    await session.rollback()
-                    # rollback() expires every ORM instance (even with
-                    # expire_on_commit=False). Refresh `run` so the subsequent
-                    # progress/finish writes operate on a live object instead of
-                    # lazily reloading mid-operation.
-                    await session.refresh(run)
-                    errors.append(f"{cname}: {course_exc}")
-                    logger.exception("Course sync failed for %s", course["id"], extra={"job_id": run_id})
-                    post_msg = f"Failed {idx}/{total_courses}: {cname} ({course_exc})"
+                if fetch_err is not None:
+                    errors.append(f"{cname}: {fetch_err}")
+                    logger.error(
+                        "Course fetch failed for %s: %s", course.get("id"), fetch_err,
+                        extra={"job_id": run_id},
+                    )
+                    post_msg = f"Failed {idx}/{total_courses}: {cname} ({fetch_err})"
+                else:
+                    try:
+                        added = await self._persist_course_bundle(session, bundle, run_id=run_id)
+                        total += added
+                        post_msg = f"Done {idx}/{total_courses}: {cname} (+{added} items, total {total})"
+                    except Exception as course_exc:
+                        await session.rollback()
+                        # rollback() expires every ORM instance (even with
+                        # expire_on_commit=False). Refresh `run` so subsequent
+                        # progress/finish writes operate on a live object.
+                        await session.refresh(run)
+                        errors.append(f"{cname}: {course_exc}")
+                        logger.exception("Course persist failed for %s", course["id"], extra={"job_id": run_id})
+                        post_msg = f"Failed {idx}/{total_courses}: {cname} ({course_exc})"
 
-                # Post-course progress with accumulated items
-                post_pct = int((idx / max(total_courses, 1)) * 92)
+                post_pct = 55 + int((idx / max(total_courses, 1)) * 40)
                 await cache.update_sync_run_progress(
                     session, run,
                     items_count=total,
                     message=post_msg,
-                    percent=post_pct,
+                    percent=min(95, post_pct),
                 )
 
             # Finalizing
@@ -142,7 +170,11 @@ class ClassroomSyncService:
                 message=f"Starting sync for course {course_id}"
             )
 
-            count = await self._sync_course(session, course_id, track_run=False, run_id=run.id)
+            bundle = await self._fetch_course_bundle(course_id)
+            await cache.update_sync_run_progress(
+                session, run, percent=55, message=f"Fetched course {course_id}; persisting..."
+            )
+            count = await self._persist_course_bundle(session, bundle, run_id=run.id)
 
             await cache.update_sync_run_progress(
                 session, run,
@@ -157,44 +189,107 @@ class ClassroomSyncService:
             await cache.finish_sync_run(session, run, status="error", error_message=str(exc))
             raise
 
-    async def _sync_course(
-        self, session: AsyncSession, course_id: str, *, track_run: bool = True, run_id: Optional[int] = None
-    ) -> int:
-        course = await google_service.get_course(course_id)
-        if not course:
-            raise ValueError(f"Course '{course_id}' not found")
+    async def sync_announcements_only(self, session: AsyncSession, course_id: str) -> dict:
+        """Lightweight announcement (stream) sync for one course.
 
-        await cache.upsert_course(session, course, run_id=run_id)
+        Fetches only the announcements list (1 cheap API call), and writes only
+        when a signature check shows a change. No ClassroomSyncRun is created —
+        this is meant to run on a short interval. Returns ``{"changed": bool, ...}``.
+        """
+        announcements = await google_service.fetch_announcements(course_id)
+        new_count = len(announcements)
+        new_max = max((a.get("updateTime") or "" for a in announcements), default="") or None
+
+        cur_count, cur_max = await cache.announcement_signature(session, course_id)
+        if new_count == cur_count and new_max == cur_max:
+            return {"changed": False, "course_id": course_id}
+
+        n = await cache.upsert_announcements(session, course_id, announcements)
+        removed = await cache.soft_delete_missing(
+            session, ClassroomAnnouncement, course_id=course_id,
+            seen_ids={a["id"] for a in announcements if a.get("id")},
+            id_attr="id", entity_type="announcement",
+        )
+        await session.commit()
+        logger.info(
+            "Announcement poll updated course %s (%d upserted, %d removed)",
+            course_id, n, removed, extra={"category": "api"},
+        )
+        return {"changed": True, "course_id": course_id, "upserted": n, "removed": removed}
+
+    async def _fetch_course_bundle(
+        self, course_id: str, course: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Fetch every Classroom resource for one course in parallel (network
+        only, no DB writes). Returns a bundle consumed by ``_persist_course_bundle``.
+
+        ``course`` may be supplied (e.g. from ``courses.list`` in a full sync) to
+        skip a redundant ``courses.get`` round-trip; otherwise it is fetched.
+        """
+        if course is None:
+            course = await google_service.get_course(course_id)
+            if not course:
+                raise ValueError(f"Course '{course_id}' not found")
+
+        # The 7 list endpoints are independent reads — run them concurrently.
+        (
+            announcements, coursework, topics, materials,
+            teachers, students, submissions,
+        ) = await asyncio.gather(
+            google_service.fetch_announcements(course_id),
+            google_service.fetch_coursework(course_id),
+            google_service.fetch_topics(course_id),
+            google_service.fetch_course_work_materials(course_id),
+            google_service.fetch_teachers(course_id),
+            google_service.fetch_students(course_id),
+            google_service.list_student_submissions(course_id, "-", "me"),
+        )
+
+        return {
+            "course": course,
+            "course_id": course_id,
+            "announcements": announcements,
+            "coursework": coursework,
+            "topics": topics,
+            "materials": materials,
+            "teachers": teachers,
+            "students": students,
+            "todos": self._build_todos(course_id, coursework, submissions),
+        }
+
+    async def _persist_course_bundle(
+        self, session: AsyncSession, bundle: Dict[str, Any], *, run_id: Optional[int] = None
+    ) -> int:
+        """Persist a pre-fetched course bundle (upserts + soft-deletes + commit +
+        attachment download). DB-only; safe to call serially per course."""
+        course_id = bundle["course_id"]
+        announcements = bundle["announcements"]
+        coursework = bundle["coursework"]
+        topics = bundle["topics"]
+        materials = bundle["materials"]
+        teachers = bundle["teachers"]
+        students = bundle["students"]
+        todos = bundle["todos"]
+
+        await cache.upsert_course(session, bundle["course"], run_id=run_id)
         count = 1
 
-        announcements = await google_service.fetch_announcements(course_id)
         count += await cache.upsert_announcements(session, course_id, announcements, run_id=run_id)
 
         # One broad list per resource already returns every item with its topicId
         # embedded, so topics are reconstructed from these. The Classroom API's
         # courseWork/courseWorkMaterials list endpoints do not accept a topicId
         # filter in this client, so there is no per-topic re-fetch.
-        coursework = await google_service.fetch_coursework(course_id)
         count += await cache.upsert_coursework(session, course_id, coursework, run_id=run_id)
-
-        topics = await google_service.fetch_topics(course_id)
         count += await cache.upsert_topics(session, course_id, topics, run_id=run_id)
-
-        materials = await google_service.fetch_course_work_materials(course_id)
         count += await cache.upsert_materials(session, course_id, materials, run_id=run_id)
 
         # Track every id we observed upstream so soft-delete can mark the rest as removed.
         seen_cw = {cw["id"] for cw in coursework if cw.get("id")}
         seen_mat = {m["id"] for m in materials if m.get("id")}
 
-        teachers = await google_service.fetch_teachers(course_id)
         count += await cache.upsert_people(session, course_id, "teacher", teachers, run_id=run_id)
-
-        students = await google_service.fetch_students(course_id)
         count += await cache.upsert_people(session, course_id, "student", students, run_id=run_id)
-
-        # To-do items: courseWork joined with the authenticated user's submissions.
-        todos = await self._build_todos(course_id, coursework)
         count += await cache.upsert_todos(session, course_id, todos, run_id=run_id)
 
         # UpdateOrNew step 3: soft-delete records that disappeared upstream.
@@ -250,12 +345,14 @@ class ClassroomSyncService:
 
         return count
 
-    async def _build_todos(
-        self, course_id: str, coursework: List[Dict[str, Any]]
+    def _build_todos(
+        self, course_id: str, coursework: List[Dict[str, Any]], submissions: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """Derive the authenticated user's to-do items from their own submissions
-        joined with course work (Classroom has no dedicated to-do endpoint)."""
-        submissions = await google_service.list_student_submissions(course_id, "-", "me")
+        joined with course work (Classroom has no dedicated to-do endpoint).
+
+        ``submissions`` is pre-fetched in ``_fetch_course_bundle`` so this is a
+        pure, synchronous join."""
         cw_by_id = {cw.get("id"): cw for cw in coursework if cw.get("id")}
         todos: List[Dict[str, Any]] = []
         for sub in submissions:

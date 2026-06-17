@@ -157,12 +157,15 @@ async def test_sync_all_survives_one_failing_course(session, mock_google, monkey
         AsyncMock(return_value=[{"id": "good", "name": "OK"}, {"id": "bad", "name": "Boom"}]),
     )
 
-    async def flaky_get_course(course_id):
+    # sync_all reuses the course dict from list_courses (no per-course get_course),
+    # so inject the per-course failure at a call that IS made during the parallel
+    # fetch phase. A fetch failure for one course must not abort the whole run.
+    async def flaky_coursework(course_id, **kw):
         if course_id == "bad":
             raise RuntimeError("simulated upstream failure")
-        return {"id": course_id, "name": "OK"}
+        return COURSEWORK
 
-    monkeypatch.setattr(gs, "get_course", flaky_get_course)
+    monkeypatch.setattr(gs, "fetch_coursework", flaky_coursework)
 
     result = await classroom_sync_service.sync_all(session)
 

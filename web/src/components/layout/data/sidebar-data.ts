@@ -2,6 +2,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   RefreshCw,
+  ScrollText,
   Settings,
   Command,
   ClipboardList,
@@ -44,6 +45,11 @@ export const sidebarData: SidebarData = {
           title: 'Sync',
           url: '/sync',
           icon: RefreshCw,
+        },
+        {
+          title: 'Audit log',
+          url: '/audit',
+          icon: ScrollText,
         },
         {
           title: 'Settings',

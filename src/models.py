@@ -290,5 +290,25 @@ class BotHeartbeat(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class AuditLog(SQLModel, table=True):
+    """Append-only audit trail of system operations.
+
+    Every meaningful action (API request, Classroom sync, OAuth login, Discord
+    command, lifecycle event) is recorded here, grouped by ``category`` so the
+    WebUI can filter General / API / Discord. Writes are best-effort and must
+    never break the operation they describe."""
+    __tablename__ = "audit_logs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=now_jst, index=True)
+    category: str = Field(index=True)  # general | api | discord
+    action: str = Field(index=True)    # e.g. sync.full, api.request, auth.login
+    actor: Optional[str] = None        # user/email/"system"
+    target: Optional[str] = None       # course id, path, command name, ...
+    status: str = Field(default="ok")  # ok | error
+    duration_ms: Optional[int] = None
+    detail: Optional[str] = None       # JSON string with extra context
+
+
 def dump_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False)

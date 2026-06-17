@@ -27,6 +27,7 @@ import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSearchIndexRouteImport } from './routes/_authenticated/search/index'
 import { Route as AuthenticatedCoursesIndexRouteImport } from './routes/_authenticated/courses/index'
+import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authenticated/audit/index'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedCoursesCourseIdRouteRouteImport } from './routes/_authenticated/courses/$courseId/route'
 import { Route as AuthenticatedCoursesCourseIdIndexRouteImport } from './routes/_authenticated/courses/$courseId/index'
@@ -127,6 +128,11 @@ const AuthenticatedCoursesIndexRoute =
     path: '/courses/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAuditIndexRoute = AuthenticatedAuditIndexRouteImport.update({
+  id: '/audit/',
+  path: '/audit/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/audit/': typeof AuthenticatedAuditIndexRoute
   '/courses/': typeof AuthenticatedCoursesIndexRoute
   '/search/': typeof AuthenticatedSearchIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -202,6 +209,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/audit': typeof AuthenticatedAuditIndexRoute
   '/courses': typeof AuthenticatedCoursesIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
@@ -229,6 +237,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/_authenticated/audit/': typeof AuthenticatedAuditIndexRoute
   '/_authenticated/courses/': typeof AuthenticatedCoursesIndexRoute
   '/_authenticated/search/': typeof AuthenticatedSearchIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -256,6 +265,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/courses/$courseId'
     | '/errors/$error'
+    | '/audit/'
     | '/courses/'
     | '/search/'
     | '/settings/'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/'
     | '/errors/$error'
+    | '/audit'
     | '/courses'
     | '/search'
     | '/settings'
@@ -305,6 +316,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/courses/$courseId'
     | '/_authenticated/errors/$error'
+    | '/_authenticated/audit/'
     | '/_authenticated/courses/'
     | '/_authenticated/search/'
     | '/_authenticated/settings/'
@@ -458,6 +470,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCoursesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/audit/': {
+      id: '/_authenticated/audit/'
+      path: '/audit'
+      fullPath: '/audit/'
+      preLoaderRoute: typeof AuthenticatedAuditIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -546,6 +565,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedCoursesCourseIdRouteRoute: typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
+  AuthenticatedAuditIndexRoute: typeof AuthenticatedAuditIndexRoute
   AuthenticatedCoursesIndexRoute: typeof AuthenticatedCoursesIndexRoute
   AuthenticatedSearchIndexRoute: typeof AuthenticatedSearchIndexRoute
   AuthenticatedSyncIndexRoute: typeof AuthenticatedSyncIndexRoute
@@ -558,6 +578,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCoursesCourseIdRouteRoute:
     AuthenticatedCoursesCourseIdRouteRouteWithChildren,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
+  AuthenticatedAuditIndexRoute: AuthenticatedAuditIndexRoute,
   AuthenticatedCoursesIndexRoute: AuthenticatedCoursesIndexRoute,
   AuthenticatedSearchIndexRoute: AuthenticatedSearchIndexRoute,
   AuthenticatedSyncIndexRoute: AuthenticatedSyncIndexRoute,

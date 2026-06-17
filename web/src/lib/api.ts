@@ -151,6 +151,20 @@ export type SearchResponse = {
   categories: SearchCategory[]
 }
 
+export type AuditCategory = 'general' | 'api' | 'discord'
+
+export type AuditLog = {
+  id: number
+  created_at: string | null
+  category: AuditCategory
+  action: string
+  actor?: string | null
+  target?: string | null
+  status: string
+  duration_ms?: number | null
+  detail?: string | null
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
   status: () =>
@@ -220,6 +234,16 @@ export const api = {
     request<SearchResponse>(
       `/search?q=${encodeURIComponent(q)}&limit=${limit}`
     ),
+  listAudit: (params: { category?: string; action?: string; search?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams()
+    Object.entries(params).forEach(([k, v]) => {
+      if (v != null && v !== '') qs.append(k, String(v))
+    })
+    const q = qs.toString()
+    return request<{ rows: AuditLog[]; total: number; page: number; limit: number }>(
+      `/audit${q ? `?${q}` : ''}`
+    )
+  },
   botStatus: () => request<BotStatus>('/bot/status'),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>

@@ -32,8 +32,13 @@ REQUIRED_SCOPES = [
 # simply skipped until the operator re-runs setup_google_auth.py to grant it.
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 
-# Full scope set requested by the OAuth setup flow (Classroom + optional Drive).
-SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE]
+# Optional push-notifications scope: required only for event-driven sync
+# (Classroom registrations → Cloud Pub/Sub). Like Drive, it is NOT part of the
+# required-scope validation — push is disabled until the operator re-authorizes.
+PUSH_SCOPE = "https://www.googleapis.com/auth/classroom.push-notifications"
+
+# Full scope set requested by the OAuth setup flow (Classroom + optional Drive + push).
+SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE, PUSH_SCOPE]
 
 CLASSROOM_MAX_PAGE_SIZE = 30
 
@@ -65,6 +70,22 @@ class GoogleClassroomService:
             except Exception:
                 return False
         return DRIVE_SCOPE in (creds.scopes or [])
+
+    def has_push_scope(self) -> bool:
+        """Whether the loaded credentials were granted the optional push scope.
+
+        Event-driven sync (Classroom registrations → Pub/Sub) is only enabled
+        when this is True; otherwise push is skipped until re-authorization."""
+        creds = self.creds
+        if not creds:
+            try:
+                token_path = settings.GOOGLE_TOKEN_FILE
+                if not os.path.exists(token_path):
+                    return False
+                creds = Credentials.from_authorized_user_file(token_path)
+            except Exception:
+                return False
+        return PUSH_SCOPE in (creds.scopes or [])
 
     def credential_status(self) -> dict[str, Any]:
         """Return non-secret diagnostics for admin UI and /api/status."""

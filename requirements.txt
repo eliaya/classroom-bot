@@ -3,6 +3,9 @@ google-api-python-client>=2.120.0
 google-auth>=2.28.0
 google-auth-oauthlib>=1.2.0
 google-auth-httplib2>=0.2.0
+# Optional: only needed when CLASSROOM_PUSH_ENABLED=true (event-driven sync via
+# Cloud Pub/Sub pull subscription). Imported lazily; safe to omit if unused.
+google-cloud-pubsub>=2.21.0
 python-dotenv>=1.0.1
 APScheduler>=3.10.4
 sqlmodel>=0.0.16
