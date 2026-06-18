@@ -16,6 +16,8 @@ __pycache__/
 venv/
 
 credentials/*.json
+credentials/*.json.*
+credentials/*.org
 data/*
 !data/README.md
 

@@ -68,7 +68,24 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
-## [0.8.0] - 2026-06-17
+## [0.8.1] - 2026-06-18
+
+### Added / 新增
+- Audit logging module. A new `audit_logs` table + `GET /api/audit` endpoint + WebUI **Audit log** page record every system operation, grouped into **General / API / Discord** categories (API requests, Classroom syncs, OAuth login, Discord commands, app lifecycle). Recording is best-effort and never breaks the operation it describes.
+- 稽核紀錄模組。新增 `audit_logs` 資料表 + `GET /api/audit` 端點 + WebUI **Audit log** 頁，記錄所有系統操作,分為 **General / API / Discord** 三類(API 請求、Classroom 同步、OAuth 登入、Discord 指令、程式生命週期)。記錄為 best-effort,絕不影響主流程。
+- Event-driven sync scaffold (disabled by default). When `CLASSROOM_PUSH_ENABLED=true` and GCP is configured, a Cloud Pub/Sub **pull** subscriber triggers a targeted `sync_course` within seconds of a `COURSE_WORK_CHANGES` notification (with debounce + auto-renewing registrations). New optional `classroom.push-notifications` scope; new `google-cloud-pubsub` dependency (lazy-imported). See `docs/push-sync-setup.md`.
+- 事件驅動同步 scaffold(預設關閉)。當 `CLASSROOM_PUSH_ENABLED=true` 且完成 GCP 設定時,Cloud Pub/Sub **pull** 訂閱會在 `COURSE_WORK_CHANGES` 通知後數秒內觸發針對性 `sync_course`(含 debounce 與自動續期)。新增選用 `classroom.push-notifications` scope 與 `google-cloud-pubsub` 依賴(lazy import)。詳見 `docs/push-sync-setup.md`。
+- Lightweight announcement (stream) poller (disabled by default, `CLASSROOM_ANNOUNCEMENT_POLL_ENABLED`). Classroom has no push feed for announcements, so a cheap announcements-only poll (1 list call per course, written only on a signature change) gives near-instant stream updates. Independent of push.
+- 輕量公告(stream)輪詢(預設關閉,`CLASSROOM_ANNOUNCEMENT_POLL_ENABLED`)。Classroom 沒有公告的 push feed,故以只抓公告的便宜輪詢(每課程 1 個呼叫,僅在 signature 變更時寫入)達成近即時更新。與 push 互相獨立。
+
+### Changed / 變更
+- Classroom full sync is now **two-phase**: all courses are fetched in parallel (bounded by `CLASSROOM_SYNC_CONCURRENCY`, default 4; the 7 per-course list calls also run concurrently), then persisted serially to avoid SQLite write contention. Large syncs are substantially faster.
+- Classroom 全量同步改為**兩階段**:所有課程並行抓取(受 `CLASSROOM_SYNC_CONCURRENCY` 限制,預設 4;每課程 7 個 list 呼叫也並行),再序列持久化以避開 SQLite 寫入競爭。大量同步明顯加快。
+- The `/courses` split-screen detail panel now shows attachments with the **same rich design as the Classwork page** (MIME-aware coloured icons + source badge + Open/Download links + download status), via a shared `AttachmentView` component used by both pages.
+- `/courses` 分割畫面詳情面板的附件改用與 **Classwork 頁相同的精緻設計**(依 MIME 的彩色圖示 + 來源 badge + Open/Download 連結 + 下載狀態),透過兩頁共用的 `AttachmentView` 元件。
+- `/courses` split-screen ratio changed to **3:7** (list : detail). The "Open in Google Classroom" link now uses an external-link icon, and the redundant source badge before "Open ↗" was removed.
+- `/courses` 分割畫面比例改為 **3:7**(清單:詳情)。「Open in Google Classroom」連結改用外連圖示,並移除「Open ↗」前多餘的來源 badge。
+
 
 ### Added / 新增
 - Whole-app full-text search. The header search bar (and `⌘K` command palette) now searches cached content via a new `GET /api/search?q=&limit=` endpoint, with results grouped into **Course / Classworks / Stream** categories (Classworks also matches attachment names). Each category shows up to 5 hits with a "More…" link to a dedicated `/search` results page; quick-action page navigation is preserved.

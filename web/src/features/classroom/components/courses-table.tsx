@@ -10,16 +10,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import {
-  BookOpen,
-  FileText,
-  HardDrive,
-  Link as LinkIcon,
-  Radio,
-  Users,
-  Video,
-} from 'lucide-react'
-import { GoogleClassroomIcon } from '@/assets/custom/icon-google-classroom'
+import { BookOpen, ExternalLink, Radio, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
 import {
@@ -39,13 +30,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DataTableToolbar } from '@/components/data-table'
 import {
   api,
-  fileUrl,
-      type ClassworkItem,
+  type ClassworkItem,
   type ClassworkResponse,
   type Course,
   type StreamItem,
 } from '@/lib/api'
 import { coursesColumns } from './courses-columns'
+import { AttachmentView } from './attachment-view'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -70,27 +61,6 @@ const SECTION_NAV: SectionDef[] = [
   { key: 'stream',    label: 'Stream',    Icon: Radio },
   { key: 'people',    label: 'People',    Icon: Users },
 ]
-
-// Icon for an attachment based on its source type.
-function AttachmentIcon({
-  source,
-  className,
-}: {
-  source?: 'drive' | 'link' | 'form' | 'youtube' | null
-  className?: string
-}) {
-  switch (source) {
-    case 'youtube':
-      return <Video className={cn('text-red-600', className)} />
-    case 'form':
-      return <FileText className={cn('text-violet-600', className)} />
-    case 'link':
-      return <LinkIcon className={cn('text-blue-600', className)} />
-    case 'drive':
-    default:
-      return <HardDrive className={cn('text-emerald-600', className)} />
-  }
-}
 
 const COLUMN_VISIBILITY_KEY = 'courses-table:column-visibility'
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = { room: false }
@@ -177,7 +147,7 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
     <div className='flex flex-col gap-4'>
       <DataTableToolbar table={table} searchPlaceholder='Filter courses…' searchKey='name' />
       <div className='flex flex-col gap-3 lg:flex-row lg:items-start'>
-        <div className={cn('overflow-hidden rounded-md border', selectedCourse ? 'lg:w-1/2' : 'w-full')}>
+        <div className={cn('overflow-hidden rounded-md border', selectedCourse ? 'lg:w-[30%]' : 'w-full')}>
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
@@ -341,29 +311,13 @@ function InlineClasswork({
                       {attCount > 0 && <span className='rounded bg-muted px-1.5 py-0.5'>{attCount} files</span>}
                     </div>
 
-                    {/* For Material: directly show downloaded attachment http urls (as Contents) */}
-                    {isMaterial && attCount > 0 && (
-                      <div className='mt-2 flex flex-col gap-0.5'>
-                        {item.attachments
-                          ?.filter((a) => a.download_url)
-                          .map((att, i) => (
-                            <a
-                              key={i}
-                              href={fileUrl(att.download_url!)}
-                              target='_blank'
-                              rel='noreferrer'
-                              className='flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
-                              title={att.title || ''}
-                            >
-                              <AttachmentIcon
-                                source={att.source}
-                                className='size-3 shrink-0'
-                              />
-                              <span className='truncate'>
-                                {att.title || 'Attachment file'}
-                              </span>
-                            </a>
-                          ))}
+                    {/* Attachments — same rich design as the Classwork page
+                        (icon + label + source badge + Open/Download links). */}
+                    {attCount > 0 && (
+                      <div className='mt-2 flex flex-col gap-2'>
+                        {item.attachments?.map((att, i) => (
+                          <AttachmentView key={att.id ?? i} att={att} />
+                        ))}
                       </div>
                     )}
 
@@ -376,7 +330,7 @@ function InlineClasswork({
                           rel='noreferrer'
                           className='inline-flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
                         >
-                          <GoogleClassroomIcon className='size-3.5 shrink-0' />
+                          <ExternalLink className='size-3.5 shrink-0' />
                           Open in Google Classroom ↗
                         </a>
                       </div>
@@ -502,7 +456,7 @@ function InlineStream({
                           rel='noreferrer'
                           className='inline-flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
                         >
-                          <GoogleClassroomIcon className='size-3.5 shrink-0' />
+                          <ExternalLink className='size-3.5 shrink-0' />
                           Open in Google Classroom ↗
                         </a>
                       </div>
@@ -642,7 +596,7 @@ function CourseDetail({
   const onPeopleCount = useCallback((n: number) => setCount('people', n), [setCount])
 
   return (
-    <div className='flex max-h-[80vh] h-[80vh] flex-col overflow-hidden rounded-md border lg:w-1/2'>
+    <div className='flex max-h-[80vh] h-[80vh] flex-col overflow-hidden rounded-md border lg:w-[70%]'>
       {/* Header */}
       <div className='flex items-start justify-between gap-2 border-b p-3'>
         <div className='min-w-0'>
