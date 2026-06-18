@@ -52,7 +52,11 @@ async def init_db() -> None:
             _added_columns: dict[str, list[tuple[str, str]]] = {
                 "classroom_sync_runs": [("message", "TEXT"), ("percent", "INTEGER")],
                 # Soft-delete + diff timestamps on every cached entity.
-                "classroom_courses": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
+                # ``week`` = weekday extracted from the section's leading Japanese text.
+                "classroom_courses": [
+                    ("updated_at", "DATETIME"), ("removed_at", "DATETIME"),
+                    ("week", "INTEGER"),
+                ],
                 "classroom_announcements": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
                 "classroom_topics": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
                 "classroom_people": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
@@ -81,6 +85,17 @@ async def init_db() -> None:
                         await conn.execute(
                             text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
                         )
+
+            # Backfill ``week`` for courses synced before the column existed,
+            # deriving it from the section's leading Japanese weekday (その他=8).
+            if await _has_column(conn, "classroom_courses", "week"):
+                await conn.execute(text(
+                    "UPDATE classroom_courses SET week = CASE substr(section, 1, 3) "
+                    "WHEN '月曜日' THEN 1 WHEN '火曜日' THEN 2 WHEN '水曜日' THEN 3 "
+                    "WHEN '木曜日' THEN 4 WHEN '金曜日' THEN 5 WHEN '土曜日' THEN 6 "
+                    "WHEN '日曜日' THEN 7 ELSE 8 END "
+                    "WHERE week IS NULL"
+                ))
         logger.info("Database initialized successfully.")
     except Exception as e:
         logger.critical(f"Failed to initialize database: {e}")

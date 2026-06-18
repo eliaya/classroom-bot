@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { fileUrl, type Attachment } from '@/lib/api'
 
 // Shared attachment design used by both the Classwork page and the Courses
@@ -76,17 +75,6 @@ function IconImage({ className = 'h-4 w-4' }: { className?: string }) {
   )
 }
 
-function IconGoogleClassroom({ className = 'h-5 w-5' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox='0 0 192 192' fill='none' aria-hidden='true'>
-      <rect width='192' height='192' rx='24' fill='#1EA362' />
-      <rect x='24' y='32' width='144' height='96' rx='8' fill='white' />
-      <circle cx='96' cy='80' r='24' fill='#1EA362' />
-      <path d='M56 152h80' stroke='white' strokeWidth='12' strokeLinecap='round' />
-    </svg>
-  )
-}
-
 export function AttachmentIcon({ att }: { att: Attachment }) {
   if (att.source === 'youtube') return <IconYouTube />
   if (att.source === 'form') return <IconForm />
@@ -114,14 +102,6 @@ export function AttachmentView({ att }: { att: Attachment }) {
           ) : (
             <span className='truncate'>{label}</span>
           )}
-          <div className='mt-0.5 flex items-center gap-2'>
-            <a href={att.source_url || undefined} target='_blank' rel='noreferrer' className='text-muted-foreground transition-opacity hover:opacity-80'>
-              <IconGoogleClassroom className='size-4' />
-            </a>
-            <Badge variant='outline' className='text-[10px]'>
-              {att.source}
-            </Badge>
-          </div>
         </div>
       </div>
     )

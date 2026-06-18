@@ -75,14 +75,12 @@ export function ClassroomDashboard() {
 
   return (
     <>
-      <ClassroomHeader fixed />
+      <ClassroomHeader
+        fixed
+        title='Dashboard'
+        description='Google Classroom data cached in local SQLite'
+      />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>Dashboard</h2>
-          <p className='text-muted-foreground'>
-            Google Classroom data cached in local SQLite
-          </p>
-        </div>
 
         {error && (
           <Card className='border-destructive'>

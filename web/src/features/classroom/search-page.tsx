@@ -70,10 +70,13 @@ export function SearchPage() {
 
   return (
     <>
-      <ClassroomHeader fixed />
+      <ClassroomHeader
+        fixed
+        title='Search'
+        description='Search across all courses, classwork, and stream'
+      />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div className='flex flex-col gap-1'>
-          <h2 className='text-2xl font-bold tracking-tight'>Search</h2>
           <p className='text-sm text-muted-foreground'>
             {q ? (
               <>

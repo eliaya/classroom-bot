@@ -29,11 +29,24 @@ export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Co
     cell: ({ row }) => row.getValue('section') || '—',
   },
   {
-    accessorKey: 'room',
+    accessorKey: 'week',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Room' />
+      <DataTableColumnHeader column={column} title='Week' />
     ),
-    cell: ({ row }) => row.getValue('room') || '—',
+    meta: { className: 'w-16' },
+    cell: ({ row }) => {
+      // week 1-7 → 月..日, 8 → その他 (stored as a number in the DB).
+      const WEEK_LABELS: Record<number, string> = {
+        1: '月', 2: '火', 3: '水', 4: '木',
+        5: '金', 6: '土', 7: '日', 8: 'その他',
+      }
+      const week = row.getValue('week') as number | null
+      return typeof week === 'number' ? (
+        <Badge variant='outline'>{WEEK_LABELS[week] ?? week}</Badge>
+      ) : (
+        '—'
+      )
+    },
   },
   {
     accessorKey: 'state',

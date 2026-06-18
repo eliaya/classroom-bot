@@ -144,15 +144,12 @@ export function ClassroomSettingsPage() {
 
   return (
     <>
-      <ClassroomHeader fixed />
+      <ClassroomHeader
+        fixed
+        title='Settings'
+        description='API health, OAuth credentials, and sync configuration'
+      />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>Settings</h2>
-          <p className='text-muted-foreground'>
-            API health, OAuth credentials, and sync configuration
-          </p>
-        </div>
-
         {error && <p className='text-destructive text-sm'>{error}</p>}
 
         <div className='grid gap-4 md:grid-cols-2'>

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -217,17 +217,38 @@ async def soft_delete_missing(
     return removed
 
 
+# Japanese weekday → number. The leading 3 characters of a course ``section``
+# (e.g. "月曜日 ５限～６限／担当：…") encode the weekday. その他 (no weekday) = 8.
+WEEKDAY_MAP: Dict[str, int] = {
+    "月曜日": 1,
+    "火曜日": 2,
+    "水曜日": 3,
+    "木曜日": 4,
+    "金曜日": 5,
+    "土曜日": 6,
+    "日曜日": 7,
+}
+WEEK_OTHER = 8
+
+
+def week_from_section(section: Optional[str]) -> int:
+    """Extract the leading Japanese weekday (first 3 chars) from ``section``
+    and map it to a number. Returns 8 (その他) when no weekday is present."""
+    if not section:
+        return WEEK_OTHER
+    return WEEKDAY_MAP.get(section.strip()[:3], WEEK_OTHER)
+
+
 def _course_from_api(data: Dict[str, Any]) -> ClassroomCourse:
+    section = data.get("section")
     return ClassroomCourse(
         id=data["id"],
         name=data.get("name", "Untitled"),
-        section=data.get("section"),
-        room=data.get("room"),
+        section=section,
+        week=week_from_section(section),
         owner_id=data.get("ownerId"),
         state=data.get("courseState"),
         alternate_link=data.get("alternateLink"),
-        description_heading=data.get("descriptionHeading"),
-        description=data.get("description"),
         raw_json=dump_json(data),
         synced_at=now_jst(),
     )
@@ -346,8 +367,7 @@ def _person_from_api(course_id: str, role: str, data: Dict[str, Any]) -> Classro
 # Per-entity tracked fields used for the field-level diff (raw_json/synced_at
 # are always refreshed but deliberately excluded so changed_fields is meaningful).
 _COURSE_FIELDS = (
-    "name", "section", "room", "owner_id", "state", "alternate_link",
-    "description_heading", "description",
+    "name", "section", "week", "owner_id", "state", "alternate_link",
 )
 _ANNOUNCEMENT_FIELDS = (
     "text", "materials_json", "creator_user_id", "state",
@@ -501,6 +521,22 @@ async def upsert_todos(
             entity_type="todo", entity_id=f"{row.user_id}:{row.item_id}", course_id=course_id, run_id=run_id,
         )
     return len(items)
+
+
+async def get_coursework_update_times(
+    session: AsyncSession, course_id: Optional[str] = None
+) -> Dict[tuple[str, str], Optional[str]]:
+    """Map of (course_id, courseWorkId) -> update_time, for enriching todos with
+    their linked coursework's last-updated time."""
+    stmt = select(
+        ClassroomCoursework.course_id,
+        ClassroomCoursework.id,
+        ClassroomCoursework.update_time,
+    )
+    if course_id is not None:
+        stmt = stmt.where(ClassroomCoursework.course_id == course_id)
+    result = await session.execute(stmt)
+    return {(row[0], row[1]): row[2] for row in result.all()}
 
 
 async def list_cached_courses(session: AsyncSession) -> List[ClassroomCourse]:
@@ -737,16 +773,16 @@ async def search_all(
     courses = await list_cached_courses(session)
     course_name = {c.id: c.name for c in courses}
 
-    # ── Course: name / section / room / description ──────────────────────────
+    # ── Course: name / section ──────────────────────────
     for c in courses:
-        hay = " ".join(filter(None, [c.name, c.section, c.room, c.description])).lower()
+        hay = " ".join(filter(None, [c.name, c.section])).lower()
         if ql in hay:
             course_items.append({
                 "kind": "course",
                 "course_id": c.id,
                 "course_name": c.name,
                 "title": c.name,
-                "subtitle": c.section or c.room or None,
+                "subtitle": c.section or None,
                 "alternate_link": c.alternate_link,
                 "url": f"/courses/{c.id}/stream",
             })
@@ -856,12 +892,25 @@ async def list_cached_todos(
     user_id: str = "me",
     include_removed: bool = False,
 ) -> List[ClassroomTodo]:
-    stmt = select(ClassroomTodo).where(ClassroomTodo.user_id == user_id)
+    # Order by the linked coursework's last-updated time (most recent first).
+    # A todo maps to a courseWork via item_id (=courseWorkId) + course_id.
+    stmt = (
+        select(ClassroomTodo)
+        .outerjoin(
+            ClassroomCoursework,
+            and_(
+                ClassroomCoursework.id == ClassroomTodo.item_id,
+                ClassroomCoursework.course_id == ClassroomTodo.course_id,
+            ),
+        )
+        .where(ClassroomTodo.user_id == user_id)
+    )
     if course_id is not None:
         stmt = stmt.where(ClassroomTodo.course_id == course_id)
     if not include_removed:
         stmt = stmt.where(ClassroomTodo.removed_at.is_(None))
-    stmt = stmt.order_by(ClassroomTodo.due_date)
+    # NULL update_time (no matching coursework) sorts last under DESC in SQLite.
+    stmt = stmt.order_by(ClassroomCoursework.update_time.desc(), ClassroomTodo.due_date)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 

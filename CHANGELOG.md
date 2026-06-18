@@ -68,6 +68,34 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.9.0] - 2026-06-18
+
+### Added / 新增
+- Courses: new **Week** column derived from the section's leading Japanese weekday (月曜日=1 … 日曜日=7; その他=8 when none). Stored as a number for sorting, displayed as a short label (月/火/水/木/金/土/日/その他), toggleable via "View", and width-reduced. Backfilled for existing rows on startup.
+- 課程：新增 **Week** 欄，依 section 開頭的日本語星期推導（月曜日=1 … 日曜日=7；無對應為 その他=8）。以數字儲存供排序、以短標籤顯示（月/火/水/木/金/土/日/その他），可於「View」切換顯示、欄寬縮減；既有資料於啟動時自動回填。
+- Courses table: **drag-and-drop column reordering** (via `@dnd-kit`) with a grip handle on each header; the order is persisted to `localStorage` and restored on reload (stale columns dropped, new columns appended).
+- 課程表：**拖拉調整欄位順序**（使用 `@dnd-kit`），每欄標題有把手；順序保存於 `localStorage` 並於重整後還原（自動移除失效欄、補上新欄）。
+- Courses table: sorting state is now also persisted to `localStorage` (alongside column order and visibility).
+- 課程表：排序狀態現也保存於 `localStorage`（與欄位順序、顯示狀態一致）。
+- To-do: each card now shows the assignment's **last-updated time** ("Updated … ago" with a full-timestamp tooltip), sourced from the linked coursework's `update_time`.
+- 待辦：每張卡片顯示作業的**最後更新時間**（"Updated … ago"，hover 顯示完整時間戳），來源為關聯 coursework 的 `update_time`。
+
+### Changed / 變更
+- Page headers: every page's H2 title now sits in the top header bar (left-aligned), with the old subtitle shown as a **tooltip** on the title. Applied to Courses, Dashboard, Settings, Sync, Audit log, Search, and To-do.
+- 頁面標題：各頁的 H2 標題移入頂部 header 列（靠左對齊），原副標改以標題上的 **tooltip** 顯示。套用於 Courses、Dashboard、Settings、Sync、Audit log、Search、To-do。
+- Header horizontal padding now matches `<Main>` (`px-4 sm:px-6 lg:px-8`), so the header title aligns left and the profile menu aligns right with the content block below.
+- Header 水平內距改為與 `<Main>` 一致（`px-4 sm:px-6 lg:px-8`），標題靠左、profile 選單靠右皆與下方內容區貼齊。
+- To-do items are now ordered by the linked coursework's `update_time` (most recently updated first) instead of by due date.
+- 待辦改以關聯 coursework 的 `update_time` 由新到舊排序（取代原本依到期日排序）。
+- Courses split-screen detail panel: the list now keeps **Course name + Week** visible; description text in the panel uses a darker (`text-foreground`) colour for readability.
+- 課程分割畫面詳情：清單固定顯示 **Course name + Week**；面板內描述文字改用較深色（`text-foreground`）以利閱讀。
+
+### Removed / 移除
+- Dropped the unused `room`, `description_heading`, and `description` columns from `classroom_courses` (always empty upstream) — removed from the model, API responses, web UI, and Discord course embed.
+- 移除 `classroom_courses` 中無資料的 `room`、`description_heading`、`description` 欄位（上游恆為空）——同步移除 model、API 回應、Web UI 與 Discord 課程嵌入欄位。
+- Attachment view: removed the Google Classroom source icon/badge from attachment rows (shared by the Classwork and Courses pages).
+- 附件檢視：移除附件列上的 Google Classroom 來源圖示／標籤（Classwork 與 Courses 頁共用）。
+
 ## [0.8.1] - 2026-06-18
 
 ### Added / 新增

@@ -23,14 +23,12 @@ export function CoursesListPage() {
 
   return (
     <>
-      <ClassroomHeader fixed />
+      <ClassroomHeader
+        fixed
+        title='Courses'
+        description='Google Classroom courses from local SQL cache'
+      />
       <Main fluid className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>Courses</h2>
-          <p className='text-muted-foreground'>
-            Google Classroom courses from local SQL cache
-          </p>
-        </div>
         {error && (
           <p className='text-destructive text-sm'>{error}</p>
         )}

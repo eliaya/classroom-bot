@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, ClipboardList } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, fullTimestamp, humanReadableTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -97,6 +97,14 @@ function TodoCard({
         <p className={cn('text-xs', dueDateClass(item))}>
           Due {formatDueDate(item.due_date)}
           {isMissing(item) && <span className='ml-1 font-semibold'>· Missing</span>}
+        </p>
+      )}
+      {item.last_updated && (
+        <p
+          className='text-[11px] text-muted-foreground'
+          title={fullTimestamp(item.last_updated) || undefined}
+        >
+          Updated {humanReadableTime(item.last_updated)}
         </p>
       )}
     </div>
@@ -216,14 +224,12 @@ export function TodoPage() {
 
   return (
     <>
-      <ClassroomHeader fixed />
+      <ClassroomHeader
+        fixed
+        title='To-do'
+        description='Assignments across all courses (from local cache)'
+      />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>To-do</h2>
-          <p className='text-muted-foreground'>
-            Assignments across all courses (from local cache)
-          </p>
-        </div>
 
         {error && <p className='text-destructive text-sm'>{error}</p>}
 

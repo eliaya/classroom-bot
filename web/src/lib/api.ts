@@ -28,7 +28,7 @@ export type Course = {
   id: string
   name: string
   section?: string | null
-  room?: string | null
+  week?: number | null
   owner_id?: string | null
   state?: string | null
   alternate_link?: string | null
@@ -114,6 +114,7 @@ export type TodoItem = {
   due_date?: string | null
   status?: string | null
   course_work_link?: string | null
+  last_updated?: string | null
 }
 
 export type SearchResultKind =

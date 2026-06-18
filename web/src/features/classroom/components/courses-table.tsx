@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  type Cell,
+  type ColumnOrderState,
+  type Header,
   type SortingState,
   type VisibilityState,
   flexRender,
@@ -10,7 +13,25 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { BookOpen, ExternalLink, Radio, Users } from 'lucide-react'
+import {
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { BookOpen, GripVertical, Radio, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
 import {
@@ -63,7 +84,7 @@ const SECTION_NAV: SectionDef[] = [
 ]
 
 const COLUMN_VISIBILITY_KEY = 'courses-table:column-visibility'
-const DEFAULT_COLUMN_VISIBILITY: VisibilityState = { room: false }
+const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {}
 
 function loadColumnVisibility(): VisibilityState {
   if (typeof window === 'undefined') return DEFAULT_COLUMN_VISIBILITY
@@ -72,6 +93,97 @@ function loadColumnVisibility(): VisibilityState {
     if (raw) return JSON.parse(raw) as VisibilityState
   } catch { /* ignore */ }
   return DEFAULT_COLUMN_VISIBILITY
+}
+
+const COLUMN_ORDER_KEY = 'courses-table:column-order'
+
+function loadColumnOrder(): ColumnOrderState {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(COLUMN_ORDER_KEY)
+    if (raw) return JSON.parse(raw) as ColumnOrderState
+  } catch { /* ignore */ }
+  return []
+}
+
+const SORTING_KEY = 'courses-table:sorting'
+
+function loadSorting(): SortingState {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(SORTING_KEY)
+    if (raw) return JSON.parse(raw) as SortingState
+  } catch { /* ignore */ }
+  return []
+}
+
+// ─── Draggable header + drag-along body cell (column reordering) ──────────────
+
+function DraggableHeader({ header }: { header: Header<Course, unknown> }) {
+  const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
+    id: header.column.id,
+  })
+  const style: React.CSSProperties = {
+    opacity: isDragging ? 0.8 : 1,
+    position: 'relative',
+    transform: CSS.Translate.toString(transform),
+    transition: 'transform 0.2s ease-in-out',
+    whiteSpace: 'nowrap',
+    zIndex: isDragging ? 1 : 0,
+  }
+  const hasTitle = header.column.columnDef.header != null
+  return (
+    <TableHead
+      ref={setNodeRef}
+      colSpan={header.colSpan}
+      style={style}
+      className={cn(header.column.columnDef.meta?.className)}
+    >
+      <div className='flex items-center gap-1'>
+        {hasTitle && !header.isPlaceholder && (
+          <button
+            type='button'
+            aria-label='Drag to reorder column'
+            className='cursor-grab touch-none text-muted-foreground/40 transition-colors hover:text-foreground'
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className='size-3.5' />
+          </button>
+        )}
+        {header.isPlaceholder
+          ? null
+          : flexRender(header.column.columnDef.header, header.getContext())}
+      </div>
+    </TableHead>
+  )
+}
+
+function DragAlongCell({
+  cell,
+  onClick,
+}: {
+  cell: Cell<Course, unknown>
+  onClick?: () => void
+}) {
+  const { isDragging, setNodeRef, transform } = useSortable({ id: cell.column.id })
+  const style: React.CSSProperties = {
+    opacity: isDragging ? 0.8 : 1,
+    position: 'relative',
+    transform: CSS.Translate.toString(transform),
+    transition: 'transform 0.2s ease-in-out',
+    zIndex: isDragging ? 1 : 0,
+  }
+  return (
+    <TableCell
+      ref={setNodeRef}
+      style={style}
+      className={cn(cell.column.columnDef.meta?.className)}
+      onClick={onClick}
+    >
+      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+    </TableCell>
+  )
 }
 
 
@@ -88,17 +200,63 @@ type CoursesTableProps = {
 export function CoursesTable({ data, search, navigate, selectedCourse, onSelectCourse }: CoursesTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(loadColumnVisibility)
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [sorting, setSorting] = useState<SortingState>(loadSorting)
   const [visibleCount, setVisibleCount] = useState(10)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   const columns = useMemo(() => coursesColumns(onSelectCourse), [onSelectCourse])
+
+  // Resolved id of every column, in their definition order.
+  const defaultColumnOrder = useMemo<ColumnOrderState>(
+    () =>
+      columns.map(
+        (c) => ((c as { id?: string }).id ?? (c as { accessorKey?: string }).accessorKey) as string
+      ),
+    [columns]
+  )
+
+  // Restore a saved order, dropping stale ids and appending any new columns.
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(() => {
+    const stored = loadColumnOrder()
+    if (!stored.length) return defaultColumnOrder
+    const valid = stored.filter((id) => defaultColumnOrder.includes(id))
+    const missing = defaultColumnOrder.filter((id) => !valid.includes(id))
+    return [...valid, ...missing]
+  })
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(KeyboardSensor)
+  )
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setColumnOrder((order) => {
+      const from = order.indexOf(active.id as string)
+      const to = order.indexOf(over.id as string)
+      return from < 0 || to < 0 ? order : arrayMove(order, from, to)
+    })
+  }, [])
 
   useEffect(() => {
     try {
       window.localStorage.setItem(COLUMN_VISIBILITY_KEY, JSON.stringify(columnVisibility))
     } catch { /* ignore */ }
   }, [columnVisibility])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(columnOrder))
+    } catch { /* ignore */ }
+  }, [columnOrder])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SORTING_KEY, JSON.stringify(sorting))
+    } catch { /* ignore */ }
+  }, [sorting])
 
   const { columnFilters, onColumnFiltersChange } = useTableUrlState({
     search,
@@ -120,19 +278,21 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
     return () => observer.disconnect()
   }, [])
 
+  // When the split-screen detail panel is open, keep only Course name + Week.
   const effectiveColumnVisibility: VisibilityState = selectedCourse
-    ? { section: false, room: false, state: false, synced_at: false, actions: false }
+    ? { section: false, state: false, synced_at: false, actions: false }
     : columnVisibility
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, rowSelection, columnFilters, columnVisibility: effectiveColumnVisibility },
+    state: { sorting, rowSelection, columnFilters, columnVisibility: effectiveColumnVisibility, columnOrder },
     onColumnFiltersChange,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -148,52 +308,62 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
       <DataTableToolbar table={table} searchPlaceholder='Filter courses…' searchKey='name' />
       <div className='flex flex-col gap-3 lg:flex-row lg:items-start'>
         <div className={cn('overflow-hidden rounded-md border', selectedCourse ? 'lg:w-[30%]' : 'w-full')}>
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={cn(header.column.columnDef.meta?.className)}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToHorizontalAxis]}
+            onDragEnd={handleDragEnd}
+          >
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    <SortableContext
+                      items={columnOrder}
+                      strategy={horizontalListSortingStrategy}
                     >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {visibleRows.length ? (
-                visibleRows.map((row) => {
-                  const isSelected = selectedCourse?.id === row.original.id
-                  return (
-                    <TableRow
-                      key={row.id}
-                      data-state={isSelected ? 'selected' : undefined}
-                      className='cursor-pointer'
-                      onClick={() => onSelectCourse(row.original)}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id} className={cn(cell.column.columnDef.meta?.className)}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
+                      {headerGroup.headers.map((header) => (
+                        <DraggableHeader key={header.id} header={header} />
                       ))}
-                    </TableRow>
-                  )
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className='h-24 text-center'>
-                    No courses in cache. Run a sync first.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                    </SortableContext>
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {visibleRows.length ? (
+                  visibleRows.map((row) => {
+                    const isSelected = selectedCourse?.id === row.original.id
+                    return (
+                      <TableRow
+                        key={row.id}
+                        data-state={isSelected ? 'selected' : undefined}
+                        className='cursor-pointer'
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <SortableContext
+                            key={cell.id}
+                            items={columnOrder}
+                            strategy={horizontalListSortingStrategy}
+                          >
+                            <DragAlongCell
+                              cell={cell}
+                              onClick={() => onSelectCourse(row.original)}
+                            />
+                          </SortableContext>
+                        ))}
+                      </TableRow>
+                    )
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className='h-24 text-center'>
+                      No courses in cache. Run a sync first.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </DndContext>
         </div>
 
         {selectedCourse && (
@@ -295,7 +465,6 @@ function InlineClasswork({
               const typeLabel = isMaterial ? 'Attachment' : String(item.work_type || 'Coursework')
               const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
               const description = String(item.description || '').trim()
-              const hasGcLink = !isMaterial && item.alternate_link
               return (
                 <div key={`${item._kind}-${String(item.id)}`}>
                   {idx > 0 && <Separator />}
@@ -321,24 +490,9 @@ function InlineClasswork({
                       </div>
                     )}
 
-                    {/* For non-Material: show "Open in Google Classroom ↗" text URL (no SVG icon) */}
-                    {hasGcLink && (
-                      <div className='mt-2'>
-                        <a
-                          href={item.alternate_link!}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='inline-flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
-                        >
-                          <ExternalLink className='size-3.5 shrink-0' />
-                          Open in Google Classroom ↗
-                        </a>
-                      </div>
-                    )}
-
                     {/* Description (plain, no accordion) */}
                     {description && (
-                      <p className='mt-2 text-sm text-muted-foreground whitespace-pre-wrap'>
+                      <p className='mt-2 text-sm text-foreground whitespace-pre-wrap'>
                         {description}
                       </p>
                     )}
@@ -432,7 +586,6 @@ function InlineStream({
               const typeLabel = item.type === 'announcement' ? 'Announcement' : String(item.work_type || 'Assignment')
               const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
               const description = String(item.text || '').trim()
-              const hasGcLink = !!item.alternate_link
               return (
                 <div key={`${item.type}-${item.id}`}>
                   {idx > 0 && <Separator />}
@@ -447,24 +600,9 @@ function InlineStream({
                       {dateStr && <span className='rounded bg-muted px-1.5 py-0.5'>{dateStr}</span>}
                     </div>
 
-                    {/* non-Material (stream items): show "Open in Google Classroom ↗" text URL (no SVG icon) */}
-                    {hasGcLink && (
-                      <div className='mt-2'>
-                        <a
-                          href={item.alternate_link!}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='inline-flex items-center gap-1.5 text-primary text-sm underline hover:opacity-80'
-                        >
-                          <ExternalLink className='size-3.5 shrink-0' />
-                          Open in Google Classroom ↗
-                        </a>
-                      </div>
-                    )}
-
                     {/* Description (plain, no accordion) */}
                     {description && (
-                      <p className='mt-2 text-sm text-muted-foreground whitespace-pre-wrap'>
+                      <p className='mt-2 text-sm text-foreground whitespace-pre-wrap'>
                         {description}
                       </p>
                     )}
@@ -617,9 +755,6 @@ function CourseDetail({
           <div className='text-muted-foreground mt-0.5 flex flex-wrap items-center gap-2 text-xs'>
             {course.section && (
               <span className='rounded bg-muted px-1.5 py-0.5'>{course.section}</span>
-            )}
-            {course.room && (
-              <span className='rounded bg-muted px-1.5 py-0.5'>Room: {course.room}</span>
             )}
           </div>
         </div>

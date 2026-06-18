@@ -42,7 +42,7 @@ async def list_courses(session: AsyncSession = Depends(get_db_session)) -> dict:
                 "id": c.id,
                 "name": c.name,
                 "section": c.section,
-                "room": c.room,
+                "week": c.week,
                 "owner_id": c.owner_id,
                 "state": c.state,
                 "alternate_link": c.alternate_link,
@@ -63,12 +63,10 @@ async def get_course(course_id: str, session: AsyncSession = Depends(get_db_sess
         "id": course.id,
         "name": course.name,
         "section": course.section,
-        "room": course.room,
+        "week": course.week,
         "owner_id": course.owner_id,
         "state": course.state,
         "alternate_link": course.alternate_link,
-        "description_heading": course.description_heading,
-        "description": course.description,
         "synced_at": course.synced_at.isoformat() if course.synced_at else None,
     }
 

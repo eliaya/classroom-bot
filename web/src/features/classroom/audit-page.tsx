@@ -93,14 +93,12 @@ export function AuditPage() {
 
   return (
     <>
-      <ClassroomHeader fixed />
+      <ClassroomHeader
+        fixed
+        title='Audit log'
+        description='All system operations — sync, API requests, OAuth login, Discord commands'
+      />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>Audit log</h2>
-          <p className='text-muted-foreground'>
-            All system operations — sync, API requests, OAuth login, Discord commands
-          </p>
-        </div>
 
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <Tabs value={tab} onValueChange={(v) => setTab(v as CategoryTab)}>

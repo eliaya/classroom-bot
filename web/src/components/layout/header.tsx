@@ -33,7 +33,10 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
     >
       <div
         className={cn(
-          'relative flex h-full items-center gap-3 p-4 sm:gap-4',
+          // Horizontal padding matches <Main> (px-4 sm:px-6 lg:px-8) so the
+          // header title aligns left and the profile menu aligns right with
+          // the content block below.
+          'relative flex h-full items-center gap-3 p-4 sm:gap-4 sm:px-6 lg:px-8',
           offset > 10 &&
             fixed &&
             'after:absolute after:inset-0 after:-z-10 after:bg-background/20 after:backdrop-blur-lg'

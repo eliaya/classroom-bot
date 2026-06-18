@@ -46,12 +46,12 @@ class ClassroomCourse(SQLModel, table=True):
     id: str = Field(primary_key=True)
     name: str
     section: Optional[str] = None
-    room: Optional[str] = None
+    # Weekday extracted from the leading Japanese text of ``section``
+    # (月曜日=1 … 日曜日=7; その他=8 when no weekday is present).
+    week: int = Field(default=8, index=True)
     owner_id: Optional[str] = None
     state: Optional[str] = None
     alternate_link: Optional[str] = None
-    description_heading: Optional[str] = None
-    description: Optional[str] = None
     raw_json: Optional[str] = None
     synced_at: datetime = Field(default_factory=now_jst)
     updated_at: Optional[datetime] = Field(default=None, index=True)

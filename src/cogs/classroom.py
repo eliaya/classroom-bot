@@ -199,7 +199,6 @@ class ClassroomCog(commands.Cog):
             )
             embed.add_field(name="Course ID", value=f"`{course.id}`", inline=False)
             embed.add_field(name="Section", value=course.section or "No section", inline=True)
-            embed.add_field(name="Room", value=course.room or "Not set", inline=True)
             embed.add_field(name="Owner", value=course.owner_id or "Unavailable", inline=False)
             embed.add_field(name="State", value=course.state or "UNKNOWN", inline=True)
             await interaction.followup.send(embed=embed, ephemeral=True)

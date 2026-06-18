@@ -25,6 +25,7 @@ async def list_all_todos(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     todos = await cache.list_cached_todos(session, course_id=course_id)
+    update_times = await cache.get_coursework_update_times(session, course_id=course_id)
 
     if status == "not_turned_in":
         todos = [t for t in todos if (t.status or "").lower() in _NOT_TURNED_IN]
@@ -48,6 +49,7 @@ async def list_all_todos(
                 "due_date": t.due_date,
                 "status": t.status,
                 "course_work_link": t.course_work_link,
+                "last_updated": update_times.get((t.course_id, t.item_id)),
             }
             for t in todos
         ],
