@@ -68,6 +68,24 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.9.1] - 2026-06-19
+
+### Added / 新增
+- Courses: rows whose **Week** matches **today's weekday** are highlighted (amber, readable in light/dark). Today's weekday comes from the new `GET /api/time` endpoint (Asia/Tokyo server time, 1=Mon … 7=Sun).
+- 課程：**Week** 等於**今日星期**的列以琥珀色高亮（深淺色皆可讀）。今日星期來自新增的 `GET /api/time`（Asia/Tokyo 伺服器時間，1=月 … 7=日）。
+- Command Palette: recent search keyword chips (up to 3) below the search bar, persisted to `localStorage`; clicking a chip jumps straight to that keyword's results.
+- Command Palette：搜尋列下方新增最近關鍵字標籤（最多 3 個），保存於 `localStorage`，點擊直接跳到該關鍵字的結果。
+- Anime.js-powered motion: a bouncing-dots loader used as the global route/lazy-load fallback, a subtle entrance on every `Skeleton`, and a slide+fade entrance for the Courses split-screen detail panel.
+- 以 Anime.js 加入動態：全域路由／lazy-load 的彈跳點 Loader、所有 `Skeleton` 的細緻進場，以及課程分割畫面詳情面板的滑入＋淡入進場。
+
+### Changed / 變更
+- Courses: clicking a table row now **toggles** the split-screen detail panel (click the selected row again to close).
+- 課程：點擊表格列改為**切換**詳情面板（再次點擊已選列即關閉）。
+- Command Palette: ~25% larger visible area (wider dialog + taller results list).
+- Command Palette：可視面積增加約 25%（對話框加寬、結果清單加高）。
+- Courses: the **Week** column is narrower, and stays visible alongside Course name when the detail panel is open.
+- 課程：**Week** 欄變窄，且在詳情面板開啟時與課程名稱一併保留顯示。
+
 ## [0.9.0] - 2026-06-18
 
 ### Added / 新增
