@@ -247,6 +247,17 @@ const zhTW: Resources = {
     statusReturned: '已發還',
     statusReclaimed: '已取消繳交',
   },
+  notification: {
+    syncingTitle: '同步中',
+    syncingPercent: '同步中… {{percent}}%',
+    successTitle: '同步完成',
+    errorTitle: '同步失敗',
+    items: '{{count}} 筆項目',
+    viewAria: '檢視同步詳情',
+    dismissAria: '關閉通知',
+    showDetailsAria: '顯示詳情',
+    hideDetailsAria: '隱藏詳情',
+  },
   sync: {
     title: '同步',
     desc: '觸發完整的 Classroom 同步並檢視執行紀錄。同步進行時進度會即時更新。',

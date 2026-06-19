@@ -247,6 +247,17 @@ const zhCN: Resources = {
     statusReturned: '已退回',
     statusReclaimed: '已取消提交',
   },
+  notification: {
+    syncingTitle: '同步中',
+    syncingPercent: '同步中… {{percent}}%',
+    successTitle: '同步完成',
+    errorTitle: '同步失败',
+    items: '{{count}} 项',
+    viewAria: '查看同步详情',
+    dismissAria: '关闭通知',
+    showDetailsAria: '显示详情',
+    hideDetailsAria: '隐藏详情',
+  },
   sync: {
     title: '同步',
     desc: '触发完整的 Classroom 同步并查看运行记录。同步进行时进度会实时更新。',

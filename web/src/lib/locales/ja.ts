@@ -247,6 +247,17 @@ const ja: Resources = {
     statusReturned: '返却済み',
     statusReclaimed: '提出取り消し',
   },
+  notification: {
+    syncingTitle: '同期中',
+    syncingPercent: '同期中… {{percent}}%',
+    successTitle: '同期完了',
+    errorTitle: '同期失敗',
+    items: '{{count}} 件',
+    viewAria: '同期の詳細を表示',
+    dismissAria: '通知を閉じる',
+    showDetailsAria: '詳細を表示',
+    hideDetailsAria: '詳細を非表示',
+  },
   sync: {
     title: '同期',
     desc: 'Classroom の完全同期を実行し、実行履歴を表示します。同期中は進捗がリアルタイムで更新されます。',

@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/table'
 import { Main } from '@/components/layout/main'
 import { api, type SyncRun } from '@/lib/api'
+import { useSyncStatusStore } from '@/stores/sync-status-store'
 import { ClassroomHeader } from './layout-header'
 import { RunProgressBar, RunStatusBadge } from './components/run-indicators'
 
@@ -118,6 +119,9 @@ export function SyncPage() {
       await api.triggerSync()
       // Immediately refresh a few times so the new running run appears fast
       await load()
+      // Nudge the global notification store so the top-centered NotificationPopUp
+      // picks up the new run instantly and stays live across page navigation.
+      useSyncStatusStore.getState().startPolling()
       // polling effect will take over
     } catch (e) {
       setError(e instanceof Error ? e.message : t('sync.syncFailed'))

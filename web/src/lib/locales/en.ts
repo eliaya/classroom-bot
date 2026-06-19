@@ -250,6 +250,17 @@ export const en = {
     statusReturned: 'Returned',
     statusReclaimed: 'Unsubmitted',
   },
+  notification: {
+    syncingTitle: 'Syncing',
+    syncingPercent: 'Syncing… {{percent}}%',
+    successTitle: 'Sync complete',
+    errorTitle: 'Sync failed',
+    items: '{{count}} items',
+    viewAria: 'View sync details',
+    dismissAria: 'Dismiss notification',
+    showDetailsAria: 'Show details',
+    hideDetailsAria: 'Hide details',
+  },
   sync: {
     title: 'Sync',
     desc: 'Trigger full Classroom sync and view run history. Progress updates live while syncing.',

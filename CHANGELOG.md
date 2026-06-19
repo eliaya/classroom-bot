@@ -68,6 +68,22 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.9.3] - 2026-06-19
+
+### Added / 新增
+- **Global Sync Job notification (`NotificationPopUp`)** — a single shared, top-centered, audio-player-style status bar mounted once in the authenticated layout. It is a pure subscriber that observes sync status app-wide and never triggers a sync itself. Shows a live animated progress bar with real-time percentage, success/error final state, and auto-hides ~1s after completion. Includes accessibility (`role="status"`, `aria-live="polite"`).
+- **全域同步通知（`NotificationPopUp`）** — 在已驗證版面掛載單一共用的頂部置中、音樂播放器風格狀態列。純訂閱者，全站觀察同步狀態、本身不觸發同步。顯示即時動畫進度條與百分比、成功/失敗最終狀態，完成後約 1 秒自動隱藏。具無障礙支援（`role="status"`、`aria-live="polite"`）。
+- `sync-status-store.ts` (Zustand) — shared source of truth that polls `api.syncStatus()` (observe-only) and exposes phase/progress/message for the notification.
+- `sync-status-store.ts`（Zustand） — 共用狀態來源，輪詢 `api.syncStatus()`（僅觀察），對外提供 phase/progress/message 供通知元件使用。
+- Eye toggle on the notification to expand/collapse detailed progress (items count, resource, message) inline; collapsed view shows only the progress bar + percentage.
+- 通知列新增眼睛切換鈕，就地展開/收合詳細進度（項目數、resource、訊息）；收合時僅顯示進度條與百分比。
+
+### Changed / 變更
+- Notification background made semi-transparent with stronger backdrop blur (`bg-card/30` with `backdrop-blur-md`).
+- 通知背景改為半透明並加強毛玻璃效果（`bg-card/30` + `backdrop-blur-md`）。
+- Sync Page nudges `startPolling()` after firing a sync so the global notification appears instantly.
+- 同步頁觸發同步後呼叫 `startPolling()`，讓全域通知即時出現。
+
 ## [0.9.2] - 2026-06-19
 
 ### Added / 新增
