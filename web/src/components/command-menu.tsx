@@ -39,6 +39,19 @@ const KIND_ICON: Record<SearchResultKind, React.ElementType> = {
   announcement: Megaphone,
 }
 
+// Recent search keywords shown as quick chips below the search bar.
+const RECENT_KEYWORDS_KEY = 'command-palette:recent-keywords'
+const MAX_RECENT_KEYWORDS = 3
+
+function loadRecentKeywords(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEYWORDS_KEY)
+    if (raw) return (JSON.parse(raw) as string[]).slice(0, MAX_RECENT_KEYWORDS)
+  } catch { /* ignore */ }
+  return []
+}
+
 export function CommandMenu() {
   const navigate = useNavigate()
   const { setTheme } = useTheme()
@@ -46,6 +59,9 @@ export function CommandMenu() {
   const [query, setQuery] = React.useState('')
   const [categories, setCategories] = React.useState<SearchCategory[]>([])
   const [searching, setSearching] = React.useState(false)
+  const [recentKeywords, setRecentKeywords] = React.useState<string[]>(
+    loadRecentKeywords
+  )
 
   const runCommand = React.useCallback(
     (command: () => unknown) => {
@@ -54,6 +70,23 @@ export function CommandMenu() {
     },
     [setOpen]
   )
+
+  // Remember a keyword the user actually acted on (picked a result / opened the
+  // full results page). Most-recent first, de-duplicated, capped at 3.
+  const commitKeyword = React.useCallback((raw: string) => {
+    const kw = raw.trim()
+    if (kw.length < 2) return
+    setRecentKeywords((prev) => {
+      const next = [
+        kw,
+        ...prev.filter((k) => k.toLowerCase() !== kw.toLowerCase()),
+      ].slice(0, MAX_RECENT_KEYWORDS)
+      try {
+        window.localStorage.setItem(RECENT_KEYWORDS_KEY, JSON.stringify(next))
+      } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   // Navigate to a search result. Classwork items carry the item id/kind so the
   // classwork page can auto-open its split-screen detail panel.
@@ -127,14 +160,49 @@ export function CommandMenu() {
       open={open}
       onOpenChange={setOpen}
       shouldFilter={false}
+      className='sm:max-w-xl'
     >
       <CommandInput
         placeholder='Search the app or jump to a page...'
         value={query}
         onValueChange={setQuery}
       />
+
+      {/* Recent keyword chips — shown only when not actively searching. Click
+          jumps straight to that keyword's full results page. */}
+      {navQuery.length < 2 && recentKeywords.length > 0 && (
+        <div className='flex flex-wrap items-center gap-1.5 border-b px-3 py-2'>
+          <span className='text-xs text-muted-foreground'>Recent:</span>
+          {recentKeywords.map((kw) => (
+            <span
+              key={kw}
+              role='button'
+              tabIndex={0}
+              onClick={() =>
+                runCommand(() => {
+                  commitKeyword(kw)
+                  navigate({ to: '/search', search: { q: kw } })
+                })
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  runCommand(() => {
+                    commitKeyword(kw)
+                    navigate({ to: '/search', search: { q: kw } })
+                  })
+                }
+              }}
+              className='cursor-pointer rounded-full border bg-muted/50 px-2 py-0.5 text-xs text-foreground transition-colors hover:bg-accent hover:text-accent-foreground'
+            >
+              {kw}
+            </span>
+          ))}
+        </div>
+      )}
+
       <CommandList>
-        <ScrollArea type='hover' className='h-72 pe-1'>
+        <ScrollArea type='hover' className='h-80 pe-1'>
           <CommandEmpty>
             {searching ? 'Searching…' : 'No results found.'}
           </CommandEmpty>
@@ -155,7 +223,10 @@ export function CommandMenu() {
                           key={`${category.key}-${result.course_id}-${i}`}
                           value={`result-${category.key}-${result.course_id}-${i}`}
                           onSelect={() => {
-                            runCommand(() => goToResult(result))
+                            runCommand(() => {
+                              commitKeyword(query)
+                              goToResult(result)
+                            })
                           }}
                         >
                           <Icon className='text-muted-foreground' />
@@ -174,12 +245,13 @@ export function CommandMenu() {
                       <CommandItem
                         value={`more-${category.key}`}
                         onSelect={() => {
-                          runCommand(() =>
+                          runCommand(() => {
+                            commitKeyword(query)
                             navigate({
                               to: '/search',
                               search: { q: query, category: category.key },
                             })
-                          )
+                          })
                         }}
                       >
                         <MoreHorizontal className='text-muted-foreground' />
