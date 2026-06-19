@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -11,6 +12,7 @@ import {
 import { api } from '@/lib/api'
 
 export function CoursePeoplePage({ courseId }: { courseId: string }) {
+  const { t } = useTranslation()
   const [people, setPeople] = useState<
     Array<{ user_id: string; role: string; full_name?: string; email?: string }>
   >([])
@@ -20,7 +22,7 @@ export function CoursePeoplePage({ courseId }: { courseId: string }) {
     api
       .getPeople(courseId)
       .then((res) => setPeople(res.items))
-      .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
   }, [courseId])
 
   if (error) {
@@ -32,9 +34,9 @@ export function CoursePeoplePage({ courseId }: { courseId: string }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Role</TableHead>
+            <TableHead>{t('coursePeople.name')}</TableHead>
+            <TableHead>{t('coursePeople.email')}</TableHead>
+            <TableHead>{t('coursePeople.role')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -52,7 +54,7 @@ export function CoursePeoplePage({ courseId }: { courseId: string }) {
           {!people.length && (
             <TableRow>
               <TableCell colSpan={3} className='text-muted-foreground'>
-                No people in cache.
+                {t('coursePeople.noPeople')}
               </TableCell>
             </TableRow>
           )}

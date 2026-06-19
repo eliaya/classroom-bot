@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLayout } from '@/context/layout-provider'
 import {
   Sidebar,
@@ -17,6 +18,7 @@ import { NavUser } from './nav-user'
 import { api } from '@/lib/api'
 
 export function AppSidebar() {
+  const { t } = useTranslation()
   const { collapsible, variant } = useLayout()
   const [version, setVersion] = useState<string | null>(null)
   const team = sidebarData.teams[0]
@@ -65,7 +67,7 @@ export function AppSidebar() {
         <NavUser user={sidebarData.user} />
         {/* Version display in admin sidebar */}
         <div className="px-3 py-1 text-center text-[10px] font-mono text-muted-foreground/70 select-none border-t border-sidebar-border/50 mt-1">
-          {version ? `Classroom Bot v${version}` : 'Classroom Bot'}
+          {version ? t('sidebar.appVersion', { version }) : t('sidebar.appName')}
         </div>
       </SidebarFooter>
       <SidebarRail />

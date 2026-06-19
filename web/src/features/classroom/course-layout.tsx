@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { ExternalLink } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Main } from '@/components/layout/main'
 import { api } from '@/lib/api'
@@ -11,6 +12,7 @@ type CourseLayoutProps = {
 }
 
 export function CourseLayout({ courseId }: CourseLayoutProps) {
+  const { t } = useTranslation()
   const [courseName, setCourseName] = useState(courseId)
   const [alternateLink, setAlternateLink] = useState<string | null>(null)
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -33,17 +35,17 @@ export function CourseLayout({ courseId }: CourseLayoutProps) {
 
   const topNav = [
     {
-      title: 'Stream',
+      title: t('courses.stream'),
       href: `/courses/${courseId}/stream`,
       isActive: isStream,
     },
     {
-      title: 'Classwork',
+      title: t('courses.classwork'),
       href: `/courses/${courseId}/classwork`,
       isActive: isClasswork,
     },
     {
-      title: 'People',
+      title: t('courses.people'),
       href: `/courses/${courseId}/people`,
       isActive: isPeople,
     },
@@ -57,7 +59,7 @@ export function CourseLayout({ courseId }: CourseLayoutProps) {
           <div>
             <p className='text-muted-foreground text-sm'>
               <Link to='/courses' className='hover:underline'>
-                Courses
+                {t('courses.title')}
               </Link>
               {' / '}
               <span className='text-foreground'>{courseName}</span>
@@ -68,7 +70,7 @@ export function CourseLayout({ courseId }: CourseLayoutProps) {
             <Button variant='outline' size='sm' asChild>
               <a href={alternateLink} target='_blank' rel='noreferrer'>
                 <ExternalLink className='me-2 h-4 w-4' />
-                Open in Classroom
+                {t('courses.openInClassroom')}
               </a>
             </Button>
           )}

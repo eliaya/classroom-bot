@@ -24,35 +24,36 @@ export const sidebarData: SidebarData = {
   ],
   navGroups: [
     {
-      title: 'General',
+      // Titles are i18n keys, translated at render time (see nav-group / command-menu).
+      title: 'nav.general',
       items: [
         {
-          title: 'Dashboard',
+          title: 'nav.dashboard',
           url: '/',
           icon: LayoutDashboard,
         },
         {
-          title: 'Courses',
+          title: 'nav.courses',
           url: '/courses',
           icon: GraduationCap,
         },
         {
-          title: 'To-do',
+          title: 'nav.todo',
           url: '/todos',
           icon: ClipboardList,
         },
         {
-          title: 'Sync',
+          title: 'nav.sync',
           url: '/sync',
           icon: RefreshCw,
         },
         {
-          title: 'Audit log',
+          title: 'nav.audit',
           url: '/audit',
           icon: ScrollText,
         },
         {
-          title: 'Settings',
+          title: 'nav.settings',
           url: '/settings',
           icon: Settings,
         },

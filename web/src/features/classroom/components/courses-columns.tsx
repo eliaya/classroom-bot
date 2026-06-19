@@ -1,4 +1,5 @@
 import { type ColumnDef } from '@tanstack/react-table'
+import { type TFunction } from 'i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table'
@@ -6,12 +7,15 @@ import { LongText } from '@/components/long-text'
 import { type Course } from '@/lib/api'
 import { fullTimestamp, humanReadableTime } from '@/lib/utils'
 
-export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Course>[] {
+export function coursesColumns(
+  onSelect: (course: Course) => void,
+  t: TFunction
+): ColumnDef<Course>[] {
   return [
   {
     accessorKey: 'name',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Course name' />
+      <DataTableColumnHeader column={column} title={t('courses.courseName')} />
     ),
     cell: ({ row }) => (
       <LongText className='max-w-[320px] font-medium'>
@@ -24,14 +28,14 @@ export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Co
   {
     accessorKey: 'section',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Section' />
+      <DataTableColumnHeader column={column} title={t('courses.section')} />
     ),
     cell: ({ row }) => row.getValue('section') || '—',
   },
   {
     accessorKey: 'week',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Week' />
+      <DataTableColumnHeader column={column} title={t('courses.week')} />
     ),
     meta: { className: 'w-12' },
     cell: ({ row }) => {
@@ -53,7 +57,7 @@ export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Co
   {
     accessorKey: 'state',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='State' />
+      <DataTableColumnHeader column={column} title={t('courses.state')} />
     ),
     cell: ({ row }) => {
       const state = row.getValue('state') as string | null
@@ -69,7 +73,7 @@ export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Co
   {
     accessorKey: 'synced_at',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Synced at' />
+      <DataTableColumnHeader column={column} title={t('courses.syncedAt')} />
     ),
     cell: ({ row }) => {
       const value = row.getValue('synced_at') as string | null
@@ -95,7 +99,7 @@ export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Co
           onSelect(row.original)
         }}
       >
-        View
+        {t('courses.view')}
       </Button>
     ),
   },

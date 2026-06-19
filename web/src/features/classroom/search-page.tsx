@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, getRouteApi } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 import {
   BookOpen,
   FileText,
@@ -34,6 +35,7 @@ const KIND_ICON: Record<SearchResultKind, React.ElementType> = {
 }
 
 export function SearchPage() {
+  const { t } = useTranslation()
   const { q, category } = route.useSearch()
   const [categories, setCategories] = useState<SearchCategory[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,19 +74,20 @@ export function SearchPage() {
     <>
       <ClassroomHeader
         fixed
-        title='Search'
-        description='Search across all courses, classwork, and stream'
+        title={t('searchPage.title')}
+        description={t('searchPage.desc')}
       />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div className='flex flex-col gap-1'>
           <p className='text-sm text-muted-foreground'>
             {q ? (
               <>
-                Results for <span className='text-foreground'>“{q}”</span>
-                {category ? ` in ${category}` : ''}
+                {t('searchPage.resultsFor')}{' '}
+                <span className='text-foreground'>“{q}”</span>
+                {category ? t('searchPage.inCategory', { category }) : ''}
               </>
             ) : (
-              'Type a query to search across all courses, classwork, and stream.'
+              t('searchPage.prompt')
             )}
           </p>
         </div>
@@ -97,7 +100,7 @@ export function SearchPage() {
           </div>
         ) : visible.length === 0 ? (
           <p className='text-sm text-muted-foreground'>
-            No results found{q ? ` for “${q}”` : ''}.
+            {q ? t('searchPage.noResultsFor', { q }) : t('searchPage.noResults')}
           </p>
         ) : (
           <div className='flex flex-col gap-6'>
@@ -110,8 +113,8 @@ export function SearchPage() {
                   </CardTitle>
                   <CardDescription>
                     {cat.total > cat.items.length
-                      ? `Showing ${cat.items.length} of ${cat.total}`
-                      : `${cat.total} result${cat.total === 1 ? '' : 's'}`}
+                      ? t('searchPage.showingOf', { shown: cat.items.length, total: cat.total })
+                      : t('searchPage.resultCount', { count: cat.total })}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='flex flex-col gap-1'>

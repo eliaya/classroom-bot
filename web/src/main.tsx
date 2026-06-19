@@ -11,10 +11,11 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { handleServerError } from '@/lib/handle-server-error'
 import { Loader } from '@/components/loader'
-// Initialize i18n (side-effect import)
-import '@/lib/i18n'
+// Initialize i18n (side-effect import) + use t() outside React render
+import i18n from '@/lib/i18n'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
+import { LocaleProvider } from './context/locale-provider'
 import { ThemeProvider } from './context/theme-provider'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
@@ -45,7 +46,7 @@ const queryClient = new QueryClient({
 
         if (error instanceof AxiosError) {
           if (error.response?.status === 304) {
-            toast.error('Content not modified!')
+            toast.error(i18n.t('toast.contentNotModified'))
           }
         }
       },
@@ -55,13 +56,13 @@ const queryClient = new QueryClient({
     onError: (error) => {
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
-          toast.error('Session expired!')
+          toast.error(i18n.t('toast.sessionExpired'))
           useAuthStore.getState().auth.reset()
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
         }
         if (error.response?.status === 500) {
-          toast.error('Internal Server Error!')
+          toast.error(i18n.t('toast.internalServerError'))
           // Only navigate to error page in production to avoid disrupting HMR in development
           if (import.meta.env.PROD) {
             router.navigate({ to: '/500' })
@@ -106,7 +107,9 @@ if (!rootElement.innerHTML) {
         <ThemeProvider>
           <FontProvider>
             <DirectionProvider>
-              <RouterProvider router={router} />
+              <LocaleProvider>
+                <RouterProvider router={router} />
+              </LocaleProvider>
             </DirectionProvider>
           </FontProvider>
         </ThemeProvider>

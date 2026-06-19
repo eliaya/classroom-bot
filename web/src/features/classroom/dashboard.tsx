@@ -65,7 +65,7 @@ export function ClassroomDashboard() {
       setRecentRuns(sync.runs.slice(0, 8))
       setBotStatus(botRes)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load dashboard')
+      setError(e instanceof Error ? e.message : t('dashboard.loadFailed'))
     }
   }
 
@@ -77,8 +77,8 @@ export function ClassroomDashboard() {
     <>
       <ClassroomHeader
         fixed
-        title='Dashboard'
-        description='Google Classroom data cached in local SQLite'
+        title={t('dashboard.title')}
+        description={t('dashboard.desc')}
       />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
 
@@ -93,17 +93,17 @@ export function ClassroomDashboard() {
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
           <Card>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Courses</CardTitle>
+              <CardTitle className='text-sm font-medium'>{t('dashboard.courses')}</CardTitle>
               <GraduationCap className='h-4 w-4 text-muted-foreground' />
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{courseCount}</div>
-              <p className='text-xs text-muted-foreground'>Cached in database</p>
+              <p className='text-xs text-muted-foreground'>{t('dashboard.cachedInDb')}</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Google OAuth</CardTitle>
+              <CardTitle className='text-sm font-medium'>{t('dashboard.googleOauth')}</CardTitle>
               <KeyRound className='h-4 w-4 text-muted-foreground' />
             </CardHeader>
             <CardContent>
@@ -116,7 +116,7 @@ export function ClassroomDashboard() {
                   </span>
                 )}
               </div>
-              <p className='text-xs text-muted-foreground'>API credential status</p>
+              <p className='text-xs text-muted-foreground'>{t('dashboard.apiCredentialStatus')}</p>
             </CardContent>
           </Card>
           <Card>
@@ -167,12 +167,12 @@ export function ClassroomDashboard() {
           </Card>
           <Card>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Sync errors</CardTitle>
+              <CardTitle className='text-sm font-medium'>{t('dashboard.syncErrors')}</CardTitle>
               <AlertCircle className='h-4 w-4 text-muted-foreground' />
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{errorCount}</div>
-              <p className='text-xs text-muted-foreground'>Failed runs in history</p>
+              <p className='text-xs text-muted-foreground'>{t('dashboard.failedRuns')}</p>
             </CardContent>
           </Card>
         </div>
@@ -180,17 +180,17 @@ export function ClassroomDashboard() {
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
           <Card className='col-span-1 lg:col-span-4'>
             <CardHeader>
-              <CardTitle>Recent sync runs</CardTitle>
-              <CardDescription>Latest background sync activity</CardDescription>
+              <CardTitle>{t('dashboard.recentRuns')}</CardTitle>
+              <CardDescription>{t('dashboard.recentRunsDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Resource</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead>Finished</TableHead>
+                    <TableHead>{t('dashboard.resource')}</TableHead>
+                    <TableHead>{t('dashboard.status')}</TableHead>
+                    <TableHead>{t('dashboard.items')}</TableHead>
+                    <TableHead>{t('dashboard.finished')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -224,7 +224,7 @@ export function ClassroomDashboard() {
                   {!recentRuns.length && (
                     <TableRow>
                       <TableCell colSpan={4} className='text-muted-foreground'>
-                        No sync runs yet. Trigger a sync to populate the cache.
+                        {t('dashboard.noRunsYet')}
                       </TableCell>
                     </TableRow>
                   )}
@@ -234,18 +234,18 @@ export function ClassroomDashboard() {
           </Card>
           <Card className='col-span-1 lg:col-span-3'>
             <CardHeader>
-              <CardTitle>Quick actions</CardTitle>
-              <CardDescription>Navigate to common tasks</CardDescription>
+              <CardTitle>{t('dashboard.quickActions')}</CardTitle>
+              <CardDescription>{t('dashboard.quickActionsDesc')}</CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-2'>
               <Button variant='outline' asChild className='justify-start'>
-                <Link to='/courses'>Browse courses</Link>
+                <Link to='/courses'>{t('dashboard.browseCourses')}</Link>
               </Button>
               <Button variant='outline' asChild className='justify-start'>
-                <Link to='/sync'>View sync history</Link>
+                <Link to='/sync'>{t('dashboard.viewSyncHistory')}</Link>
               </Button>
               <Button variant='outline' asChild className='justify-start'>
-                <Link to='/settings'>API & OAuth settings</Link>
+                <Link to='/settings'>{t('dashboard.apiOauthSettings')}</Link>
               </Button>
             </CardContent>
           </Card>

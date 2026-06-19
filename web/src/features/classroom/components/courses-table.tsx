@@ -33,6 +33,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { animate } from 'animejs'
 import { BookOpen, GripVertical, Radio, Users } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
 import {
@@ -78,10 +79,11 @@ type SectionDef = {
   label: string
   Icon: React.ComponentType<{ className?: string }>
 }
+// `label` is an i18n key, translated at render time.
 const SECTION_NAV: SectionDef[] = [
-  { key: 'classwork', label: 'Classwork', Icon: BookOpen },
-  { key: 'stream',    label: 'Stream',    Icon: Radio },
-  { key: 'people',    label: 'People',    Icon: Users },
+  { key: 'classwork', label: 'courses.classwork', Icon: BookOpen },
+  { key: 'stream',    label: 'courses.stream',    Icon: Radio },
+  { key: 'people',    label: 'courses.people',    Icon: Users },
 ]
 
 const COLUMN_VISIBILITY_KEY = 'courses-table:column-visibility'
@@ -121,6 +123,7 @@ function loadSorting(): SortingState {
 // ─── Draggable header + drag-along body cell (column reordering) ──────────────
 
 function DraggableHeader({ header }: { header: Header<Course, unknown> }) {
+  const { t } = useTranslation()
   const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
     id: header.column.id,
   })
@@ -144,7 +147,7 @@ function DraggableHeader({ header }: { header: Header<Course, unknown> }) {
         {hasTitle && !header.isPlaceholder && (
           <button
             type='button'
-            aria-label='Drag to reorder column'
+            aria-label={t('courses.dragReorder')}
             className='cursor-grab touch-none text-muted-foreground/40 transition-colors hover:text-foreground'
             {...attributes}
             {...listeners}
@@ -199,6 +202,7 @@ type CoursesTableProps = {
 }
 
 export function CoursesTable({ data, search, navigate, selectedCourse, onSelectCourse }: CoursesTableProps) {
+  const { t, i18n } = useTranslation()
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(loadColumnVisibility)
   const [sorting, setSorting] = useState<SortingState>(loadSorting)
@@ -214,7 +218,11 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
       .catch(() => setTodayWeek(null))
   }, [])
 
-  const columns = useMemo(() => coursesColumns(onSelectCourse), [onSelectCourse])
+  const columns = useMemo(
+    () => coursesColumns(onSelectCourse, t),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onSelectCourse, i18n.language]
+  )
 
   // Resolved id of every column, in their definition order.
   const defaultColumnOrder = useMemo<ColumnOrderState>(
@@ -315,7 +323,7 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
 
   return (
     <div className='flex flex-col gap-4'>
-      <DataTableToolbar table={table} searchPlaceholder='Filter courses…' searchKey='name' />
+      <DataTableToolbar table={table} searchPlaceholder={t('courses.filterCourses')} searchKey='name' />
       <div className='flex flex-col gap-3 lg:flex-row lg:items-start'>
         <div className={cn('overflow-hidden rounded-md border transition-[width] duration-300 ease-out', selectedCourse ? 'lg:w-[30%]' : 'w-full')}>
           <DndContext
@@ -379,7 +387,7 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
                 ) : (
                   <TableRow>
                     <TableCell colSpan={columns.length} className='h-24 text-center'>
-                      No courses in cache. Run a sync first.
+                      {t('courses.noCourses')}
                     </TableCell>
                   </TableRow>
                 )}
@@ -398,7 +406,7 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
       <div ref={sentinelRef} className='h-1' />
       {allRows.length > visibleCount && (
         <p className='text-center text-xs text-muted-foreground'>
-          Showing {visibleCount} of {allRows.length} courses
+          {t('courses.showingOf', { count: visibleCount, total: allRows.length })}
         </p>
       )}
     </div>
@@ -416,6 +424,7 @@ function InlineClasswork({
   courseId: string
   onCountChange?: (count: number) => void
 }) {
+  const { t } = useTranslation()
   const [data, setData] = useState<ClassworkResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -430,7 +439,7 @@ function InlineClasswork({
     api
       .getClasswork(courseId)
       .then((d) => { setData(d); setError(null) })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
       .finally(() => setLoading(false))
   }, [courseId])
 
@@ -477,14 +486,14 @@ function InlineClasswork({
       ) : error ? (
         <p className='p-4 text-sm text-destructive'>{error}</p>
       ) : items.length === 0 ? (
-        <p className='p-4 text-sm text-muted-foreground'>No classwork in cache. Run a sync.</p>
+        <p className='p-4 text-sm text-muted-foreground'>{t('courses.noClasswork')}</p>
       ) : (
         <ScrollArea className='flex-1 min-h-0'>
           <div>
             {items.slice(0, visibleCount).map((item, idx) => {
               const attCount = item.attachments?.length ?? 0
               const isMaterial = item._kind === 'material'
-              const typeLabel = isMaterial ? 'Attachment' : String(item.work_type || 'Coursework')
+              const typeLabel = isMaterial ? t('courses.attachment') : String(item.work_type || t('courses.coursework'))
               const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
               const description = String(item.description || '').trim()
               return (
@@ -499,7 +508,7 @@ function InlineClasswork({
                     <div className='mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground'>
                       <span className='rounded bg-muted px-1.5 py-0.5'>{typeLabel}</span>
                       {dateStr && <span className='rounded bg-muted px-1.5 py-0.5'>{dateStr}</span>}
-                      {attCount > 0 && <span className='rounded bg-muted px-1.5 py-0.5'>{attCount} files</span>}
+                      {attCount > 0 && <span className='rounded bg-muted px-1.5 py-0.5'>{t('courses.files', { count: attCount })}</span>}
                     </div>
 
                     {/* Attachments — same rich design as the Classwork page
@@ -547,6 +556,7 @@ function InlineStream({
   courseId: string
   onCountChange?: (count: number) => void
 }) {
+  const { t } = useTranslation()
   const [data, setData] = useState<{ items: StreamItem[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -561,7 +571,7 @@ function InlineStream({
     api
       .getStream(courseId, 100) // load reasonable amount for client-side infinite; real pagination possible via limit/offset
       .then((r) => { setData({ items: r.items }); setError(null) })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
       .finally(() => setLoading(false))
   }, [courseId])
 
@@ -600,12 +610,12 @@ function InlineStream({
       ) : error ? (
         <p className='p-4 text-sm text-destructive'>{error}</p>
       ) : items.length === 0 ? (
-        <p className='p-4 text-sm text-muted-foreground'>No stream items in cache.</p>
+        <p className='p-4 text-sm text-muted-foreground'>{t('courses.noStream')}</p>
       ) : (
         <ScrollArea className='flex-1 min-h-0'>
           <div>
             {items.slice(0, visibleCount).map((item, idx) => {
-              const typeLabel = item.type === 'announcement' ? 'Announcement' : String(item.work_type || 'Assignment')
+              const typeLabel = item.type === 'announcement' ? t('courses.announcement') : String(item.work_type || t('courses.assignment'))
               const dateStr = item.update_time ? String(item.update_time).slice(0, 10) : ''
               const description = String(item.text || '').trim()
               return (
@@ -657,6 +667,7 @@ function InlinePeople({
   courseId: string
   onCountChange?: (count: number) => void
 }) {
+  const { t } = useTranslation()
   const [people, setPeople] = useState<PersonItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -666,7 +677,7 @@ function InlinePeople({
     api
       .getPeople(courseId)
       .then((r) => { setPeople(r.items); setError(null) })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
       .finally(() => setLoading(false))
   }, [courseId])
 
@@ -686,13 +697,13 @@ function InlinePeople({
       ) : error ? (
         <p className='p-4 text-sm text-destructive'>{error}</p>
       ) : people.length === 0 ? (
-        <p className='p-4 text-sm text-muted-foreground'>No people in cache.</p>
+        <p className='p-4 text-sm text-muted-foreground'>{t('courses.noPeople')}</p>
       ) : (
         <ScrollArea className='flex-1 min-h-0'>
           {teachers.length > 0 && (
             <div className='px-4 pb-1 pt-3'>
               <p className='mb-1.5 text-[11px] font-semibold uppercase text-muted-foreground'>
-                Teachers ({teachers.length})
+                {t('courses.teachers', { count: teachers.length })}
               </p>
               <div className='flex flex-col gap-1'>
                 {teachers.map((p) => (
@@ -705,7 +716,7 @@ function InlinePeople({
           {students.length > 0 && (
             <div className='px-4 pb-3 pt-1'>
               <p className='mb-1.5 text-[11px] font-semibold uppercase text-muted-foreground'>
-                Students ({students.length})
+                {t('courses.students', { count: students.length })}
               </p>
               <div className='flex flex-col gap-1'>
                 {students.map((p) => (
@@ -745,6 +756,7 @@ function CourseDetail({
   course: Course
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<SectionKey>('classwork')
   const [counts, setCounts] = useState<Partial<Record<SectionKey, number>>>({})
   const panelRef = useRef<HTMLDivElement>(null)
@@ -784,7 +796,7 @@ function CourseDetail({
                   {course.name}
                 </h3>
               </TooltipTrigger>
-              <TooltipContent>Synced {course.synced_at}</TooltipContent>
+              <TooltipContent>{t('courses.synced', { time: course.synced_at })}</TooltipContent>
             </Tooltip>
           ) : (
             <h3 className='truncate font-medium' title={course.name}>
@@ -812,7 +824,7 @@ function CourseDetail({
           {SECTION_NAV.map(({ key, label, Icon }) => (
             <TabsTrigger key={key} value={key} className='gap-3 px-6 py-6'>
               <Icon className='size-3.5' />
-              {label}
+              {t(label)}
               {counts[key] !== undefined && (
                 <span
                   className={

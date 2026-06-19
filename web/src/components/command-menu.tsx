@@ -1,5 +1,6 @@
 import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowRight,
   BookOpen,
@@ -54,6 +55,7 @@ function loadRecentKeywords(): string[] {
 
 export function CommandMenu() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
   const [query, setQuery] = React.useState('')
@@ -163,7 +165,7 @@ export function CommandMenu() {
       className='sm:max-w-xl'
     >
       <CommandInput
-        placeholder='Search the app or jump to a page...'
+        placeholder={t('commandMenu.placeholder')}
         value={query}
         onValueChange={setQuery}
       />
@@ -172,7 +174,7 @@ export function CommandMenu() {
           jumps straight to that keyword's full results page. */}
       {navQuery.length < 2 && recentKeywords.length > 0 && (
         <div className='flex flex-wrap items-center gap-1.5 border-b px-3 py-2'>
-          <span className='text-xs text-muted-foreground'>Recent:</span>
+          <span className='text-xs text-muted-foreground'>{t('commandMenu.recent')}</span>
           {recentKeywords.map((kw) => (
             <span
               key={kw}
@@ -204,7 +206,7 @@ export function CommandMenu() {
       <CommandList>
         <ScrollArea type='hover' className='h-80 pe-1'>
           <CommandEmpty>
-            {searching ? 'Searching…' : 'No results found.'}
+            {searching ? t('commandMenu.searching') : t('commandMenu.noResults')}
           </CommandEmpty>
 
           {hasResults && (
@@ -256,7 +258,9 @@ export function CommandMenu() {
                       >
                         <MoreHorizontal className='text-muted-foreground' />
                         <span>
-                          More {category.label.toLowerCase()} results…
+                          {t('commandMenu.more', {
+                            label: category.label.toLowerCase(),
+                          })}
                         </span>
                       </CommandItem>
                     )}
@@ -269,7 +273,7 @@ export function CommandMenu() {
           {sidebarData.navGroups.map((group) => {
             const items = group.items.flatMap((navItem, i) => {
               if (navItem.url) {
-                if (!matchesNav(navItem.title)) return []
+                if (!matchesNav(t(navItem.title))) return []
                 return [
                   <CommandItem
                     key={`${navItem.url}-${i}`}
@@ -281,14 +285,14 @@ export function CommandMenu() {
                     <div className='flex size-4 items-center justify-center'>
                       <ArrowRight className='size-2 text-muted-foreground/80' />
                     </div>
-                    {navItem.title}
+                    {t(navItem.title)}
                   </CommandItem>,
                 ]
               }
 
               return (navItem.items ?? [])
                 .filter((subItem) =>
-                  matchesNav(`${navItem.title} ${subItem.title}`)
+                  matchesNav(`${t(navItem.title)} ${t(subItem.title)}`)
                 )
                 .map((subItem, j) => (
                   <CommandItem
@@ -301,30 +305,30 @@ export function CommandMenu() {
                     <div className='flex size-4 items-center justify-center'>
                       <ArrowRight className='size-2 text-muted-foreground/80' />
                     </div>
-                    {navItem.title} <ChevronRight /> {subItem.title}
+                    {t(navItem.title)} <ChevronRight /> {t(subItem.title)}
                   </CommandItem>
                 ))
             })
 
             if (items.length === 0) return null
             return (
-              <CommandGroup key={group.title} heading={group.title}>
+              <CommandGroup key={group.title} heading={t(group.title)}>
                 {items}
               </CommandGroup>
             )
           })}
           <CommandSeparator />
-          <CommandGroup heading='Theme'>
+          <CommandGroup heading={t('commandMenu.theme')}>
             <CommandItem onSelect={() => runCommand(() => setTheme('light'))}>
-              <Sun /> <span>Light</span>
+              <Sun /> <span>{t('commandMenu.light')}</span>
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => setTheme('dark'))}>
               <Moon className='scale-90' />
-              <span>Dark</span>
+              <span>{t('commandMenu.dark')}</span>
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => setTheme('system'))}>
               <Laptop />
-              <span>System</span>
+              <span>{t('commandMenu.system')}</span>
             </CommandItem>
           </CommandGroup>
         </ScrollArea>

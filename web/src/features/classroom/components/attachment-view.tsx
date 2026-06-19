@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { fileUrl, type Attachment } from '@/lib/api'
 
 // Shared attachment design used by both the Classwork page and the Courses
@@ -87,6 +88,7 @@ export function AttachmentIcon({ att }: { att: Attachment }) {
 }
 
 export function AttachmentView({ att }: { att: Attachment }) {
+  const { t } = useTranslation()
   const label = att.title || att.source
 
   // Non-Drive items: external link only.
@@ -111,10 +113,10 @@ export function AttachmentView({ att }: { att: Attachment }) {
   if (att.fetch_status !== 'fetched' || !att.download_url) {
     const hint =
       att.fetch_status === 'skipped'
-        ? 'Not downloaded (enable the Drive scope: re-run setup_google_auth.py).'
+        ? t('attachment.notDownloaded')
         : att.fetch_status === 'failed'
-          ? 'Download failed during the last sync.'
-          : 'Not yet downloaded.'
+          ? t('attachment.downloadFailed')
+          : t('attachment.notYetDownloaded')
     return (
       <div className='rounded border p-2 text-sm'>
         <div className='flex items-center gap-2 font-medium'>
@@ -124,7 +126,7 @@ export function AttachmentView({ att }: { att: Attachment }) {
         <div className='text-muted-foreground mt-0.5 text-xs'>{hint}</div>
         {att.source_url && (
           <a href={att.source_url} target='_blank' rel='noreferrer' className='text-primary text-xs underline'>
-            Open in Drive ↗
+            {t('attachment.openInDrive')}
           </a>
         )}
       </div>
@@ -140,16 +142,18 @@ export function AttachmentView({ att }: { att: Attachment }) {
         <div className='min-w-0 flex-1'>
           <span className='truncate font-medium' title={label}>
             {label}
-            {att.exported && <span className='text-muted-foreground ml-1 text-xs'>(exported)</span>}
+            {att.exported && <span className='text-muted-foreground ml-1 text-xs'>{t('attachment.exported')}</span>}
           </span>
           <div className='mt-0.5 flex items-center gap-2'>
             {att.source_url && (
               <a href={att.source_url} target='_blank' rel='noreferrer' className='text-primary text-xs underline'>
-                Open ↗
+                {t('attachment.open')}
               </a>
             )}
             <a href={url} download className='text-primary text-xs underline'>
-              Download{att.file_size ? ` (${formatBytes(att.file_size)})` : ''}
+              {att.file_size
+                ? t('attachment.downloadWithSize', { size: formatBytes(att.file_size) })
+                : t('attachment.download')}
             </a>
           </div>
         </div>

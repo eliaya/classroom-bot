@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, XCircle, Eye, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { Trans, useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +36,7 @@ function getDisplayPercent(run: SyncRun): number | null {
 }
 
 export function SyncPage() {
+  const { t } = useTranslation()
   const [runs, setRuns] = useState<SyncRun[]>([])
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,14 +66,13 @@ export function SyncPage() {
       setError(null)
       if (status.google_credentials !== 'valid') {
         setCredentialError(
-          status.google?.error ||
-            'Google OAuth is not configured. Run setup_google_auth.py on the host.'
+          status.google?.error || t('sync.oauthNotConfigured')
         )
       } else {
         setCredentialError(null)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Load failed')
+      setError(e instanceof Error ? e.message : t('common.loadFailed'))
       setRuns([])
     }
   }
@@ -119,7 +120,7 @@ export function SyncPage() {
       await load()
       // polling effect will take over
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sync failed')
+      setError(e instanceof Error ? e.message : t('sync.syncFailed'))
     } finally {
       setSyncing(false)
     }
@@ -140,7 +141,7 @@ export function SyncPage() {
       await api.clearDeadRun(runId)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to clear dead job')
+      setError(e instanceof Error ? e.message : t('sync.clearDeadFailed'))
     }
   }
 
@@ -150,7 +151,7 @@ export function SyncPage() {
       if (detailRun?.id === runId) setDetailRun(null)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete run')
+      setError(e instanceof Error ? e.message : t('sync.deleteFailed'))
     }
   }
 
@@ -173,36 +174,34 @@ export function SyncPage() {
     <>
       <ClassroomHeader
         fixed
-        title='Sync'
-        description='Trigger full Classroom sync and view run history. Progress updates live while syncing.'
+        title={t('sync.title')}
+        description={t('sync.desc')}
       />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div className='flex flex-wrap items-end justify-between gap-2'>
           <div>
             {BUILD_TIME && (
-              <p className='text-[10px] text-muted-foreground/70'>built {BUILD_TIME}</p>
+              <p className='text-[10px] text-muted-foreground/70'>{t('sync.built', { time: BUILD_TIME })}</p>
             )}
           </div>
           <Button onClick={() => void handleSync()} disabled={isLiveSyncing}>
             <RefreshCw className={isLiveSyncing ? 'animate-spin' : ''} />
-            {isLiveSyncing ? 'Syncing…' : 'Sync Now'}
+            {isLiveSyncing ? t('sync.syncing') : t('sync.syncNow')}
           </Button>
         </div>
 
         {credentialError && (
           <Alert variant='destructive'>
-            <AlertTitle>Google OAuth not ready</AlertTitle>
+            <AlertTitle>{t('sync.oauthNotReady')}</AlertTitle>
             <AlertDescription className='space-y-2'>
               <p>{credentialError}</p>
               <p className='text-sm'>
-                On the host machine (not inside Docker), run:{' '}
-                <code className='rounded bg-muted px-1 py-0.5'>
-                  python src/scripts/setup_google_auth.py
-                </code>
-                , then restart:{' '}
-                <code className='rounded bg-muted px-1 py-0.5'>
-                  docker compose restart api bot
-                </code>
+                <Trans
+                  i18nKey='sync.hostInstructions'
+                  components={{
+                    code: <code className='rounded bg-muted px-1 py-0.5' />,
+                  }}
+                />
               </p>
             </AlertDescription>
           </Alert>
@@ -212,38 +211,37 @@ export function SyncPage() {
 
         {runs.some(isStaleRunning) && (
           <p className="rounded border border-orange-200 bg-orange-50 px-3 py-1 text-xs text-orange-700">
-            One or more jobs are still marked “running” but look stuck (started &gt;30min ago).
-            Use the <span className="font-medium">Clear</span> button(s) below to mark them as error so new syncs can be triggered.
+            {t('sync.stuckWarning')}
           </p>
         )}
 
         {/* Search + Filters for paginated table (10 per page) */}
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[180px]">
-            <div className="text-[10px] text-muted-foreground mb-0.5">Search (message/resource)</div>
+            <div className="text-[10px] text-muted-foreground mb-0.5">{t('sync.searchLabel')}</div>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
+              placeholder={t('sync.searchPlaceholder')}
               className="w-full rounded-md border bg-background px-2 py-1 text-sm"
             />
           </div>
           <div>
-            <div className="text-[10px] text-muted-foreground mb-0.5">Status</div>
+            <div className="text-[10px] text-muted-foreground mb-0.5">{t('common.status')}</div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="rounded-md border bg-background px-2 py-1 text-sm"
             >
-              <option value="">All</option>
+              <option value="">{t('common.all')}</option>
               <option value="running">running</option>
               <option value="success">success</option>
               <option value="error">error</option>
             </select>
           </div>
           <Button size="sm" variant="outline" onClick={() => load({ page: 1 })}>
-            Apply
+            {t('common.apply')}
           </Button>
           {(search || statusFilter) && (
             <Button
@@ -256,7 +254,7 @@ export function SyncPage() {
                 load({ page: 1 })
               }}
             >
-              Clear filters
+              {t('common.clearFilters')}
             </Button>
           )}
         </div>
@@ -267,11 +265,11 @@ export function SyncPage() {
             <div className='mb-3 flex items-center justify-between'>
               <div className='flex items-center gap-2'>
                 <RefreshCw className='h-4 w-4 animate-spin text-primary' />
-                <span className='font-semibold'>Live Sync Progress</span>
-                <Badge variant='outline' className='text-[10px]'>REAL-TIME</Badge>
+                <span className='font-semibold'>{t('sync.liveProgress')}</span>
+                <Badge variant='outline' className='text-[10px]'>{t('sync.realtime')}</Badge>
               </div>
               <span className='text-xs text-muted-foreground'>
-                {activeRun.percent != null ? `${activeRun.percent}%` : 'Running…'}
+                {activeRun.percent != null ? `${activeRun.percent}%` : t('sync.running')}
               </span>
             </div>
 
@@ -287,26 +285,26 @@ export function SyncPage() {
 
             <div className='grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2'>
               <div>
-                <span className='text-muted-foreground'>Current: </span>
+                <span className='text-muted-foreground'>{t('sync.current')}</span>
                 <span className='font-medium'>
                   {activeRun.message || `${activeRun.resource} sync`}
                 </span>
               </div>
               <div>
-                <span className='text-muted-foreground'>Items so far: </span>
+                <span className='text-muted-foreground'>{t('sync.itemsSoFar')}</span>
                 <span className='font-medium tabular-nums'>{activeRun.items_count}</span>
               </div>
               <div>
-                <span className='text-muted-foreground'>Resource: </span>
+                <span className='text-muted-foreground'>{t('sync.resourceLabel')}</span>
                 <span>{activeRun.resource}{activeRun.course_id ? ` (${activeRun.course_id})` : ''}</span>
               </div>
               <div className='text-muted-foreground'>
-                Started {activeRun.started_at ? new Date(activeRun.started_at).toLocaleTimeString() : 'just now'}
+                {t('sync.started', { time: activeRun.started_at ? new Date(activeRun.started_at).toLocaleTimeString() : t('sync.justNow') })}
               </div>
             </div>
 
             <p className='mt-2 text-[11px] text-muted-foreground'>
-              The progress bar and message update automatically while the background sync is running.
+              {t('sync.liveHint')}
             </p>
           </div>
         )}
@@ -316,13 +314,13 @@ export function SyncPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Resource</TableHead>
-                <TableHead>Course</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Progress</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Finished</TableHead>
+                <TableHead>{t('sync.colId')}</TableHead>
+                <TableHead>{t('sync.colResource')}</TableHead>
+                <TableHead>{t('sync.colCourse')}</TableHead>
+                <TableHead>{t('sync.colStatus')}</TableHead>
+                <TableHead>{t('sync.colProgress')}</TableHead>
+                <TableHead>{t('sync.colItems')}</TableHead>
+                <TableHead>{t('sync.colFinished')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -348,7 +346,7 @@ export function SyncPage() {
                     <div className='flex items-center gap-1.5'>
                       <RunStatusBadge status={run.status}>
                         {run.status}
-                        {isStaleRunning(run) && ' (stuck?)'}
+                        {isStaleRunning(run) && t('sync.stuck')}
                       </RunStatusBadge>
                       {(run.error_message || run.message) && (
                         <Button
@@ -356,8 +354,8 @@ export function SyncPage() {
                           size='icon'
                           className='h-6 w-6 text-muted-foreground'
                           onClick={() => setDetailRun(run)}
-                          aria-label='View run detail'
-                          title='View detail (status message / error)'
+                          aria-label={t('sync.viewDetailAria')}
+                          title={t('sync.viewDetailTitle')}
                         >
                           <Eye className='h-4 w-4' />
                         </Button>
@@ -380,7 +378,7 @@ export function SyncPage() {
                     ) : run.status === 'running' ? (
                       <div className='flex items-center gap-1.5 text-xs text-muted-foreground'>
                         <div className='h-1.5 w-8 animate-pulse rounded bg-primary/40' />
-                        <span>running…</span>
+                        <span>{t('sync.runningShort')}</span>
                         {run.message && (
                           <span className='ml-1 truncate max-w-[80px] text-[10px]' title={run.message}>
                             {run.message}
@@ -398,7 +396,7 @@ export function SyncPage() {
                         {run.finished_at
                           ? formatDistanceToNow(new Date(run.finished_at), { addSuffix: true })
                           : run.started_at
-                            ? `started ${formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}`
+                            ? t('sync.startedAgo', { time: formatDistanceToNow(new Date(run.started_at), { addSuffix: true }) })
                             : '—'}
                       </span>
                       {/* Any 'running' job can be force-released here (e.g. after a
@@ -410,11 +408,11 @@ export function SyncPage() {
                           size='icon'
                           className='text-destructive h-6 w-6'
                           onClick={() => void handleClearDead(run.id)}
-                          aria-label='Clear stuck job'
+                          aria-label={t('sync.clearStuckAria')}
                           title={
                             isStaleRunning(run)
-                              ? 'This job has been running >30min with no finish — likely stuck. Click to release it (marks it as error so new syncs can start).'
-                              : 'Force-release this running job (marks it as error so a new sync can be triggered). Use if it is actually dead after a crash/restart.'
+                              ? t('sync.clearStuckStaleTitle')
+                              : t('sync.clearStuckTitle')
                           }
                         >
                           <XCircle className='h-4 w-4' />
@@ -427,8 +425,8 @@ export function SyncPage() {
                           size='icon'
                           className='text-destructive h-6 w-6'
                           onClick={() => void handleDeleteRun(run.id)}
-                          aria-label='Delete run from history'
-                          title='Delete this run from history.'
+                          aria-label={t('sync.deleteAria')}
+                          title={t('sync.deleteTitle')}
                         >
                           <Trash2 className='h-4 w-4' />
                         </Button>
@@ -442,8 +440,8 @@ export function SyncPage() {
                 <TableRow>
                   <TableCell colSpan={7} className='text-muted-foreground'>
                     {search || statusFilter
-                      ? 'No runs match the current search or filters.'
-                      : 'No sync runs recorded yet. Trigger a full sync to see live progress here.'}
+                      ? t('sync.noRunsFiltered')
+                      : t('sync.noRuns')}
                   </TableCell>
                 </TableRow>
               )}
@@ -455,7 +453,11 @@ export function SyncPage() {
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
             <div>
-              Showing {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} of {total}
+              {t('sync.showingRange', {
+                from: Math.min((page - 1) * limit + 1, total),
+                to: Math.min(page * limit, total),
+                total,
+              })}
             </div>
             <div className="flex items-center gap-1">
               <Button
@@ -468,9 +470,9 @@ export function SyncPage() {
                   load({ page: p })
                 }}
               >
-                Prev
+                {t('common.prev')}
               </Button>
-              <span className="px-2 tabular-nums">Page {page}</span>
+              <span className="px-2 tabular-nums">{t('sync.page', { page })}</span>
               <Button
                 size="sm"
                 variant="outline"
@@ -481,7 +483,7 @@ export function SyncPage() {
                   load({ page: p })
                 }}
               >
-                Next
+                {t('common.next')}
               </Button>
             </div>
           </div>
@@ -493,17 +495,17 @@ export function SyncPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                Run #{detailRun?.id} — {detailRun?.resource}
+                {t('sync.runDetail', { id: detailRun?.id, resource: detailRun?.resource })}
                 {detailRun?.course_id ? ` (${detailRun.course_id})` : ''}
               </DialogTitle>
               <DialogDescription>
-                Status: {detailRun?.status}
+                {t('sync.detailStatus', { status: detailRun?.status })}
               </DialogDescription>
             </DialogHeader>
             <div className='space-y-3 text-sm'>
               {detailRun?.error_message && (
                 <div>
-                  <div className='mb-1 font-medium text-destructive'>Error</div>
+                  <div className='mb-1 font-medium text-destructive'>{t('sync.errorLabel')}</div>
                   <pre className='max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-destructive/10 p-3 text-xs text-destructive'>
                     {detailRun.error_message}
                   </pre>
@@ -511,17 +513,17 @@ export function SyncPage() {
               )}
               {detailRun?.message && (
                 <div>
-                  <div className='mb-1 font-medium'>Last message</div>
+                  <div className='mb-1 font-medium'>{t('sync.lastMessage')}</div>
                   <pre className='max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-3 text-xs'>
                     {detailRun.message}
                   </pre>
                 </div>
               )}
               <div className='grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground'>
-                <div>Items: <span className='tabular-nums text-foreground'>{detailRun?.items_count}</span></div>
-                <div>Percent: <span className='tabular-nums text-foreground'>{detailRun?.percent ?? '—'}</span></div>
-                <div>Started: <span className='text-foreground'>{detailRun?.started_at ? new Date(detailRun.started_at).toLocaleString() : '—'}</span></div>
-                <div>Finished: <span className='text-foreground'>{detailRun?.finished_at ? new Date(detailRun.finished_at).toLocaleString() : '—'}</span></div>
+                <div>{t('sync.detailItems')}: <span className='tabular-nums text-foreground'>{detailRun?.items_count}</span></div>
+                <div>{t('sync.detailPercent')}: <span className='tabular-nums text-foreground'>{detailRun?.percent ?? '—'}</span></div>
+                <div>{t('sync.detailStarted')}: <span className='text-foreground'>{detailRun?.started_at ? new Date(detailRun.started_at).toLocaleString() : '—'}</span></div>
+                <div>{t('sync.detailFinished')}: <span className='text-foreground'>{detailRun?.finished_at ? new Date(detailRun.finished_at).toLocaleString() : '—'}</span></div>
               </div>
             </div>
           </DialogContent>

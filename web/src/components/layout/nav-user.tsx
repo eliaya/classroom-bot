@@ -5,6 +5,7 @@ import {
   LogOut,
   Settings,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -33,6 +34,7 @@ type NavUserProps = {
 }
 
 export function NavUser({ user }: NavUserProps) {
+  const { t } = useTranslation()
   const { isMobile } = useSidebar()
   const [open, setOpen] = useDialogState()
 
@@ -80,13 +82,13 @@ export function NavUser({ user }: NavUserProps) {
                 <DropdownMenuItem asChild>
                   <Link to='/settings'>
                     <Settings />
-                    Settings
+                    {t('userMenu.settings')}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to='/sync'>
                     <BadgeCheck />
-                    Sync status
+                    {t('userMenu.syncStatus')}
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
@@ -96,7 +98,7 @@ export function NavUser({ user }: NavUserProps) {
                 onClick={() => setOpen(true)}
               >
                 <LogOut />
-                Sign out
+                {t('userMenu.signOut')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

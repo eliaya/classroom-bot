@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { api, type AuditCategory, type AuditLog } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
@@ -18,11 +19,12 @@ import { ClassroomHeader } from './layout-header'
 
 type CategoryTab = 'all' | AuditCategory
 
+// `label` is an i18n key, translated at render time.
 const TABS: { value: CategoryTab; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'general', label: 'General' },
-  { value: 'api', label: 'API' },
-  { value: 'discord', label: 'Discord' },
+  { value: 'all', label: 'audit.tabAll' },
+  { value: 'general', label: 'audit.tabGeneral' },
+  { value: 'api', label: 'audit.tabApi' },
+  { value: 'discord', label: 'audit.tabDiscord' },
 ]
 
 const CATEGORY_VARIANT: Record<AuditCategory, 'secondary' | 'default' | 'outline'> = {
@@ -43,6 +45,7 @@ function formatTime(iso: string | null): string {
 }
 
 export function AuditPage() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<CategoryTab>('all')
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
@@ -79,7 +82,7 @@ export function AuditPage() {
         setError(null)
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Load failed')
+        if (!cancelled) setError(e instanceof Error ? e.message : t('common.loadFailed'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -95,23 +98,23 @@ export function AuditPage() {
     <>
       <ClassroomHeader
         fixed
-        title='Audit log'
-        description='All system operations — sync, API requests, OAuth login, Discord commands'
+        title={t('audit.title')}
+        description={t('audit.desc')}
       />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
 
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <Tabs value={tab} onValueChange={(v) => setTab(v as CategoryTab)}>
             <TabsList>
-              {TABS.map((t) => (
-                <TabsTrigger key={t.value} value={t.value}>
-                  {t.label}
+              {TABS.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value}>
+                  {t(tab.label)}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
           <Input
-            placeholder='Filter action / actor / target…'
+            placeholder={t('audit.filterPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className='h-9 w-full sm:w-72'
@@ -124,13 +127,13 @@ export function AuditPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className='w-44'>Time</TableHead>
-                <TableHead className='w-24'>Category</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead className='w-20'>Status</TableHead>
-                <TableHead className='w-20 text-right'>ms</TableHead>
+                <TableHead className='w-44'>{t('audit.colTime')}</TableHead>
+                <TableHead className='w-24'>{t('audit.colCategory')}</TableHead>
+                <TableHead>{t('audit.colAction')}</TableHead>
+                <TableHead>{t('audit.colActor')}</TableHead>
+                <TableHead>{t('audit.colTarget')}</TableHead>
+                <TableHead className='w-20'>{t('audit.colStatus')}</TableHead>
+                <TableHead className='w-20 text-right'>{t('audit.colMs')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -145,7 +148,7 @@ export function AuditPage() {
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className='h-24 text-center text-muted-foreground'>
-                    No audit entries.
+                    {t('audit.noEntries')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -185,7 +188,7 @@ export function AuditPage() {
         </div>
 
         <div className='flex items-center justify-between text-sm text-muted-foreground'>
-          <span>{total} entries</span>
+          <span>{t('audit.entries', { count: total })}</span>
           <div className='flex items-center gap-2'>
             <button
               type='button'
@@ -193,7 +196,7 @@ export function AuditPage() {
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               className='rounded border px-2 py-1 disabled:opacity-40'
             >
-              Prev
+              {t('common.prev')}
             </button>
             <span>
               {page} / {totalPages}
@@ -204,7 +207,7 @@ export function AuditPage() {
               onClick={() => setPage((p) => p + 1)}
               className='rounded border px-2 py-1 disabled:opacity-40'
             >
-              Next
+              {t('common.next')}
             </button>
           </div>
         </div>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, ClipboardList } from 'lucide-react'
+import { type TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { cn, fullTimestamp, humanReadableTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,21 +50,22 @@ function dueDateClass(item: TodoItem): string {
   return 'text-muted-foreground'
 }
 
-function statusLabel(status: string | null | undefined): string {
+function statusLabel(status: string | null | undefined, t: TFunction): string {
   switch ((status || '').toLowerCase()) {
-    case 'new': return 'New'
-    case 'created': return 'Not submitted'
-    case 'turned_in': return 'Submitted'
-    case 'returned': return 'Returned'
-    case 'reclaimed_by_student': return 'Unsubmitted'
+    case 'new': return t('todo.statusNew')
+    case 'created': return t('todo.statusCreated')
+    case 'turned_in': return t('todo.statusTurnedIn')
+    case 'returned': return t('todo.statusReturned')
+    case 'reclaimed_by_student': return t('todo.statusReclaimed')
     default: return status || '—'
   }
 }
 
+// `label` is an i18n key, translated at render time.
 const COLUMNS: { key: ColumnKey; label: string; dotClass: string }[] = [
-  { key: 'missing', label: 'Missing', dotClass: 'bg-destructive' },
-  { key: 'todo', label: 'To do', dotClass: 'bg-amber-500' },
-  { key: 'submitted', label: 'Submitted', dotClass: 'bg-emerald-500' },
+  { key: 'missing', label: 'todo.missing', dotClass: 'bg-destructive' },
+  { key: 'todo', label: 'todo.todo', dotClass: 'bg-amber-500' },
+  { key: 'submitted', label: 'todo.submitted', dotClass: 'bg-emerald-500' },
 ]
 
 function TodoCard({
@@ -72,13 +75,14 @@ function TodoCard({
   item: TodoItem
   courseName: string
 }) {
+  const { t } = useTranslation()
   return (
     <div className='flex flex-col gap-2 rounded-md border bg-card p-3 shadow-sm'>
       <p className='text-sm font-medium leading-snug'>{item.title || '—'}</p>
       <p className='truncate text-xs text-muted-foreground'>{courseName}</p>
       <div className='flex items-center justify-between gap-2'>
         <Badge variant={statusVariant(item)} className='text-[11px]'>
-          {statusLabel(item.status)}
+          {statusLabel(item.status, t)}
         </Badge>
         {item.course_work_link && (
           <Button variant='ghost' size='sm' className='h-7 shrink-0 px-2' asChild>
@@ -86,7 +90,7 @@ function TodoCard({
               href={item.course_work_link}
               target='_blank'
               rel='noreferrer'
-              title='Open in Google Classroom'
+              title={t('todo.openInClassroom')}
             >
               <ExternalLink className='size-3.5' />
             </a>
@@ -95,8 +99,8 @@ function TodoCard({
       </div>
       {item.due_date && (
         <p className={cn('text-xs', dueDateClass(item))}>
-          Due {formatDueDate(item.due_date)}
-          {isMissing(item) && <span className='ml-1 font-semibold'>· Missing</span>}
+          {t('todo.due', { date: formatDueDate(item.due_date) })}
+          {isMissing(item) && <span className='ml-1 font-semibold'>· {t('todo.missingTag')}</span>}
         </p>
       )}
       {item.last_updated && (
@@ -104,7 +108,7 @@ function TodoCard({
           className='text-[11px] text-muted-foreground'
           title={fullTimestamp(item.last_updated) || undefined}
         >
-          Updated {humanReadableTime(item.last_updated)}
+          {t('todo.updated', { time: humanReadableTime(item.last_updated) })}
         </p>
       )}
     </div>
@@ -122,6 +126,7 @@ function KanbanColumn({
   items: TodoItem[]
   courseMap: Record<string, string>
 }) {
+  const { t } = useTranslation()
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [loadingMore, setLoadingMore] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -170,7 +175,7 @@ function KanbanColumn({
         <div className='flex flex-col gap-2 p-3'>
           {items.length === 0 ? (
             <p className='px-1 py-6 text-center text-xs text-muted-foreground'>
-              Nothing here.
+              {t('todo.nothingHere')}
             </p>
           ) : (
             shown.map((item) => (
@@ -193,6 +198,7 @@ function KanbanColumn({
 }
 
 export function TodoPage() {
+  const { t } = useTranslation()
   const [items, setItems] = useState<TodoItem[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
@@ -206,7 +212,7 @@ export function TodoPage() {
         setCourses(coursesRes.items)
         setError(null)
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('todo.loadFailed')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -226,8 +232,8 @@ export function TodoPage() {
     <>
       <ClassroomHeader
         fixed
-        title='To-do'
-        description='Assignments across all courses (from local cache)'
+        title={t('todo.title')}
+        description={t('todo.desc')}
       />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
 
@@ -248,7 +254,7 @@ export function TodoPage() {
           <div className='flex flex-col items-center gap-3 py-16 text-center'>
             <ClipboardList className='size-10 text-muted-foreground' />
             <p className='text-muted-foreground text-sm'>
-              No to-do items in cache. Run a sync first.
+              {t('todo.empty')}
             </p>
           </div>
         ) : (
@@ -256,7 +262,7 @@ export function TodoPage() {
             {COLUMNS.map((col) => (
               <KanbanColumn
                 key={col.key}
-                label={col.label}
+                label={t(col.label)}
                 dotClass={col.dotClass}
                 items={board[col.key]}
                 courseMap={courseMap}

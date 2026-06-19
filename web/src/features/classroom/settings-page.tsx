@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, KeyRound, RefreshCw, XCircle } from 'lucide-react'
+import { CheckCircle2, KeyRound, Languages, RefreshCw, XCircle } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -13,10 +14,19 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Main } from '@/components/layout/main'
+import { useLocale } from '@/context/locale-provider'
 import { api, type SchedulerStatus } from '@/lib/api'
+import { type Locale, SUPPORTED_LOCALES } from '@/lib/i18n'
 import { ClassroomHeader } from './layout-header'
 
 type GoogleDetail = {
@@ -36,6 +46,8 @@ const callbackUri =
     : ''
 
 export function ClassroomSettingsPage() {
+  const { t } = useTranslation()
+  const { locale, setLocale } = useLocale()
   const [health, setHealth] = useState<string | null>(null)
   const [googleStatus, setGoogleStatus] = useState<string | null>(null)
   const [googleDetail, setGoogleDetail] = useState<GoogleDetail | null>(null)
@@ -65,16 +77,16 @@ export function ClassroomSettingsPage() {
         setGoogleDetail((s.google as GoogleDetail) ?? null)
         setPythonVersion(s.python ?? null)
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('settings.loadFailed')))
 
   useEffect(() => {
     // Handle the redirect back from the Google OAuth callback.
     const params = new URLSearchParams(window.location.search)
     const authResult = params.get('auth')
     if (authResult === 'success') {
-      toast.success('Google authorization complete')
+      toast.success(t('settings.authComplete'))
     } else if (authResult === 'error') {
-      toast.error(`Google authorization failed: ${params.get('reason') ?? 'unknown'}`)
+      toast.error(t('settings.authFailed', { reason: params.get('reason') ?? t('settings.authUnknown') }))
     }
     if (authResult) {
       // Strip the query params so a refresh doesn't re-toast.
@@ -86,7 +98,7 @@ export function ClassroomSettingsPage() {
       .getScheduler()
       .then(applyScheduler)
       .catch((e) =>
-        setSchedulerMsg(e instanceof Error ? e.message : 'Failed to load scheduler')
+        setSchedulerMsg(e instanceof Error ? e.message : t('settings.schedulerLoadFailed'))
       )
   }, [])
 
@@ -97,7 +109,7 @@ export function ClassroomSettingsPage() {
       // Full-page redirect to Google's consent screen; the callback returns here.
       window.location.href = authorization_url
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to start authorization')
+      toast.error(e instanceof Error ? e.message : t('settings.authStartFailed'))
       setAuthorizing(false)
     }
   }
@@ -108,16 +120,16 @@ export function ClassroomSettingsPage() {
     try {
       const minutes = Number(intervalInput)
       if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
-        throw new Error('Interval must be an integer between 0 and 1440 minutes')
+        throw new Error(t('settings.intervalError'))
       }
       const updated = await api.updateScheduler({
         interval_minutes: minutes,
         enabled: enabledInput,
       })
       applyScheduler(updated)
-      setSchedulerMsg('Saved')
+      setSchedulerMsg(t('settings.saved'))
     } catch (e) {
-      setSchedulerMsg(e instanceof Error ? e.message : 'Save failed')
+      setSchedulerMsg(e instanceof Error ? e.message : t('common.saveFailed'))
     } finally {
       setSavingScheduler(false)
     }
@@ -128,9 +140,9 @@ export function ClassroomSettingsPage() {
     setSchedulerMsg(null)
     try {
       await api.triggerSync()
-      setSchedulerMsg('Sync triggered')
+      setSchedulerMsg(t('settings.syncTriggered'))
     } catch (e) {
-      setSchedulerMsg(e instanceof Error ? e.message : 'Trigger failed')
+      setSchedulerMsg(e instanceof Error ? e.message : t('settings.triggerFailed'))
     } finally {
       setRunningNow(false)
     }
@@ -146,8 +158,8 @@ export function ClassroomSettingsPage() {
     <>
       <ClassroomHeader
         fixed
-        title='Settings'
-        description='API health, OAuth credentials, and sync configuration'
+        title={t('settings.title')}
+        description={t('settings.desc')}
       />
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         {error && <p className='text-destructive text-sm'>{error}</p>}
@@ -155,8 +167,8 @@ export function ClassroomSettingsPage() {
         <div className='grid gap-4 md:grid-cols-2'>
           <Card>
             <CardHeader>
-              <CardTitle>API health</CardTitle>
-              <CardDescription>FastAPI backend status</CardDescription>
+              <CardTitle>{t('settings.apiHealth')}</CardTitle>
+              <CardDescription>{t('settings.apiHealthDesc')}</CardDescription>
             </CardHeader>
             <CardContent className='flex items-center gap-2'>
               {health === 'ok' ? (
@@ -165,14 +177,14 @@ export function ClassroomSettingsPage() {
                 <XCircle className='h-5 w-5 text-destructive' />
               )}
               <Badge variant={health === 'ok' ? 'secondary' : 'destructive'}>
-                {health || 'unknown'}
+                {health || t('settings.unknown')}
               </Badge>
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Google OAuth</CardTitle>
-              <CardDescription>Classroom API credentials</CardDescription>
+              <CardTitle>{t('settings.googleOauth')}</CardTitle>
+              <CardDescription>{t('settings.googleOauthDesc')}</CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-3'>
               <div className='flex items-center gap-2'>
@@ -182,17 +194,16 @@ export function ClassroomSettingsPage() {
                   <XCircle className='h-5 w-5 text-destructive' />
                 )}
                 <Badge variant={oauthOk ? 'secondary' : 'destructive'}>
-                  {googleStatus || 'unknown'}
+                  {googleStatus || t('settings.unknown')}
                 </Badge>
                 {googleDetail?.expired ? (
-                  <Badge variant='outline'>expired</Badge>
+                  <Badge variant='outline'>{t('settings.expired')}</Badge>
                 ) : null}
               </div>
               {googleDetail?.missing_scopes &&
                 googleDetail.missing_scopes.length > 0 && (
                   <p className='text-muted-foreground text-xs'>
-                    Missing scopes: {googleDetail.missing_scopes.length}. Re-authorize
-                    to grant them.
+                    {t('settings.missingScopes', { count: googleDetail.missing_scopes.length })}
                   </p>
                 )}
               {!oauthOk && googleDetail?.error && (
@@ -207,14 +218,14 @@ export function ClassroomSettingsPage() {
               >
                 <KeyRound className={authorizing ? 'animate-pulse' : ''} />
                 {authorizing
-                  ? 'Redirecting…'
+                  ? t('settings.redirecting')
                   : oauthOk
-                    ? 'Re-authorize'
-                    : 'Authorize with Google'}
+                    ? t('settings.reauthorize')
+                    : t('settings.authorize')}
               </Button>
               {googleDetail?.client_secret_exists === false && (
                 <p className='text-destructive text-xs'>
-                  client_secret.json not found — upload your Web OAuth client first.
+                  {t('settings.clientSecretMissing')}
                 </p>
               )}
             </CardContent>
@@ -223,18 +234,47 @@ export function ClassroomSettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Scheduler</CardTitle>
+            <CardTitle className='flex items-center gap-2'>
+              <Languages className='h-5 w-5' />
+              {t('language.title')}
+            </CardTitle>
+            <CardDescription>{t('language.desc')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className='flex flex-col gap-1.5'>
+              <Label htmlFor='interface-language'>{t('language.label')}</Label>
+              <Select
+                value={locale}
+                onValueChange={(value) => setLocale(value as Locale)}
+              >
+                <SelectTrigger id='interface-language' className='w-full sm:w-64'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUPPORTED_LOCALES.map((l) => (
+                    <SelectItem key={l.value} value={l.value}>
+                      {l.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('settings.scheduler')}</CardTitle>
             <CardDescription>
-              Automatic Classroom cache sync. Changes are saved to the database
-              and take effect immediately (persist across restarts).
+              {t('settings.schedulerDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4'>
             <div className='flex items-center justify-between'>
               <div className='space-y-0.5'>
-                <Label htmlFor='scheduler-enabled'>Enabled</Label>
+                <Label htmlFor='scheduler-enabled'>{t('settings.enabled')}</Label>
                 <p className='text-muted-foreground text-xs'>
-                  Turn the scheduled background sync on or off
+                  {t('settings.enabledDesc')}
                 </p>
               </div>
               <Switch
@@ -246,7 +286,7 @@ export function ClassroomSettingsPage() {
             <Separator />
             <div className='flex flex-wrap items-end gap-3'>
               <div className='space-y-1'>
-                <Label htmlFor='scheduler-interval'>Interval (minutes)</Label>
+                <Label htmlFor='scheduler-interval'>{t('settings.interval')}</Label>
                 <Input
                   id='scheduler-interval'
                   type='number'
@@ -261,7 +301,7 @@ export function ClassroomSettingsPage() {
                 onClick={() => void handleSaveScheduler()}
                 disabled={savingScheduler || !schedulerDirty}
               >
-                {savingScheduler ? 'Saving…' : 'Save'}
+                {savingScheduler ? t('settings.saving') : t('settings.save')}
               </Button>
               <Button
                 variant='outline'
@@ -269,18 +309,18 @@ export function ClassroomSettingsPage() {
                 disabled={runningNow}
               >
                 <RefreshCw className={runningNow ? 'animate-spin' : ''} />
-                Run now
+                {t('settings.runNow')}
               </Button>
             </div>
             <div className='text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs'>
               <span>
-                Status:{' '}
+                {t('settings.schedulerStatus')}{' '}
                 <Badge variant={scheduler?.job_scheduled ? 'secondary' : 'outline'}>
-                  {scheduler?.job_scheduled ? 'active' : 'idle'}
+                  {scheduler?.job_scheduled ? t('settings.active') : t('settings.idle')}
                 </Badge>
               </span>
               <span>
-                Next run:{' '}
+                {t('settings.nextRun')}{' '}
                 {scheduler?.next_run_time
                   ? new Date(scheduler.next_run_time).toLocaleString()
                   : '—'}
@@ -294,25 +334,28 @@ export function ClassroomSettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Setup instructions</CardTitle>
+            <CardTitle>{t('settings.setupTitle')}</CardTitle>
             <CardDescription>
-              Required steps when credentials are missing or scopes change
+              {t('settings.setupDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4 text-sm'>
             <div className='flex flex-col gap-2'>
-              <p className='font-medium'>1. Authorize Google OAuth (no terminal needed)</p>
+              <p className='font-medium'>{t('settings.step1Title')}</p>
               <p className='text-muted-foreground'>
-                Click <strong>Authorize with Google</strong> in the Google OAuth
-                card above and complete consent. The token is written
-                automatically — no host script required.
+                <Trans
+                  i18nKey='settings.step1Desc'
+                  components={{ strong: <strong /> }}
+                />
               </p>
               <Alert>
-                <AlertTitle>One-time Google Cloud setup</AlertTitle>
+                <AlertTitle>{t('settings.step1AlertTitle')}</AlertTitle>
                 <AlertDescription>
                   <p>
-                    Add this exact <strong>Authorized redirect URI</strong> to
-                    your Web OAuth client in the Google Cloud Console:
+                    <Trans
+                      i18nKey='settings.step1AlertDesc'
+                      components={{ strong: <strong /> }}
+                    />
                   </p>
                   <code className='rounded bg-muted px-1 py-0.5 break-all'>
                     {callbackUri}
@@ -322,33 +365,34 @@ export function ClassroomSettingsPage() {
             </div>
             <Separator />
             <div>
-              <p className='font-medium'>2. Background sync interval</p>
+              <p className='font-medium'>{t('settings.step2Title')}</p>
               <p className='text-muted-foreground'>
-                Configure the schedule in the <strong>Scheduler</strong> card
-                above (saved to the database).{' '}
-                <code className='rounded bg-muted px-1 py-0.5'>
-                  CLASSROOM_SYNC_INTERVAL_MINUTES
-                </code>{' '}
-                in <code className='rounded bg-muted px-1 py-0.5'>.env</code>{' '}
-                only seeds the initial default (30) on first run.
+                <Trans
+                  i18nKey='settings.step2Desc'
+                  components={{
+                    strong: <strong />,
+                    code: <code className='rounded bg-muted px-1 py-0.5' />,
+                  }}
+                />
               </p>
             </div>
             <Separator />
             <div>
-              <p className='font-medium'>3. Admin API token (optional)</p>
+              <p className='font-medium'>{t('settings.step3Title')}</p>
               <p className='text-muted-foreground'>
-                Set{' '}
-                <code className='rounded bg-muted px-1 py-0.5'>
-                  VITE_ADMIN_API_TOKEN
-                </code>{' '}
-                in the web build environment if the API requires Bearer auth.
+                <Trans
+                  i18nKey='settings.step3Desc'
+                  components={{
+                    code: <code className='rounded bg-muted px-1 py-0.5' />,
+                  }}
+                />
               </p>
             </div>
             {pythonVersion && (
               <>
                 <Separator />
                 <p className='text-muted-foreground'>
-                  API Python version: {pythonVersion}
+                  {t('settings.pythonVersion', { version: pythonVersion })}
                 </p>
               </>
             )}

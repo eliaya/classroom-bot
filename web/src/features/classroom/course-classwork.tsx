@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -34,6 +35,7 @@ export function CourseClassworkPage({
   initialItemId?: string
   initialKind?: 'coursework' | 'material'
 }) {
+  const { t, i18n } = useTranslation()
   const [data, setData] = useState<ClassworkResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'classwork' | 'topics'>('classwork')
@@ -50,7 +52,7 @@ export function CourseClassworkPage({
         setData(d)
         setError(null)
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
   }
 
   useEffect(() => {
@@ -121,7 +123,7 @@ export function CourseClassworkPage({
     allItems.forEach((it) => bump(it.topic_id ? String(it.topic_id) : UNCATEGORIZED))
 
     const options: Array<{ value: string | null; label: string; count?: number }> = [
-      { value: null, label: 'All topics', count: allItems.length },
+      { value: null, label: t('classwork.allTopics'), count: allItems.length },
     ]
     ;(data?.topics || []).forEach((t) => {
       const id = String(t.id || '')
@@ -133,7 +135,7 @@ export function CourseClassworkPage({
     })
     options.push({
       value: UNCATEGORIZED,
-      label: 'No topic',
+      label: t('classwork.noTopic'),
       count: counts[UNCATEGORIZED] || 0,
     })
 
@@ -153,7 +155,8 @@ export function CourseClassworkPage({
       filteredItems: fItems,
       topicCounts: counts,
     }
-  }, [data, selectedTopicId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, selectedTopicId, i18n.language])
 
   const resolveTopicName = (tid?: string | null) => {
     if (!tid) return '—'
@@ -184,22 +187,22 @@ export function CourseClassworkPage({
     >
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <div className='flex items-center gap-2'>
-          <span className='text-muted-foreground text-sm'>Viewing by:</span>
+          <span className='text-muted-foreground text-sm'>{t('classwork.viewingBy')}</span>
           <TabsList>
-            <TabsTrigger value='classwork'>Classwork</TabsTrigger>
-            <TabsTrigger value='topics'>Topics</TabsTrigger>
+            <TabsTrigger value='classwork'>{t('classwork.classwork')}</TabsTrigger>
+            <TabsTrigger value='topics'>{t('classwork.topics')}</TabsTrigger>
           </TabsList>
         </div>
 
         {/* Quick filter status */}
         {tab === 'classwork' && selectedTopicId !== null && (
           <div className='flex items-center gap-2 text-sm'>
-            <span className='text-muted-foreground'>Filtered by:</span>
+            <span className='text-muted-foreground'>{t('classwork.filteredBy')}</span>
             <span className='rounded bg-muted px-2 py-0.5 font-medium'>
-              {selectedTopicId === UNCATEGORIZED ? 'No topic' : resolveTopicName(selectedTopicId)}
+              {selectedTopicId === UNCATEGORIZED ? t('classwork.noTopic') : resolveTopicName(selectedTopicId)}
             </span>
             <Button variant='ghost' size='sm' onClick={resetFilter}>
-              Clear filter
+              {t('classwork.clearFilter')}
             </Button>
           </div>
         )}
@@ -240,7 +243,7 @@ export function CourseClassworkPage({
 
           return (
             <div className='flex flex-wrap items-center gap-2'>
-              <span className='text-muted-foreground mr-1 text-sm font-medium'>Latest topics:</span>
+              <span className='text-muted-foreground mr-1 text-sm font-medium'>{t('classwork.latestTopics')}</span>
               {renderBtn(allTopicsOpt)}
               {visibleTopics.map(renderBtn)}
               {(showAllTopics || hiddenCount <= 0) && renderBtn(noTopicOpt)}
@@ -249,7 +252,7 @@ export function CourseClassworkPage({
                   type='button'
                   onClick={() => setShowAllTopics((v) => !v)}
                   className='text-muted-foreground hover:text-foreground flex h-8 items-center gap-1 rounded border px-2 text-xs transition-colors'
-                  title={showAllTopics ? 'Show fewer topics' : `Show ${hiddenCount} more topic${hiddenCount === 1 ? '' : 's'}`}
+                  title={showAllTopics ? t('classwork.showFewer') : t('classwork.showMore', { count: hiddenCount })}
                 >
                   {showAllTopics ? (
                     <svg xmlns='http://www.w3.org/2000/svg' className='h-3.5 w-3.5' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
@@ -260,12 +263,12 @@ export function CourseClassworkPage({
                       <path d='m6 9 6 6 6-6' />
                     </svg>
                   )}
-                  {showAllTopics ? 'Less' : `+${hiddenCount} more`}
+                  {showAllTopics ? t('classwork.less') : t('classwork.more', { count: hiddenCount })}
                 </button>
               )}
               {selectedTopicId !== null && (
                 <Button variant='ghost' size='sm' onClick={resetFilter} className='h-8'>
-                  Reset
+                  {t('classwork.reset')}
                 </Button>
               )}
             </div>
@@ -282,10 +285,10 @@ export function CourseClassworkPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Type</TableHead>
-                  {!selectedItem && <TableHead>Topic</TableHead>}
-                  {!selectedItem && <TableHead>Updated</TableHead>}
+                  <TableHead>{t('classwork.title')}</TableHead>
+                  <TableHead>{t('classwork.type')}</TableHead>
+                  {!selectedItem && <TableHead>{t('classwork.topic')}</TableHead>}
+                  {!selectedItem && <TableHead>{t('classwork.updated')}</TableHead>}
                   <TableHead className='w-16' />
                 </TableRow>
               </TableHeader>
@@ -335,7 +338,7 @@ export function CourseClassworkPage({
                             setSelectedItem(row)
                           }}
                         >
-                          View
+                          {t('classwork.view')}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -345,8 +348,8 @@ export function CourseClassworkPage({
                   <TableRow>
                     <TableCell colSpan={5} className='text-muted-foreground'>
                       {hasTopics
-                        ? 'No classwork matches this topic filter. (All data is cached locally.)'
-                        : 'No classwork in cache. Run a course sync.'}
+                        ? t('classwork.noMatch')
+                        : t('classwork.noClasswork')}
                     </TableCell>
                   </TableRow>
                 )}
@@ -367,8 +370,8 @@ export function CourseClassworkPage({
 
       <TabsContent value='topics' className='mt-4'>
         <div className='gap-3 [column-fill:_balance] columns-1 sm:columns-2 lg:columns-3'>
-          {(data?.topics || []).map((t) => {
-            const tid = String(t.id || '')
+          {(data?.topics || []).map((topic) => {
+            const tid = String(topic.id || '')
             const count = topicCounts[tid] || 0
             return (
               <Card
@@ -377,13 +380,13 @@ export function CourseClassworkPage({
                 onClick={() => selectTopicAndSwitch(tid)}
               >
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-base'>{String(t.name || tid)}</CardTitle>
+                  <CardTitle className='text-base'>{String(topic.name || tid)}</CardTitle>
                 </CardHeader>
                 <CardContent className='text-muted-foreground -mt-1 text-sm'>
-                  {count} item{count === 1 ? '' : 's'} in cache (coursework + materials)
+                  {t('classwork.itemsInCache', { count })}
                   <div className='mt-2'>
                     <Button variant='outline' size='sm' onClick={(e) => { e.stopPropagation(); selectTopicAndSwitch(tid) }}>
-                      Filter classwork by this topic
+                      {t('classwork.filterByTopic')}
                     </Button>
                   </div>
                 </CardContent>
@@ -391,7 +394,7 @@ export function CourseClassworkPage({
             )
           })}
           {!data?.topics?.length && (
-            <p className='text-muted-foreground text-sm'>No topics in cache. Sync the course to pull all topics + content under each topic.</p>
+            <p className='text-muted-foreground text-sm'>{t('classwork.noTopics')}</p>
           )}
         </div>
         <div className='mt-3'>
@@ -400,7 +403,7 @@ export function CourseClassworkPage({
             size='sm'
             onClick={() => selectTopicAndSwitch(UNCATEGORIZED)}
           >
-            Show uncategorized / no-topic items
+            {t('classwork.showUncategorized')}
           </Button>
         </div>
       </TabsContent>
@@ -417,6 +420,7 @@ function ClassworkDetail({
   topicName: string
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const attachments = item.attachments || []
   const description = String(item.description || '').trim()
 
@@ -425,7 +429,7 @@ function ClassworkDetail({
       <div className='flex items-start justify-between gap-2 border-b p-3'>
         <div className='min-w-0'>
           <h3 className='truncate font-medium' title={String(item.title || '')}>
-            {String(item.title || 'Untitled')}
+            {String(item.title || t('classwork.untitled'))}
           </h3>
           <div className='text-muted-foreground mt-0.5 flex flex-wrap items-center gap-2 text-xs'>
             <span className='rounded bg-muted px-1.5 py-0.5'>{topicName}</span>
@@ -440,15 +444,15 @@ function ClassworkDetail({
         {description ? (
           <div className='text-sm whitespace-pre-wrap'>{description}</div>
         ) : (
-          <p className='text-muted-foreground text-sm italic'>No description.</p>
+          <p className='text-muted-foreground text-sm italic'>{t('classwork.noDescription')}</p>
         )}
 
         <div className='space-y-3'>
           <p className='text-muted-foreground text-xs font-medium uppercase'>
-            Attachments ({attachments.length})
+            {t('classwork.attachments', { count: attachments.length })}
           </p>
           {attachments.length === 0 && (
-            <p className='text-muted-foreground text-sm'>No attachments.</p>
+            <p className='text-muted-foreground text-sm'>{t('classwork.noAttachments')}</p>
           )}
           {attachments.map((att) => (
             <AttachmentView key={att.id} att={att} />

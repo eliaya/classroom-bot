@@ -68,6 +68,34 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.9.2] - 2026-06-19
+
+### Added / 新增
+- **WebUI i18n multi-language support** — 4 languages: English, 繁體中文, 简体中文, 日本語. All pages translated (layout, classroom, auth, errors, toasts). Language is persisted to a cookie and applied on every reload.
+- **WebUI 多語言支援（i18n）** — 支援 4 種語言：English、繁體中文、简体中文、日本語。全站翻譯（版面配置、Classroom 功能頁、驗證頁、錯誤頁、Toast 訊息）。語言選擇存於 cookie，重新整理後保留。
+- **Language switcher card on the Settings page** — a new card with a dropdown to switch the interface language instantly; powered by `i18next` + `react-i18next`.
+- **設定頁語言切換卡片** — 新增語言選擇下拉，切換即時生效，底層使用 `i18next` + `react-i18next`。
+- `LocaleProvider` context (`web/src/context/locale-provider.tsx`) — provides `useLocale()` hook for `{ locale, setLocale }` across the component tree.
+- `LocaleProvider` context — 提供 `useLocale()` hook，供元件樹存取目前語言與切換函式。
+- Locale resource files (`web/src/lib/locales/en.ts`, `zh-TW.ts`, `zh-CN.ts`, `ja.ts`) — structured translation dictionaries for all UI strings, grouped by feature (`common`, `nav`, `dashboard`, `courses`, `auth`, `errors`, etc.).
+- 語系字典檔（`en.ts`、`zh-TW.ts`、`zh-CN.ts`、`ja.ts`） — 依功能分群（`common`、`nav`、`dashboard`、`courses`、`auth`、`errors` 等）的巢狀翻譯字典。
+- `docs/push-sync-setup.md` expanded with detailed post-API-enable steps: per-step GCP Console alternatives, a quick checklist, and a troubleshooting table.
+- `docs/push-sync-setup.md` 擴充「啟用 API 後」的後續步驟：每步均附 GCP Console 替代操作、快速清單與排錯對照表。
+
+### Changed / 變更
+- `web/src/lib/i18n.ts` rewritten: exports `resources`, `Locale` type, `SUPPORTED_LOCALES`, `setLocale()` (cookie + `changeLanguage` + `<html lang>`).
+- `web/src/lib/i18n.ts` 改寫：新增 `resources`、`Locale` 型別、`SUPPORTED_LOCALES`、`setLocale()`（cookie + `changeLanguage` + `<html lang>`）。
+- `sidebar-data.ts` navigation titles now hold i18n keys; rendered with `t()` in `nav-group.tsx`.
+- `sidebar-data.ts` 導航標題改存 i18n key，由 `nav-group.tsx` 的 `t()` 渲染。
+- `courses-columns.tsx` accepts a `TFunction` parameter so column headers translate when the language changes.
+- `courses-columns.tsx` 接受 `TFunction` 參數，欄位標題隨語言切換即時更新。
+- `main.tsx` toast strings switched from hardcoded English to `i18n.t()`.
+- `main.tsx` 的 toast 文字改用 `i18n.t()`。
+
+### Fixed / 修正
+- `course-classwork.tsx`: Topics `.map()` callback parameter renamed from `t` to `topic`, eliminating a TypeScript variable-shadowing error (`TS2349`) that caused `tsc -b` (Docker build) to fail.
+- `course-classwork.tsx`：Topics `.map()` 回呼參數從 `t` 改名為 `topic`，修正 `tsc -b`（Docker 建置）因變數遮蔽（`TS2349`）導致的型別錯誤。
+
 ## [0.9.1] - 2026-06-19
 
 ### Added / 新增
