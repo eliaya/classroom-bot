@@ -185,6 +185,9 @@ export const api = {
       }
     }>('/status'),
   version: () => request<{ version: string }>('/version'),
+  // Server time (Asia/Tokyo); weekday 1=Mon … 7=Sun (matches course `week`).
+  serverTime: () =>
+    request<{ now: string; weekday: number; weekday_name: string }>('/time'),
   googleAuthStart: (origin: string) =>
     request<{ authorization_url: string; redirect_uri: string; state: string }>(
       `/auth/google/start?origin=${encodeURIComponent(origin)}`

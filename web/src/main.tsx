@@ -10,6 +10,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { handleServerError } from '@/lib/handle-server-error'
+import { Loader } from '@/components/loader'
 // Initialize i18n (side-effect import)
 import '@/lib/i18n'
 import { DirectionProvider } from './context/direction-provider'
@@ -80,6 +81,12 @@ const router = createRouter({
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
+  // Animated fallback shown while routes/lazy chunks load.
+  defaultPendingComponent: () => (
+    <div className='flex h-svh w-full items-center justify-center'>
+      <Loader />
+    </div>
+  ),
 })
 
 // Register the router instance for type safety

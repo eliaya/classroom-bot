@@ -33,7 +33,7 @@ export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Co
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Week' />
     ),
-    meta: { className: 'w-16' },
+    meta: { className: 'w-12' },
     cell: ({ row }) => {
       // week 1-7 → 月..日, 8 → その他 (stored as a number in the DB).
       const WEEK_LABELS: Record<number, string> = {
@@ -42,7 +42,9 @@ export function coursesColumns(onSelect: (course: Course) => void): ColumnDef<Co
       }
       const week = row.getValue('week') as number | null
       return typeof week === 'number' ? (
-        <Badge variant='outline'>{WEEK_LABELS[week] ?? week}</Badge>
+        <Badge variant='outline' className='whitespace-nowrap px-1'>
+          {WEEK_LABELS[week] ?? week}
+        </Badge>
       ) : (
         '—'
       )

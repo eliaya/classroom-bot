@@ -31,6 +31,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { animate } from 'animejs'
 import { BookOpen, GripVertical, Radio, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
@@ -204,6 +205,15 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
   const [visibleCount, setVisibleCount] = useState(10)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
+  // Today's weekday (1=Mon … 7=Sun) from server time, to highlight matching rows.
+  const [todayWeek, setTodayWeek] = useState<number | null>(null)
+  useEffect(() => {
+    api
+      .serverTime()
+      .then((r) => setTodayWeek(r.weekday))
+      .catch(() => setTodayWeek(null))
+  }, [])
+
   const columns = useMemo(() => coursesColumns(onSelectCourse), [onSelectCourse])
 
   // Resolved id of every column, in their definition order.
@@ -307,7 +317,7 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
     <div className='flex flex-col gap-4'>
       <DataTableToolbar table={table} searchPlaceholder='Filter courses…' searchKey='name' />
       <div className='flex flex-col gap-3 lg:flex-row lg:items-start'>
-        <div className={cn('overflow-hidden rounded-md border', selectedCourse ? 'lg:w-[30%]' : 'w-full')}>
+        <div className={cn('overflow-hidden rounded-md border transition-[width] duration-300 ease-out', selectedCourse ? 'lg:w-[30%]' : 'w-full')}>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -333,11 +343,21 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
                 {visibleRows.length ? (
                   visibleRows.map((row) => {
                     const isSelected = selectedCourse?.id === row.original.id
+                    // todayWeek is always 1-7 (server isoweekday), so その他 (8)
+                    // can never match — no extra guard needed.
+                    const isToday =
+                      todayWeek != null && row.original.week === todayWeek
                     return (
                       <TableRow
                         key={row.id}
                         data-state={isSelected ? 'selected' : undefined}
-                        className='cursor-pointer'
+                        className={cn(
+                          'cursor-pointer',
+                          // Amber highlight — subtle enough to keep text readable
+                          // in both light and dark themes.
+                          isToday &&
+                            'bg-amber-200/50 hover:bg-amber-200/70 dark:bg-amber-400/15 dark:hover:bg-amber-400/25'
+                        )}
                       >
                         {row.getVisibleCells().map((cell) => (
                           <SortableContext
@@ -347,7 +367,9 @@ export function CoursesTable({ data, search, navigate, selectedCourse, onSelectC
                           >
                             <DragAlongCell
                               cell={cell}
-                              onClick={() => onSelectCourse(row.original)}
+                              onClick={() =>
+                                onSelectCourse(isSelected ? null : row.original)
+                              }
                             />
                           </SortableContext>
                         ))}
@@ -725,6 +747,20 @@ function CourseDetail({
 }) {
   const [tab, setTab] = useState<SectionKey>('classwork')
   const [counts, setCounts] = useState<Partial<Record<SectionKey, number>>>({})
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Slide + fade the detail panel in when it opens or switches course.
+  useEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    animate(el, {
+      opacity: [0, 1],
+      translateX: [36, 0],
+      duration: 420,
+      ease: 'outExpo',
+    })
+  }, [course.id])
 
   const setCount = useCallback((key: SectionKey, n: number) => {
     setCounts((c) => (c[key] === n ? c : { ...c, [key]: n }))
@@ -734,7 +770,10 @@ function CourseDetail({
   const onPeopleCount = useCallback((n: number) => setCount('people', n), [setCount])
 
   return (
-    <div className='flex max-h-[80vh] h-[80vh] flex-col overflow-hidden rounded-md border lg:w-[70%]'>
+    <div
+      ref={panelRef}
+      className='flex max-h-[80vh] h-[80vh] flex-col overflow-hidden rounded-md border lg:w-[70%]'
+    >
       {/* Header */}
       <div className='flex items-start justify-between gap-2 border-b p-3'>
         <div className='min-w-0'>

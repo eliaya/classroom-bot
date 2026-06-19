@@ -11,9 +11,31 @@ from src.google_service import google_service
 router = APIRouter(tags=["health"])
 
 
+_WEEKDAY_NAMES_JP = {
+    1: "月曜日", 2: "火曜日", 3: "水曜日", 4: "木曜日",
+    5: "金曜日", 6: "土曜日", 7: "日曜日",
+}
+
+
 @router.get("/health")
 async def health() -> dict:
     return {"status": "ok", "timestamp": now_jst().isoformat()}
+
+
+@router.get("/time")
+async def get_time() -> dict:
+    """Current server time (Asia/Tokyo) with today's weekday.
+
+    ``weekday`` is 1=Monday … 7=Sunday — matching the course ``week`` column
+    so the UI can highlight rows that fall on today.
+    """
+    now = now_jst()
+    weekday = now.isoweekday()  # Mon=1 .. Sun=7
+    return {
+        "now": now.isoformat(),
+        "weekday": weekday,
+        "weekday_name": _WEEKDAY_NAMES_JP[weekday],
+    }
 
 
 @router.get("/status")
