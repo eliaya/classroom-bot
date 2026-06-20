@@ -21,8 +21,8 @@ credentials/*.org
 data/*
 !data/README.md
 
-# Local documentation (README variants and CHANGELOG remain tracked)
-docs/
+# Documentation (version-controlled reference & guides)
+# Uncomment to ignore: docs/
 
 # Logs
 logs
@@ -45,3 +45,4 @@ dev-debug.log
 # Task files
 # tasks.json
 # tasks/ 
+docs/
