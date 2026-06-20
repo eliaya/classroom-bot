@@ -1,6 +1,5 @@
 from __future__ import annotations
 import platform
-from datetime import datetime
 
 from fastapi import APIRouter
 
