@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 所有重要變更會記錄於此文件。
 
+## [0.9.5] - 2026-06-20
+
+### Added / 新增
+- Dynamic Discord slash commands: WebUI-managed custom commands (`bot_commands`) are now registered into the bot's app-command tree as real `/name` commands, in addition to the existing `!name` prefix path.
+- WebUI 管理的自訂指令（`bot_commands`）會動態註冊為真正的 Discord `/name` slash 指令，與既有 `!name` 前綴指令並存。
+- Background registry poller (`CustomCommandsCog._poll_registry`, 30s) detects WebUI create/edit/enable/disable/delete and rebuilds + re-syncs the slash tree automatically — no redeploy.
+- 背景輪詢（30 秒）偵測 WebUI 的新增／編輯／啟用／停用／刪除，自動重建並重新同步 slash 指令樹，無需重新部署。
+- `DISCORD_GUILD_ID` setting: when set, custom slash commands sync to that guild instantly (global app-command sync can take up to ~1h to propagate).
+- 新增 `DISCORD_GUILD_ID` 設定：設定後自訂 slash 指令會即時同步到該伺服器（全域同步可能需約 1 小時才生效）。
+- Slash command parameters: the WebUI `params` field is now a structured editor (name/type/description/required/choices) and the bot builds real `/command` options from it (types: string/integer/number/boolean/user). Values interpolate into the response via `{paramName}`.
+- Slash 指令參數：WebUI 的 `params` 改為結構化編輯器（名稱／型別／描述／必填／選項），bot 會據此建立真正的 `/指令` 選項（型別：string/integer/number/boolean/user），參數值可用 `{參數名}` 代入回應。
+
+### Notes / 備註
+- Custom commands whose name collides with a code-defined command, or that don't match Discord's name rules (lowercase, 1-32 chars, `[a-z0-9_-]`), are skipped for the slash tree; the built-in/prefix path is unaffected.
+- 名稱與內建指令衝突、或不符合 Discord 命名規則（小寫、1-32 字、`[a-z0-9_-]`）的自訂指令會略過 slash 註冊；內建指令與前綴路徑不受影響。
+
 ## [0.1.0] - 2026-06-12
 
 ### Added / 新增

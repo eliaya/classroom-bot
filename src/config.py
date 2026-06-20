@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     DISCORD_BOT_TOKEN: str = ""
     BOT_ENABLED: bool = True
+    # When set, dynamic custom slash commands are registered to this guild and
+    # synced instantly (global app-command sync can take up to ~1h to propagate).
+    # Leave empty to register custom slash commands globally.
+    DISCORD_GUILD_ID: str = ""
     SYNC_INTERVAL_MINUTES: int = 10
     DATABASE_URL: str = "sqlite+aiosqlite:////app/data/classroom_sync.db"
     GOOGLE_CLIENT_SECRET_FILE: str = "/app/credentials/client_secret.json"

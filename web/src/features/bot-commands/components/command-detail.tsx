@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { ParamsEditor } from './params-editor'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -154,15 +155,10 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
             />
           </div>
 
-          <div className='grid gap-2'>
-            <Label htmlFor='bc-params'>{t('botCommands.params')}</Label>
-            <Textarea
-              id='bc-params'
-              value={form.params ?? ''}
-              onChange={(e) => update('params', e.target.value)}
-              rows={2}
-            />
-          </div>
+          <ParamsEditor
+            value={form.params ?? ''}
+            onChange={(next) => update('params', next || null)}
+          />
 
           <div className='flex items-center gap-3'>
             <Switch
