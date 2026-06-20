@@ -6,6 +6,7 @@ import {
   Settings,
   Command,
   ClipboardList,
+  Terminal,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -51,6 +52,11 @@ export const sidebarData: SidebarData = {
           title: 'nav.audit',
           url: '/audit',
           icon: ScrollText,
+        },
+        {
+          title: 'nav.botCommands',
+          url: '/bot-commands',
+          icon: Terminal,
         },
         {
           title: 'nav.settings',

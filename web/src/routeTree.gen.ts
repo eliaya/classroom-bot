@@ -27,6 +27,7 @@ import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSearchIndexRouteImport } from './routes/_authenticated/search/index'
 import { Route as AuthenticatedCoursesIndexRouteImport } from './routes/_authenticated/courses/index'
+import { Route as AuthenticatedBotCommandsIndexRouteImport } from './routes/_authenticated/bot-commands/index'
 import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authenticated/audit/index'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedCoursesCourseIdRouteRouteImport } from './routes/_authenticated/courses/$courseId/route'
@@ -128,6 +129,12 @@ const AuthenticatedCoursesIndexRoute =
     path: '/courses/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedBotCommandsIndexRoute =
+  AuthenticatedBotCommandsIndexRouteImport.update({
+    id: '/bot-commands/',
+    path: '/bot-commands/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAuditIndexRoute = AuthenticatedAuditIndexRouteImport.update({
   id: '/audit/',
   path: '/audit/',
@@ -186,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/audit/': typeof AuthenticatedAuditIndexRoute
+  '/bot-commands/': typeof AuthenticatedBotCommandsIndexRoute
   '/courses/': typeof AuthenticatedCoursesIndexRoute
   '/search/': typeof AuthenticatedSearchIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -210,6 +218,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/audit': typeof AuthenticatedAuditIndexRoute
+  '/bot-commands': typeof AuthenticatedBotCommandsIndexRoute
   '/courses': typeof AuthenticatedCoursesIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
@@ -238,6 +247,7 @@ export interface FileRoutesById {
   '/_authenticated/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/audit/': typeof AuthenticatedAuditIndexRoute
+  '/_authenticated/bot-commands/': typeof AuthenticatedBotCommandsIndexRoute
   '/_authenticated/courses/': typeof AuthenticatedCoursesIndexRoute
   '/_authenticated/search/': typeof AuthenticatedSearchIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/courses/$courseId'
     | '/errors/$error'
     | '/audit/'
+    | '/bot-commands/'
     | '/courses/'
     | '/search/'
     | '/settings/'
@@ -290,6 +301,7 @@ export interface FileRouteTypes {
     | '/'
     | '/errors/$error'
     | '/audit'
+    | '/bot-commands'
     | '/courses'
     | '/search'
     | '/settings'
@@ -317,6 +329,7 @@ export interface FileRouteTypes {
     | '/_authenticated/courses/$courseId'
     | '/_authenticated/errors/$error'
     | '/_authenticated/audit/'
+    | '/_authenticated/bot-commands/'
     | '/_authenticated/courses/'
     | '/_authenticated/search/'
     | '/_authenticated/settings/'
@@ -470,6 +483,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCoursesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/bot-commands/': {
+      id: '/_authenticated/bot-commands/'
+      path: '/bot-commands'
+      fullPath: '/bot-commands/'
+      preLoaderRoute: typeof AuthenticatedBotCommandsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/audit/': {
       id: '/_authenticated/audit/'
       path: '/audit'
@@ -566,6 +586,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCoursesCourseIdRouteRoute: typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedAuditIndexRoute: typeof AuthenticatedAuditIndexRoute
+  AuthenticatedBotCommandsIndexRoute: typeof AuthenticatedBotCommandsIndexRoute
   AuthenticatedCoursesIndexRoute: typeof AuthenticatedCoursesIndexRoute
   AuthenticatedSearchIndexRoute: typeof AuthenticatedSearchIndexRoute
   AuthenticatedSyncIndexRoute: typeof AuthenticatedSyncIndexRoute
@@ -579,6 +600,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedCoursesCourseIdRouteRouteWithChildren,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedAuditIndexRoute: AuthenticatedAuditIndexRoute,
+  AuthenticatedBotCommandsIndexRoute: AuthenticatedBotCommandsIndexRoute,
   AuthenticatedCoursesIndexRoute: AuthenticatedCoursesIndexRoute,
   AuthenticatedSearchIndexRoute: AuthenticatedSearchIndexRoute,
   AuthenticatedSyncIndexRoute: AuthenticatedSyncIndexRoute,

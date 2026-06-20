@@ -23,8 +23,11 @@ class ClassroomSyncBot(commands.Bot):
     """Production-grade Discord Bot representing the central interface managing Google Classroom connections."""
 
     def __init__(self) -> None:
-        # We need default intents. For simple slash commands, default intents are perfect.
+        # Default intents cover slash commands; message_content is required so the
+        # custom-command cog can read "!name" prefix messages (must also be enabled
+        # in the Discord Developer Portal).
         intents = discord.Intents.default()
+        intents.message_content = True
         super().__init__(
             command_prefix="!",
             intents=intents,
@@ -50,9 +53,11 @@ class ClassroomSyncBot(commands.Bot):
         # 3. Load Bot Cogs (Manual instantiation bypasses filesystem dynamic loading issues)
         from src.cogs.classroom import ClassroomCog
         from src.cogs.admin import AdminCog
-        
+        from src.cogs.custom_commands import CustomCommandsCog
+
         await self.add_cog(ClassroomCog(self))
         await self.add_cog(AdminCog(self))
+        await self.add_cog(CustomCommandsCog(self))
         logger.info("Bot cogs loaded successfully.")
 
         # 4. Configure Scheduler and register Polling job

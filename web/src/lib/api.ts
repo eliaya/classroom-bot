@@ -75,6 +75,28 @@ export type BotStatus = {
   checked_at: string
 }
 
+export type BotCommand = {
+  id: number
+  name: string
+  description?: string | null
+  trigger: string
+  params?: string | null
+  response: string
+  enabled: boolean
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+/** Editable fields for creating/updating a bot command. */
+export type BotCommandInput = {
+  name: string
+  description?: string | null
+  trigger?: string
+  params?: string | null
+  response: string
+  enabled?: boolean
+}
+
 export type Topic = { id?: string; name?: string; [k: string]: unknown }
 
 export type Attachment = {
@@ -249,6 +271,22 @@ export const api = {
     )
   },
   botStatus: () => request<BotStatus>('/bot/status'),
+  listBotCommands: () =>
+    request<{ items: BotCommand[]; total: number }>('/bot/commands'),
+  createBotCommand: (body: BotCommandInput) =>
+    request<BotCommand>('/bot/commands', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateBotCommand: (id: number, body: Partial<BotCommandInput>) =>
+    request<BotCommand>(`/bot/commands/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteBotCommand: (id: number) =>
+    request<{ status: string; id: number }>(`/bot/commands/${id}`, {
+      method: 'DELETE',
+    }),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>
     request<SchedulerStatus>('/scheduler', {

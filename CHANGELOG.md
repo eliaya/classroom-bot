@@ -68,6 +68,18 @@ All notable changes to this project are documented here.
 - `src/api/main.py` now delegates scheduling to `SchedulerService` (replacing the inline `AsyncIOScheduler` wiring) and loads the persisted setting on startup. `CLASSROOM_SYNC_INTERVAL_MINUTES` in `.env` now only seeds the initial default on first run.
 - `src/api/main.py` 改由 `SchedulerService` 接管排程（取代原本的 inline 接線），啟動時讀取持久化設定；`.env` 的 `CLASSROOM_SYNC_INTERVAL_MINUTES` 僅用於首次種子預設值。
 
+## [0.9.4] - 2026-06-20
+
+### Added / 新增
+- **Discord custom command management** — a new `/bot-commands` page with full CRUD over user-defined bot commands, styled like the Course Page (split list + detail/edit panel with toggle show/hide). New `BotCommand` table, `/api/bot/commands` endpoints (list/create/get/update/delete, duplicate name → 409), and an api client + sidebar nav entry + 4-language i18n.
+- **Discord 自訂指令管理** — 新增 `/bot-commands` 頁面，對使用者自訂指令提供完整 CRUD，採 Course Page 風格（左清單 + 右詳情/編輯面板、可切換開合）。新增 `BotCommand` 資料表、`/api/bot/commands` 端點（列表/建立/讀取/更新/刪除，重複名稱 → 409），以及 api client、側邊欄導覽與 4 語系翻譯。
+- **Bot-side execution** — new `src/cogs/custom_commands.py` cog listens for `trigger`+`name` messages (e.g. `!hello`) and replies with the configured response (supports `{user}`), backed by a 30s in-memory cache of enabled commands read from the shared DB.
+- **Bot 端執行** — 新增 `custom_commands` cog，監聽 `trigger`+`name` 訊息（如 `!hello`）並回覆設定的內容（支援 `{user}`），以 30 秒記憶體快取讀取共用 DB 的啟用指令。
+
+### Changed / 變更
+- `src/main.py` enables the Discord `message_content` intent (required for prefix custom commands; must also be enabled in the Discord Developer Portal).
+- `src/main.py` 開啟 Discord `message_content` intent（前綴自訂指令所需；亦須在 Discord Developer Portal 開啟）。
+
 ## [0.9.3] - 2026-06-19
 
 ### Added / 新增

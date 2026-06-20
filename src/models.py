@@ -290,6 +290,29 @@ class BotHeartbeat(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class BotCommand(SQLModel, table=True):
+    """A user-defined Discord custom command, managed via the WebUI.
+
+    The bot process reads enabled rows and replies with ``response`` when a
+    message matches ``trigger`` + ``name`` (e.g. ``!hello``). Distinct from the
+    code-defined slash commands in ``src/cogs/``.
+    """
+    __tablename__ = "bot_commands"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_bot_command_name"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)  # command word, e.g. "hello"
+    description: Optional[str] = None
+    trigger: str = Field(default="!")  # invocation prefix
+    params: Optional[str] = None  # free-form JSON text describing params
+    response: str  # text replied to the user (supports {user} interpolation)
+    enabled: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=now_jst)
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class AuditLog(SQLModel, table=True):
     """Append-only audit trail of system operations.
 
