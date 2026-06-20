@@ -67,6 +67,14 @@ export type SchedulerStatus = {
   next_run_time?: string | null
 }
 
+export type AuditRetentionStatus = {
+  enabled: boolean
+  retention_days: number
+  job_scheduled: boolean
+  next_run_time?: string | null
+  max_retention_days: number
+}
+
 export type BotStatus = {
   status: 'connected' | 'disconnected' | 'disabled' | 'unknown' | 'error'
   last_heartbeat?: string | null
@@ -290,6 +298,12 @@ export const api = {
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>
     request<SchedulerStatus>('/scheduler', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  getAuditRetention: () => request<AuditRetentionStatus>('/audit/retention'),
+  updateAuditRetention: (body: { retention_days?: number; enabled?: boolean }) =>
+    request<AuditRetentionStatus>('/audit/retention', {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),

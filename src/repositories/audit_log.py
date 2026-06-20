@@ -8,17 +8,31 @@ WebUI audit viewer with category/action filtering and pagination.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any, Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import delete, func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.config import now_jst
 from src.models import AuditLog, dump_json
 
 logger = logging.getLogger("classroom_sync.audit")
 
 VALID_CATEGORIES = {"general", "api", "discord"}
+
+
+async def purge_older_than(session: AsyncSession, days: int) -> int:
+    """Delete audit rows older than ``days``. Returns the number removed."""
+    if days <= 0:
+        return 0
+    cutoff = now_jst() - timedelta(days=days)
+    result = await session.execute(
+        delete(AuditLog).where(AuditLog.created_at < cutoff)
+    )
+    await session.commit()
+    return result.rowcount or 0
 
 
 async def record(

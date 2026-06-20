@@ -404,6 +404,11 @@ const ja: Resources = {
     scheduler: 'スケジューラ',
     schedulerDesc:
       'Classroom キャッシュの自動同期。変更はデータベースに保存され、すぐに反映されます（再起動後も保持）。',
+    auditRetention: '監査ログのローテーション',
+    auditRetentionDesc: '保持期間（最大 {{max}} 日）を超えた監査ログを自動的に削除します。',
+    auditRetentionEnabledDesc: '監査ログの自動クリーンアップのオン／オフ',
+    retentionDays: '保持日数',
+    retentionError: '保持日数は 1〜{{max}} 日の整数で指定してください。',
     enabled: '有効',
     enabledDesc: 'スケジュールされたバックグラウンド同期のオン／オフ',
     interval: '間隔（分）',

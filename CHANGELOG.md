@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 所有重要變更會記錄於此文件。
 
+## [0.9.6] - 2026-06-20
+
+### Added / 新增
+- Audit log auto-rotation: a scheduled job (every 6h) deletes audit entries older than the retention window, capped at a maximum of 30 days. Configurable (enable/disable + days) from the WebUI Settings page.
+- 稽核日誌自動輪替：排程任務（每 6 小時）刪除超過保留期限的稽核日誌，上限為 30 天。可於 WebUI 設定頁調整（啟用／停用 + 天數）。
+- `GET/PATCH /api/audit/retention` endpoints + persisted `audit_retention_settings` singleton; applied live on save and on startup.
+- 新增 `GET/PATCH /api/audit/retention` 端點與持久化的 `audit_retention_settings` 單例；儲存與啟動時即時套用。
+
+### Changed / 變更
+- Discord bot data source: read/list commands (`/classroom courses|course|announcements|coursework|todo`) now fetch from the local SQL DB via the API (`API_BASE_URL`), never calling Google directly. `/todo` uses the cached `classroom_todos` table instead of live Google submissions.
+- Discord 機器人資料來源：讀取／列表指令（`/classroom courses|course|announcements|coursework|todo`）改為經由 API（`API_BASE_URL`）查詢本地 SQL DB，讀取路徑不再直連 Google。`/todo` 改用快取的 `classroom_todos`，不再即時呼叫 Google submissions。
+- New `API_BASE_URL` setting (default `http://localhost:8000`); docker-compose sets the bot to `http://api:8000`. `/post` (announcement write) still uses Google by design.
+- 新增 `API_BASE_URL` 設定（預設 `http://localhost:8000`）；docker-compose 將 bot 指向 `http://api:8000`。`/post`（發佈公告，屬寫入）仍依設計使用 Google。
+
 ## [0.9.5] - 2026-06-20
 
 ### Added / 新增

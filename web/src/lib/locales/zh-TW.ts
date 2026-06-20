@@ -404,6 +404,11 @@ const zhTW: Resources = {
     scheduler: '排程器',
     schedulerDesc:
       '自動同步 Classroom 快取。變更會儲存至資料庫並立即生效（重啟後仍保留）。',
+    auditRetention: '稽核日誌輪替',
+    auditRetentionDesc: '自動刪除超過保留期限的稽核日誌（最長 {{max}} 天）。',
+    auditRetentionEnabledDesc: '開啟或關閉稽核日誌自動清理',
+    retentionDays: '保留天數',
+    retentionError: '保留天數須為 1 至 {{max}} 天之間的整數。',
     enabled: '啟用',
     enabledDesc: '開啟或關閉排程的背景同步',
     interval: '間隔（分鐘）',

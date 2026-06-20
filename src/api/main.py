@@ -87,6 +87,7 @@ def create_app() -> FastAPI:
 
         async with async_session_factory() as session:
             await scheduler_service.apply_persisted_setting(session)
+            await scheduler_service.apply_persisted_audit_retention(session)
             from src.repositories import audit_log
 
             await audit_log.record(

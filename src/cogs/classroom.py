@@ -6,10 +6,10 @@ from discord import app_commands
 from discord.ext import commands
 from sqlmodel import select
 
+from src.cogs._api_client import ClassroomApiClient
 from src.database import async_session_factory
 from src.google_service import google_service
 from src.models import GuildCourseLink
-from src.repositories import classroom_cache as cache
 from src.utils.permissions import is_guild_admin
 
 logger = logging.getLogger("classroom_sync.cogs.classroom")
@@ -80,6 +80,12 @@ class ClassroomCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        # Reads go through the local API (served from the synced SQL DB),
+        # never directly to Google.
+        self.api = ClassroomApiClient()
+
+    async def cog_unload(self) -> None:
+        await self.api.close()
 
     # Register '/classroom' command grouping
     classroom = app_commands.Group(
@@ -96,7 +102,7 @@ class ClassroomCog(commands.Cog):
 
     @staticmethod
     def _format_due_date(coursework: Dict[str, Any]) -> str:
-        due_date = coursework.get("dueDate")
+        due_date = coursework.get("due_date")
         if not due_date:
             return "No due date"
         return f"{due_date.get('year')}-{due_date.get('month', 0):02d}-{due_date.get('day', 0):02d}"
@@ -142,8 +148,7 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            async with async_session_factory() as session:
-                courses = await cache.list_cached_courses(session)
+            courses = await self.api.list_courses()
             if not courses:
                 await interaction.followup.send(
                     "📭 **No cached courses found.** Run sync in the web admin (POST /api/sync) first.",
@@ -158,13 +163,14 @@ class ClassroomCog(commands.Cog):
             )
 
             for course in courses[:25]:
-                url = course.alternate_link or ""
+                url = course.get("alternate_link") or ""
+                section = course.get("section") or "No section"
                 embed.add_field(
-                    name=course.name,
+                    name=course.get("name"),
                     value=(
-                        f"ID: `{course.id}`\n"
-                        f"Section: *{course.section or 'No section'}*\n"
-                        f"🔗 [Class URL]({url})" if url else f"ID: `{course.id}`\nSection: *{course.section or 'No section'}*"
+                        f"ID: `{course.get('id')}`\n"
+                        f"Section: *{section}*\n"
+                        f"🔗 [Class URL]({url})" if url else f"ID: `{course.get('id')}`\nSection: *{section}*"
                     ),
                     inline=True
                 )
@@ -182,8 +188,7 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            async with async_session_factory() as session:
-                course = await cache.get_cached_course(session, course_id)
+            course = await self.api.get_course(course_id)
             if not course:
                 await interaction.followup.send(
                     f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
@@ -192,15 +197,15 @@ class ClassroomCog(commands.Cog):
                 return
 
             embed = discord.Embed(
-                title=f"🏫 {course.name}",
-                description=self._truncate(course.description_heading or course.description or "", 300),
+                title=f"🏫 {course.get('name')}",
+                description=self._truncate(course.get("section") or "", 300),
                 color=0x137333,
-                url=course.alternate_link
+                url=course.get("alternate_link")
             )
-            embed.add_field(name="Course ID", value=f"`{course.id}`", inline=False)
-            embed.add_field(name="Section", value=course.section or "No section", inline=True)
-            embed.add_field(name="Owner", value=course.owner_id or "Unavailable", inline=False)
-            embed.add_field(name="State", value=course.state or "UNKNOWN", inline=True)
+            embed.add_field(name="Course ID", value=f"`{course.get('id')}`", inline=False)
+            embed.add_field(name="Section", value=course.get("section") or "No section", inline=True)
+            embed.add_field(name="Owner", value=course.get("owner_id") or "Unavailable", inline=False)
+            embed.add_field(name="State", value=course.get("state") or "UNKNOWN", inline=True)
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             logger.error(f"Failed fetching course details for '{course_id}': {e}")
@@ -224,28 +229,27 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
-            async with async_session_factory() as session:
-                course = await cache.get_cached_course(session, course_id)
-                if not course:
-                    await interaction.followup.send(
-                        f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
-                        ephemeral=True
-                    )
-                    return
-                rows = await cache.list_cached_announcements(session, course_id, limit=resolved_limit)
+            course = await self.api.get_course(course_id)
+            if not course:
+                await interaction.followup.send(
+                    f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
+                    ephemeral=True
+                )
+                return
+            rows = await self.api.list_announcements(course_id, limit=resolved_limit)
             if not rows:
                 await interaction.followup.send(
-                    f"📭 **No announcements found** for **{course.name}**.",
+                    f"📭 **No announcements found** for **{course.get('name')}**.",
                     ephemeral=True
                 )
                 return
 
             field_builders = [
                 (
-                    (row.text or "Untitled Announcement").splitlines()[0][:80] or "Announcement",
+                    (row.get("text") or "Untitled Announcement").splitlines()[0][:80] or "Announcement",
                     (
-                        f"{self._truncate(row.text or '', 220)}\n"
-                        f"Updated: `{row.update_time or 'Unknown'}`"
+                        f"{self._truncate(row.get('text') or '', 220)}\n"
+                        f"Updated: `{row.get('update_time') or 'Unknown'}`"
                     ),
                 )
                 for row in rows
@@ -254,7 +258,7 @@ class ClassroomCog(commands.Cog):
 
             await self._send_embed_pages(
                 interaction,
-                title=f"📢 Announcements • {course.name}",
+                title=f"📢 Announcements • {course.get('name')}",
                 description=f"Showing {count_label} announcement(s), newest first.",
                 color=0x137333,
                 field_builders=field_builders,
@@ -281,38 +285,36 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
-            async with async_session_factory() as session:
-                course = await cache.get_cached_course(session, course_id)
-                if not course:
-                    await interaction.followup.send(
-                        f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
-                        ephemeral=True
-                    )
-                    return
-                coursework_items = await cache.list_cached_coursework(session, course_id, limit=resolved_limit)
+            course = await self.api.get_course(course_id)
+            if not course:
+                await interaction.followup.send(
+                    f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
+                    ephemeral=True
+                )
+                return
+            coursework_items = await self.api.list_coursework(course_id, limit=resolved_limit)
             if not coursework_items:
                 await interaction.followup.send(
-                    f"📭 **No coursework found** for **{course.name}**.",
+                    f"📭 **No coursework found** for **{course.get('name')}**.",
                     ephemeral=True
                 )
                 return
 
             field_builders = []
             for item in coursework_items:
-                due_text = (
-                    f"{item.due_date_year}-{item.due_date_month:02d}-{item.due_date_day:02d}"
-                    if item.due_date_year and item.due_date_month and item.due_date_day
-                    else "No due date"
+                due_text = self._format_due_date(item)
+                grade_text = (
+                    f"{item.get('max_points')} points"
+                    if item.get("max_points") is not None else "Ungraded"
                 )
-                grade_text = f"{item.max_points} points" if item.max_points is not None else "Ungraded"
                 field_builders.append(
                     (
-                        (item.title or "Untitled Coursework")[:80],
+                        (item.get("title") or "Untitled Coursework")[:80],
                         (
-                            f"{self._truncate(item.description or '', 180)}\n"
+                            f"{self._truncate(item.get('description') or '', 180)}\n"
                             f"Due: `{due_text}`\n"
                             f"Grade: `{grade_text}`\n"
-                            f"Updated: `{item.update_time or 'Unknown'}`"
+                            f"Updated: `{item.get('update_time') or 'Unknown'}`"
                         ),
                     )
                 )
@@ -320,7 +322,7 @@ class ClassroomCog(commands.Cog):
             count_label = "all" if fetch_all else str(len(coursework_items))
             await self._send_embed_pages(
                 interaction,
-                title=f"📝 Coursework • {course.name}",
+                title=f"📝 Coursework • {course.get('name')}",
                 description=f"Showing {count_label} coursework item(s), newest first.",
                 color=0xf59e0b,
                 field_builders=field_builders,
@@ -345,81 +347,37 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
-            async with async_session_factory() as session:
-                courses = await cache.list_cached_courses(session)
-            if not courses:
-                await interaction.followup.send(
-                    "📭 **No cached courses found.** Run web sync first.",
-                    ephemeral=True
-                )
-                return
-
-            pending_states = {"NEW", "CREATED", "RECLAIMED_BY_STUDENT"}
-            todo_items: List[Dict[str, Any]] = []
-
-            for course in courses:
-                course_id = course.id
-                course_name = course.name
-                async with async_session_factory() as session:
-                    coursework_rows = await cache.list_cached_coursework(session, course_id)
-                submissions = await google_service.list_student_submissions(course_id)
-                coursework_map = {
-                    row.id: cache.coursework_to_discord_dict(row) for row in coursework_rows
-                }
-
-                for submission in submissions:
-                    state = submission.get("state", "UNKNOWN")
-                    if state not in pending_states:
-                        continue
-
-                    coursework_id = submission.get("courseWorkId")
-                    coursework = coursework_map.get(coursework_id)
-                    if not coursework:
-                        continue
-
-                    due_text = self._format_due_date(coursework)
-                    due_sort = coursework.get("dueDate") or {}
-                    due_key = (
-                        due_sort.get("year", 9999),
-                        due_sort.get("month", 12),
-                        due_sort.get("day", 31),
-                    )
-
-                    todo_items.append({
-                        "course_name": course_name,
-                        "course_id": course_id,
-                        "title": coursework.get("title", "Untitled Coursework"),
-                        "description": coursework.get("description", ""),
-                        "alternate_link": coursework.get("alternateLink", ""),
-                        "due_text": due_text,
-                        "due_key": due_key,
-                        "state": state,
-                        "late": submission.get("late", False),
-                    })
-
+            todo_items = await self.api.list_pending_todos()
             if not todo_items:
                 await interaction.followup.send(
-                    "✅ **No not-turned-in items found.** The authenticated Google Classroom account currently has no pending coursework.",
+                    "✅ **No not-turned-in items found.** There is currently no pending coursework in the synced cache.",
                     ephemeral=True
                 )
                 return
 
-            todo_items.sort(key=lambda item: item["due_key"])
+            # Resolve course names from the cached course list (one API call).
+            courses = await self.api.list_courses()
+            course_names = {c.get("id"): c.get("name") for c in courses}
+
+            # Sort by due date (no due date sinks to the bottom).
+            todo_items.sort(key=lambda i: i.get("due_date") or "9999-12-31")
             visible_items = todo_items if fetch_all else todo_items[: resolved_limit or len(todo_items)]
 
             field_builders = []
             for item in visible_items:
-                title = item["title"][:80]
-                status_bits = [f"Due: `{item['due_text']}`", f"State: `{item['state']}`"]
-                if item["late"]:
-                    status_bits.append("Late: `true`")
+                title = (item.get("title") or "Untitled Coursework")[:80]
+                course_id = item.get("course_id")
+                course_name = course_names.get(course_id, "Unknown Course")
+                status_bits = [
+                    f"Due: `{item.get('due_date') or 'No due date'}`",
+                    f"State: `{item.get('status') or 'UNKNOWN'}`",
+                ]
                 value = (
-                    f"**Course:** {item['course_name']} (`{item['course_id']}`)\n"
-                    f"{self._truncate(item['description'], 140)}\n"
+                    f"**Course:** {course_name} (`{course_id}`)\n"
                     f"{' • '.join(status_bits)}"
                 )
-                if item["alternate_link"]:
-                    value += f"\n[Open in Classroom]({item['alternate_link']})"
+                if item.get("course_work_link"):
+                    value += f"\n[Open in Classroom]({item['course_work_link']})"
                 field_builders.append((title, value))
 
             count_label = "all" if fetch_all else str(len(visible_items))
@@ -428,14 +386,14 @@ class ClassroomCog(commands.Cog):
                 title="📚 Google Classroom To-do",
                 description=(
                     f"Showing {count_label} pending item(s) out of {len(todo_items)} total.\n"
-                    f"This approximates the Google Classroom `not-turned-in` view for the authenticated account."
+                    f"Served from the local synced cache (the `not-turned-in` view)."
                 ),
                 color=0xE65100,
                 field_builders=field_builders,
             )
         except Exception as e:
             logger.error(f"Failed loading todo items: {e}")
-            await interaction.followup.send(f"❌ **Failed to load Google Classroom todo items:** {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ **Failed to load todo items:** {e}", ephemeral=True)
 
     @classroom.command(name="link", description="Link a Google Classroom course to a specific Discord channel.")
     @app_commands.describe(
@@ -450,15 +408,15 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         try:
+            course = await self.api.get_course(course_id)
+            if not course:
+                await interaction.followup.send(
+                    f"❌ **Invalid Course ID:** `{course_id}` not found in cache. Run web sync first.",
+                    ephemeral=True
+                )
+                return
+            course_name = course.get("name")
             async with async_session_factory() as session:
-                course = await cache.get_cached_course(session, course_id)
-                if not course:
-                    await interaction.followup.send(
-                        f"❌ **Invalid Course ID:** `{course_id}` not found in cache. Run web sync first.",
-                        ephemeral=True
-                    )
-                    return
-                course_name = course.name
                 stmt = select(GuildCourseLink).where(
                     GuildCourseLink.guild_id == interaction.guild_id,
                     GuildCourseLink.course_id == course_id
@@ -557,8 +515,8 @@ class ClassroomCog(commands.Cog):
                     chan_text = channel.mention if channel else f"Channel ID `{link.channel_id}`"
                     status = "✅ Active" if link.is_active else "❌ Disabled"
                     
-                    cached = await cache.get_cached_course(session, link.course_id)
-                    name = cached.name if cached else "Unknown Course"
+                    cached = await self.api.get_course(link.course_id)
+                    name = cached.get("name") if cached else "Unknown Course"
                     
                     embed.add_field(
                         name=f"🏫 {name}",
@@ -646,8 +604,7 @@ class ClassroomCog(commands.Cog):
         """Bidirectional command posting text to Google Classroom via a Modal popup."""
         try:
             # Verify course exists and retrieve name for visual title
-            async with async_session_factory() as session:
-                course = await cache.get_cached_course(session, course_id)
+            course = await self.api.get_course(course_id)
             if not course:
                 await interaction.response.send_message(
                     f"❌ **Failed:** Course `{course_id}` not found in cache.",
@@ -655,7 +612,7 @@ class ClassroomCog(commands.Cog):
                 )
                 return
 
-            course_name = course.name
+            course_name = course.get("name")
             
             # Send the interactive UI Modal response
             modal = ClassroomAnnouncementModal(course_id, course_name)

@@ -404,6 +404,11 @@ const zhCN: Resources = {
     scheduler: '调度器',
     schedulerDesc:
       '自动同步 Classroom 缓存。更改会保存到数据库并立即生效（重启后仍保留）。',
+    auditRetention: '审计日志轮替',
+    auditRetentionDesc: '自动删除超过保留期限的审计日志（最长 {{max}} 天）。',
+    auditRetentionEnabledDesc: '开启或关闭审计日志自动清理',
+    retentionDays: '保留天数',
+    retentionError: '保留天数须为 1 至 {{max}} 天之间的整数。',
     enabled: '启用',
     enabledDesc: '开启或关闭计划的后台同步',
     interval: '间隔（分钟）',

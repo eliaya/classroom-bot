@@ -30,6 +30,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Bot reads Classroom data from the API service over the Docker network
+      # (not Google directly). Overrides the localhost default in .env/config.
+      - API_BASE_URL=http://api:8000
     volumes:
       - ./data:/app/data
       - ./credentials:/app/credentials

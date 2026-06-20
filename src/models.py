@@ -279,6 +279,20 @@ class SchedulerSetting(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class AuditRetentionSetting(SQLModel, table=True):
+    """Singleton row (id=1) holding the audit-log auto-rotation config.
+
+    When ``enabled``, a scheduled job deletes ``audit_logs`` rows older than
+    ``retention_days`` (capped at 30). Managed via the WebUI Settings page.
+    """
+    __tablename__ = "audit_retention_settings"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    enabled: bool = Field(default=True)
+    retention_days: int = Field(default=30)  # capped at 30 by the API layer
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class BotHeartbeat(SQLModel, table=True):
     """Singleton row (id=1) written by the Discord bot process so the API can
     report live bot connection status to the dashboard."""

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     DISCORD_GUILD_ID: str = ""
     SYNC_INTERVAL_MINUTES: int = 10
     DATABASE_URL: str = "sqlite+aiosqlite:////app/data/classroom_sync.db"
+    # Base URL the Discord bot uses to read Classroom data from the local API
+    # (instead of calling Google directly). In Docker set this to the API
+    # service, e.g. http://api:8000.
+    API_BASE_URL: str = "http://localhost:8000"
     GOOGLE_CLIENT_SECRET_FILE: str = "/app/credentials/client_secret.json"
     GOOGLE_TOKEN_FILE: str = "/app/credentials/token.json"
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

@@ -411,6 +411,12 @@ export const en = {
     scheduler: 'Scheduler',
     schedulerDesc:
       'Automatic Classroom cache sync. Changes are saved to the database and take effect immediately (persist across restarts).',
+    auditRetention: 'Audit log rotation',
+    auditRetentionDesc:
+      'Automatically delete audit log entries older than the retention window (maximum {{max}} days).',
+    auditRetentionEnabledDesc: 'Turn automatic audit-log cleanup on or off',
+    retentionDays: 'Retention (days)',
+    retentionError: 'Retention must be an integer between 1 and {{max}} days.',
     enabled: 'Enabled',
     enabledDesc: 'Turn the scheduled background sync on or off',
     interval: 'Interval (minutes)',
