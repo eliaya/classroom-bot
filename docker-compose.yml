@@ -15,6 +15,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # API_PORT in .env is the *host* port. Inside the container the API must
+      # stay on 8000 — nginx, the bot, and the port mapping all expect 8000.
+      - API_PORT=8000
     volumes:
       - app_data:/app/data
       - ./credentials:/app/credentials
