@@ -93,12 +93,19 @@ export function BotCommandsTable({ data, search, navigate, onChanged }: BotComma
                     >
                       <TableCell className='font-medium'>
                         <span className='font-mono text-xs text-muted-foreground'>
-                          {cmd.trigger}
+                          {cmd.group_name ? `/${cmd.group_name} ` : cmd.trigger}
                         </span>
                         {cmd.name}
+                        {cmd.kind === 'builtin' && (
+                          <span className='ms-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground'>
+                            {t('botCommands.builtin')}
+                          </span>
+                        )}
                       </TableCell>
                       {!panelOpen && (
-                        <TableCell className='font-mono text-xs'>{cmd.trigger}</TableCell>
+                        <TableCell className='font-mono text-xs'>
+                          {cmd.kind === 'builtin' ? 'slash' : cmd.trigger}
+                        </TableCell>
                       )}
                       {!panelOpen && (
                         <TableCell>

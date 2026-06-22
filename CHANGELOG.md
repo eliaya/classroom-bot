@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-06-23
+
+Web app bumped to 2.4.1.
+
+### Fixed
+- Channel links no longer break the bot with "No course linked to this channel". Discord snowflake IDs (guild/channel) exceed JS `Number.MAX_SAFE_INTEGER`, so they were silently rounded when the WebUI sent them back as JSON numbers, corrupting the stored `channel_id`. IDs are now carried as strings end-to-end (`/api/links` and `/api/discord/channels` serialize them as strings; the frontend types and form state use strings, no `Number()` coercion). Inbound `LinkCreate`/`LinkUpdate` still accept the numeric string losslessly via Pydantic.
+
+### Changed
+- Bot console: the standalone "Bot messages" tab is merged into the "Bot commands" tab. Commands (table + detail/new-command panel) and message templates now stack in one tab under sub-headings separated by a divider — a command's reply and the bot's built-in response strings are both "what the bot says". Each section keeps its own list and "+ New" action; data models and APIs are unchanged.
+
+## [0.11.0] - 2026-06-22
+
+Web app bumped to 2.4.0.
+
+### Added
+- Unified command registry: the code-defined `/classroom` slash commands are now seeded into the `bot_commands` table (`kind="builtin"`) and managed alongside custom commands in one WebUI table — no more built-in/custom split. Built-ins can be renamed, regrouped, and enabled/disabled; their behavior stays code-defined (bound via `handler_key`). Custom (template) commands remain fully editable, including parameters.
+- Configurable slash group prefix: commands carry a `group_name` (e.g. `classroom`), so a command registers as `/group sub` or top-level `/name`. New custom commands can be placed under any group; the prefix is editable per command.
+- Bot messages are now full CRUD: add, edit, or delete any message key in the WebUI (`POST /api/bot/messages`, `PUT/DELETE /api/bot/messages/{key}`). The `bot_messages` table is the source of truth (seeded from `src/message_templates.py` on init); code keeps a fallback only for keys it references. Per-message description is stored in the DB.
+- Discord guild/channel inventory reverse-sync: the bot snapshots the servers and text channels it can see into a new `discord_channels` table (on connect + every 60 s heartbeat). The Channel Links page now resolves real server/channel names and offers dropdown pickers (`GET /api/discord/channels`), falling back to manual numeric-ID entry when the bot is offline.
+
+### Changed
+- The bot rebuilds its entire slash tree from the DB at startup and on every registry change (existing 30 s poll), so renames/regroup/enable-disable of built-ins and custom commands propagate to Discord without a redeploy (a re-sync is required, which the poll/cog-load handles). `ClassroomCog`'s static group is captured once and rebound from DB rows.
+- Removed the read-only `GET /api/bot/commands/builtin` introspection endpoint (built-ins now live in the unified table).
+
+### Notes
+- Schema changes use the existing lightweight `ALTER TABLE ADD COLUMN` migration in `init_db` (no Alembic): `bot_commands` gains `kind`/`handler_key`/`group_name`; `bot_messages` gains `description`. The new `discord_channels` table is created by `create_all`. Seeding is idempotent, so WebUI edits (incl. disabled built-ins) survive restarts.
+- The Discord inventory only populates while the bot is running and connected; the channel snapshot is a full replace, so deleted channels/servers are pruned within ~60 s.
+- Built-in commands can be disabled but not deleted (a delete would be re-seeded on next restart) — the API returns 400. A brand-new command that runs *new logic* still needs a code handler; DB-created commands are text-response (template) commands.
+- Built-in command renames/group changes are Discord slash registrations and take effect after the bot re-syncs (startup or next poll), not instantly.
+
 ## [0.10.0] - 2026-06-22
 
 Web app bumped to 2.3.0.

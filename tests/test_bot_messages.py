@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
 from sqlmodel import SQLModel
 
 import src.database as database_module
-from src.api.routes.bot_messages import _validate_placeholders
 from src.cogs._messages import MessageStore
 from src.message_templates import DEFAULT_MESSAGES, default_template
 from src.repositories import bot_messages as repo
@@ -17,57 +15,50 @@ async def _setup_tables():
 
 
 @pytest.mark.asyncio
-async def test_render_falls_back_to_default():
+async def test_render_falls_back_to_default_when_db_empty():
     await _setup_tables()
+    # With no DB row, MessageStore falls back to the in-code default.
     out = await MessageStore().render("coursework.empty", course_name="Math")
     assert out == default_template("coursework.empty").format(course_name="Math")
 
 
 @pytest.mark.asyncio
-async def test_override_is_used():
+async def test_db_value_is_used():
     await _setup_tables()
     async with database_module.async_session_factory() as session:
-        await repo.set_override(session, "list.empty", "Nothing linked here yet.")
-    # Fresh store forces a DB refresh (cache age starts at 0).
+        await repo.set_message(session, "list.empty", "Nothing linked here yet.")
     out = await MessageStore().render("list.empty")
     assert out == "Nothing linked here yet."
 
 
 @pytest.mark.asyncio
-async def test_clear_override_reverts(tmp_path):
+async def test_create_and_delete_arbitrary_key():
     await _setup_tables()
     async with database_module.async_session_factory() as session:
-        await repo.set_override(session, "list.empty", "custom")
-        assert await repo.clear_override(session, "list.empty") is True
-        assert await repo.get_by_key(session, "list.empty") is None
+        await repo.set_message(session, "custom.greeting", "Hi!", "a custom message")
+        row = await repo.get_by_key(session, "custom.greeting")
+        assert row is not None and row.description == "a custom message"
+        assert await repo.delete_message(session, "custom.greeting") is True
+        assert await repo.get_by_key(session, "custom.greeting") is None
 
 
 @pytest.mark.asyncio
 async def test_render_missing_placeholder_does_not_raise():
     await _setup_tables()
     async with database_module.async_session_factory() as session:
-        # A template referencing a placeholder we don't pass must not crash.
-        await repo.set_override(session, "list.empty", "Hi {course_name}")
+        await repo.set_message(session, "list.empty", "Hi {course_name}")
     out = await MessageStore().render("list.empty")  # no course_name passed
     assert out == "Hi {course_name}"  # raw template returned, no exception
 
 
 @pytest.mark.asyncio
-async def test_render_unknown_key_raises():
-    with pytest.raises(KeyError):
-        await MessageStore().render("does.not.exist")
-
-
-def test_validate_placeholders_rejects_unknown():
-    # link.created allows {course_name}, {course_id}, {channel}.
-    _validate_placeholders("link.created", "Linked {course_name} to {channel}")  # subset ok
-    with pytest.raises(HTTPException):
-        _validate_placeholders("link.created", "Linked {bogus}")
+async def test_render_unknown_key_returns_key_literally():
+    await _setup_tables()
+    # Unknown key (not in DB, not a default) must not crash — returns the key.
+    assert await MessageStore().render("does.not.exist") == "does.not.exist"
 
 
 def test_every_default_formats_with_its_documented_placeholders():
-    # Smoke check: each default template is itself renderable without surprise
-    # KeyErrors when given all of its own placeholders.
     import string
 
     for key, (template, _desc) in DEFAULT_MESSAGES.items():

@@ -6,6 +6,7 @@ reads the same table to execute the commands. See ``src/cogs/custom_commands.py`
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +19,17 @@ from src.repositories import bot_commands as repo
 
 router = APIRouter(prefix="/bot/commands", tags=["bot-commands"])
 
+# Discord application-command name rules: 1-32 chars, lowercase letters/digits/_/-.
+SLASH_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+
+
+def _validate_slash_name(value: str, field: str) -> None:
+    if not SLASH_NAME_RE.match(value):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field} must be 1-32 lowercase letters, digits, '_' or '-' (got '{value}')",
+        )
+
 
 class BotCommandCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
@@ -26,6 +38,7 @@ class BotCommandCreate(BaseModel):
     trigger: str = Field(default="!", min_length=1, max_length=8)
     params: Optional[str] = None
     enabled: bool = True
+    group_name: Optional[str] = Field(default=None, max_length=32)
 
 
 class BotCommandUpdate(BaseModel):
@@ -35,6 +48,7 @@ class BotCommandUpdate(BaseModel):
     trigger: Optional[str] = Field(default=None, min_length=1, max_length=8)
     params: Optional[str] = None
     enabled: Optional[bool] = None
+    group_name: Optional[str] = Field(default=None, max_length=32)
 
 
 def _serialize(cmd: BotCommand) -> dict:
@@ -46,6 +60,9 @@ def _serialize(cmd: BotCommand) -> dict:
         "params": cmd.params,
         "response": cmd.response,
         "enabled": cmd.enabled,
+        "kind": cmd.kind,
+        "handler_key": cmd.handler_key,
+        "group_name": cmd.group_name,
         "created_at": cmd.created_at.isoformat() if cmd.created_at else None,
         "updated_at": cmd.updated_at.isoformat() if cmd.updated_at else None,
     }
@@ -61,6 +78,9 @@ async def list_commands(session: AsyncSession = Depends(get_db_session)) -> dict
 async def create_command(
     body: BotCommandCreate, session: AsyncSession = Depends(get_db_session)
 ) -> dict:
+    _validate_slash_name(body.name.lower(), "name")
+    if body.group_name:
+        _validate_slash_name(body.group_name.lower(), "group_name")
     existing = await repo.get_by_name(session, body.name)
     if existing is not None:
         raise HTTPException(status_code=409, detail=f"Command '{body.name}' already exists")
@@ -72,6 +92,7 @@ async def create_command(
         trigger=body.trigger,
         params=body.params,
         enabled=body.enabled,
+        group_name=body.group_name or None,
     )
     return _serialize(cmd)
 
@@ -93,12 +114,17 @@ async def update_command(
     cmd = await repo.get_command(session, cmd_id)
     if cmd is None:
         raise HTTPException(status_code=404, detail="Command not found")
+    fields = body.model_dump(exclude_unset=True)
+    if "name" in fields and fields["name"]:
+        _validate_slash_name(fields["name"].lower(), "name")
+    if fields.get("group_name"):
+        _validate_slash_name(fields["group_name"].lower(), "group_name")
     # Reject a rename that collides with another command.
     if body.name is not None and body.name != cmd.name:
         clash = await repo.get_by_name(session, body.name)
         if clash is not None:
             raise HTTPException(status_code=409, detail=f"Command '{body.name}' already exists")
-    updated = await repo.update_command(session, cmd, **body.model_dump(exclude_unset=True))
+    updated = await repo.update_command(session, cmd, **fields)
     return _serialize(updated)
 
 
@@ -109,5 +135,12 @@ async def delete_command(
     cmd = await repo.get_command(session, cmd_id)
     if cmd is None:
         raise HTTPException(status_code=404, detail="Command not found")
+    # Built-in commands are code-defined; they can be disabled but not deleted
+    # (a delete would just be re-seeded on the next restart).
+    if cmd.kind == "builtin":
+        raise HTTPException(
+            status_code=400,
+            detail="Built-in commands cannot be deleted — disable it instead.",
+        )
     await repo.delete_command(session, cmd)
     return {"status": "deleted", "id": cmd_id}

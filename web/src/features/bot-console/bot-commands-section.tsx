@@ -29,6 +29,7 @@ export function BotCommandsSection({ search, navigate }: BotCommandsSectionProps
   return (
     <div className='flex flex-col gap-4'>
       {error && <p className='text-destructive text-sm'>{error}</p>}
+      <p className='text-muted-foreground text-xs'>{t('botCommands.unifiedHint')}</p>
       <BotCommandsTable
         data={commands}
         search={search}

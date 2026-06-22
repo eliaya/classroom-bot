@@ -1,11 +1,15 @@
-"""API for editing built-in bot response templates (``BotMessage`` overrides).
+"""Full CRUD API for WebUI-editable bot response templates (``BotMessage``).
 
-The WebUI ``/bot-messages`` page lists every known message (default merged with
-any override) and lets admins edit or reset each one. The bot reads overrides
-from the same table; defaults live in ``src/message_templates.py``.
+The ``bot_messages`` table is the source of truth (seeded from
+``src/message_templates.py`` on init). Admins can add, edit or delete any
+message key here; the bot reads the same table when rendering. Deleting a key
+that the code still references falls back to the in-code default.
 """
 
 from __future__ import annotations
+
+import re
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -17,71 +21,65 @@ from src.repositories import bot_messages as repo
 
 router = APIRouter(prefix="/bot/messages", tags=["bot-messages"])
 
+# Message keys are dotted identifiers, e.g. "coursework.empty".
+KEY_RE = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$")
+
+
+class MessageCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=128)
+    template: str = Field(min_length=1)
+    description: Optional[str] = None
+
 
 class MessageUpdate(BaseModel):
     template: str = Field(min_length=1)
+    description: Optional[str] = None
+
+
+def _serialize(m) -> dict:
+    return {
+        "key": m.key,
+        "template": m.template,
+        "description": m.description,
+        "is_default": m.key in DEFAULT_MESSAGES,
+        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+    }
 
 
 @router.get("")
 async def list_messages(session: AsyncSession = Depends(get_db_session)) -> dict:
-    overrides = {m.key: m.template for m in await repo.list_messages(session)}
-    items = [
-        {
-            "key": key,
-            "default": default,
-            "description": description,
-            "template": overrides.get(key, default),
-            "overridden": key in overrides,
-        }
-        for key, (default, description) in DEFAULT_MESSAGES.items()
-    ]
+    items = [_serialize(m) for m in await repo.list_messages(session)]
+    items.sort(key=lambda i: i["key"])
     return {"items": items, "total": len(items)}
+
+
+@router.post("", status_code=201, dependencies=[Depends(verify_admin_token)])
+async def create_message(
+    body: MessageCreate, session: AsyncSession = Depends(get_db_session)
+) -> dict:
+    if not KEY_RE.match(body.key):
+        raise HTTPException(
+            status_code=422,
+            detail="Key must be lowercase dotted identifiers, e.g. 'mygroup.empty'",
+        )
+    if await repo.get_by_key(session, body.key) is not None:
+        raise HTTPException(status_code=409, detail=f"Message '{body.key}' already exists")
+    saved = await repo.set_message(session, body.key, body.template, body.description)
+    return _serialize(saved)
 
 
 @router.put("/{key}", dependencies=[Depends(verify_admin_token)])
 async def set_message(
     key: str, body: MessageUpdate, session: AsyncSession = Depends(get_db_session)
 ) -> dict:
-    if key not in DEFAULT_MESSAGES:
-        raise HTTPException(status_code=404, detail=f"Unknown message key: {key}")
-    # Validate the template only references known placeholders, so a saved
-    # override can never break rendering on the bot.
-    _validate_placeholders(key, body.template)
-    saved = await repo.set_override(session, key, body.template)
-    return {"key": saved.key, "template": saved.template, "overridden": True}
+    saved = await repo.set_message(session, key, body.template, body.description)
+    return _serialize(saved)
 
 
 @router.delete("/{key}", dependencies=[Depends(verify_admin_token)])
-async def reset_message(
+async def delete_message(
     key: str, session: AsyncSession = Depends(get_db_session)
 ) -> dict:
-    if key not in DEFAULT_MESSAGES:
-        raise HTTPException(status_code=404, detail=f"Unknown message key: {key}")
-    await repo.clear_override(session, key)
-    return {"key": key, "template": DEFAULT_MESSAGES[key][0], "overridden": False}
-
-
-def _validate_placeholders(key: str, template: str) -> None:
-    """Reject a template that uses placeholders the default doesn't define.
-
-    The default template's field names are the allowed set; an override may use
-    a subset but not introduce unknown names (which would KeyError at render).
-    """
-    import string
-
-    allowed = {
-        name
-        for _, name, _, _ in string.Formatter().parse(DEFAULT_MESSAGES[key][0])
-        if name
-    }
-    used = {
-        name
-        for _, name, _, _ in string.Formatter().parse(template)
-        if name
-    }
-    unknown = used - allowed
-    if unknown:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown placeholders for '{key}': {', '.join(sorted(unknown))}. Allowed: {', '.join(sorted(allowed)) or 'none'}",
-        )
+    await repo.delete_message(session, key)
+    # A code-referenced key falls back to its in-code default after deletion.
+    return {"key": key, "deleted": True, "is_default": key in DEFAULT_MESSAGES}

@@ -1,9 +1,9 @@
 """Runtime resolver for WebUI-editable bot response templates.
 
 The cog renders user-facing messages through a shared ``MessageStore`` instance
-instead of hardcoded strings, so admins can edit them in the WebUI. Overrides
-are read from the shared DB with a short cache; anything not overridden falls
-back to the in-code default. WebUI edits take effect within ``CACHE_TTL_SECONDS``.
+instead of hardcoded strings, so admins can edit them in the WebUI. Templates
+are read from the shared DB with a short cache; a missing key falls back to the
+in-code default. WebUI edits take effect within ``CACHE_TTL_SECONDS``.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ CACHE_TTL_SECONDS = 30
 
 class MessageStore:
     def __init__(self) -> None:
-        self._overrides: Dict[str, str] = {}
+        self._messages: Dict[str, str] = {}
         self._at: float = 0.0
 
     async def render(self, key: str, **params: object) -> str:
@@ -40,20 +40,21 @@ class MessageStore:
             return template
 
     async def _template(self, key: str) -> str:
-        if key not in DEFAULT_MESSAGES:
-            # Programmer error — surface loudly rather than silently send "".
-            raise KeyError(f"Unknown bot message key: {key!r}")
         now = time.monotonic()
         if self._at == 0.0 or (now - self._at) >= CACHE_TTL_SECONDS:
             await self._refresh(now)
-        return self._overrides.get(key) or default_template(key)
+        if key in self._messages:
+            return self._messages[key]
+        if key in DEFAULT_MESSAGES:
+            return default_template(key)  # seed missing (e.g. row deleted) — fall back
+        return key  # unknown key: show literally rather than crash
 
     async def _refresh(self, now: float) -> None:
         try:
             async with database.async_session_factory() as session:
                 rows = await repo.list_messages(session)
-            self._overrides = {r.key: r.template for r in rows}
+            self._messages = {r.key: r.template for r in rows}
             self._at = now
         except Exception:  # noqa: BLE001 — never break a response on a DB hiccup
-            logger.warning("Failed to refresh message overrides; using defaults", exc_info=True)
+            logger.warning("Failed to refresh bot messages; using defaults", exc_info=True)
             self._at = now  # avoid hammering the DB on repeated failures

@@ -24,6 +24,26 @@ class GuildCourseLink(SQLModel, table=True):
     is_active: bool = Field(default=True)
 
 
+class DiscordChannel(SQLModel, table=True):
+    """A reverse-synced snapshot of the bot's guilds and their text channels.
+
+    The bot (which has gateway access) writes this from its live state so the
+    WebUI — which has no gateway — can offer real guild/channel names instead of
+    bare numeric IDs. Refreshed as a full snapshot, so stale rows are pruned.
+    """
+    __tablename__ = "discord_channels"
+    __table_args__ = (
+        UniqueConstraint("channel_id", name="uq_discord_channel"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    guild_id: int = Field(index=True)
+    guild_name: str
+    channel_id: int = Field(index=True)
+    channel_name: str
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class PostedAnnouncement(SQLModel, table=True):
     """Tracks posted announcements and coursework to enforce strict idempotency."""
     __tablename__ = "posted_announcements"
@@ -319,21 +339,26 @@ class BotCommand(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)  # command word, e.g. "hello"
     description: Optional[str] = None
-    trigger: str = Field(default="!")  # invocation prefix
+    trigger: str = Field(default="!")  # invocation prefix (template commands)
     params: Optional[str] = None  # free-form JSON text describing params
-    response: str  # text replied to the user (supports {user} interpolation)
+    response: str = ""  # text replied to the user (supports {user} interpolation); empty for builtins
     enabled: bool = Field(default=True, index=True)
+    # "template" = WebUI text-response command; "builtin" = a code-defined
+    # /classroom slash command surfaced for editable metadata (behavior in code).
+    kind: str = Field(default="template", index=True)
+    handler_key: Optional[str] = None  # builtin only: binds the row to its code callback
+    group_name: Optional[str] = None  # slash group prefix, e.g. "classroom"; None = top-level
     created_at: datetime = Field(default_factory=now_jst)
     updated_at: datetime = Field(default_factory=now_jst)
 
 
 class BotMessage(SQLModel, table=True):
-    """A WebUI-editable override for a built-in bot response template.
+    """A WebUI-editable bot response template.
 
-    Only *overridden* messages are stored here; the in-code defaults in
-    ``src/message_templates.py`` remain the source of truth and fallback. The
-    bot renders ``template`` with ``str.format`` using each message's documented
-    placeholders.
+    The DB is the source of truth: ``src/message_templates.py`` defaults are
+    seeded on init and act only as a fallback if a referenced key is missing.
+    The bot renders ``template`` with ``str.format`` using each message's
+    documented placeholders.
     """
     __tablename__ = "bot_messages"
     __table_args__ = (
@@ -342,7 +367,8 @@ class BotMessage(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     key: str = Field(index=True)  # registry key, e.g. "coursework.empty"
-    template: str  # override text, supports {placeholder} interpolation
+    template: str  # message text, supports {placeholder} interpolation
+    description: Optional[str] = None  # docs the available {placeholders}
     updated_at: datetime = Field(default_factory=now_jst)
 
 

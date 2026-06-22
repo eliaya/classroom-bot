@@ -41,11 +41,12 @@ async def create_command(
     session: AsyncSession,
     *,
     name: str,
-    response: str,
+    response: str = "",
     description: Optional[str] = None,
     trigger: str = "!",
     params: Optional[str] = None,
     enabled: bool = True,
+    group_name: Optional[str] = None,
 ) -> BotCommand:
     cmd = BotCommand(
         name=name,
@@ -54,6 +55,8 @@ async def create_command(
         trigger=trigger,
         params=params,
         enabled=enabled,
+        kind="template",  # commands created via the API are always text-response
+        group_name=group_name,
     )
     session.add(cmd)
     await session.commit()

@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from src.config import settings
-from src.database import async_session_factory
+import src.database as database
 from src.models import BotCommand
 from src.repositories import bot_commands as repo
 
@@ -116,8 +116,13 @@ class CustomCommandsCog(commands.Cog):
         self._cache: List[BotCommand] = []
         self._cache_at: float = 0.0
         # Slash-command bookkeeping.
-        self._registered: Set[str] = set()  # lowercased names we added to the tree
+        self._registered: Set[str] = set()  # top-level command names we added
+        self._registered_groups: Set[str] = set()  # group names we added
         self._signature: Optional[Tuple] = None  # last-seen registry fingerprint
+        # Built-in /classroom handlers, captured from ClassroomCog's static group
+        # so DB rows (kind="builtin") can rebind to their code callbacks.
+        self._builtin_handlers: Optional[Dict[str, app_commands.Command]] = None
+        self._builtins_captured = False
         guild_id = (settings.DISCORD_GUILD_ID or "").strip()
         self._guild: Optional[discord.Object] = (
             discord.Object(id=int(guild_id)) if guild_id.isdigit() else None
@@ -157,10 +162,46 @@ class CustomCommandsCog(commands.Cog):
         return tuple(
             sorted(
                 (r.id, r.name, r.description or "", r.response, r.enabled,
-                 r.params or "", r.updated_at.isoformat() if r.updated_at else "")
+                 r.params or "", r.kind, r.handler_key or "", r.group_name or "",
+                 r.updated_at.isoformat() if r.updated_at else "")
                 for r in records
             )
         )
+
+    def _capture_builtins(self) -> None:
+        """Take ownership of ClassroomCog's static /classroom group.
+
+        ClassroomCog registers a static ``classroom`` app-command group when the
+        cog loads. We capture each subcommand's callback (so DB ``builtin`` rows
+        can rebind to it under a DB-driven name/group) and remove the static
+        group, then drive all registration from the DB.
+        """
+        self._builtins_captured = True
+        grp = self.bot.tree.get_command("classroom")
+        if not isinstance(grp, app_commands.Group):
+            logger.info("No static /classroom group found to capture (builtins disabled)")
+            self._builtin_handlers = {}
+            return
+        self._builtin_handlers = {c.name: c for c in grp.commands}
+        self.bot.tree.remove_command("classroom")
+        logger.info("Captured %d built-in handler(s) from /classroom", len(self._builtin_handlers))
+
+    def _build_builtin(self, record: BotCommand) -> Optional[app_commands.Command]:
+        """Rebind a builtin row to its code callback under the DB name/description."""
+        if not self._builtin_handlers:
+            return None
+        src = self._builtin_handlers.get(record.handler_key or "")
+        if src is None:
+            logger.info("Builtin %r has no matching code handler %r; skipped",
+                        record.name, record.handler_key)
+            return None
+        cmd = app_commands.Command(
+            name=record.name.lower(),
+            description=(record.description or record.name)[:100],
+            callback=src.callback,
+        )
+        cmd.binding = src.binding  # preserve the cog instance so `self` binds
+        return cmd
 
     def _build_slash(self, record: BotCommand) -> app_commands.Command:
         response = record.response
@@ -222,53 +263,92 @@ class CustomCommandsCog(commands.Cog):
         )
 
     async def _rebuild_slash(self, *, sync: bool) -> None:
-        """Re-register all enabled custom commands into the app-command tree.
+        """Re-register every enabled command (builtin + template) into the tree.
 
-        Only commands we previously added are removed, so code-defined cogs are
-        never touched. Returns having optionally synced the (guild or global) tree.
+        Reads the unified ``bot_commands`` registry and rebuilds the slash tree:
+        builtins rebind to their code callbacks, templates build text responses,
+        and either kind can live under a configurable group prefix (e.g.
+        ``/classroom``). Only commands/groups we added are removed, so other cogs
+        are untouched. ponytail: if a partial rebuild fails mid-way, the 30s poll
+        loop retries.
         """
         try:
-            async with async_session_factory() as session:
+            async with database.async_session_factory() as session:
                 records = await repo.list_commands(session)
         except Exception:  # noqa: BLE001
             logger.warning("Failed to read command registry for slash rebuild", exc_info=True)
             return
 
+        # Take ownership of the static /classroom group once we can read the DB.
+        if not self._builtins_captured:
+            self._capture_builtins()
+
         self._signature = self._signature_of(records)
 
-        # Drop the slash commands we registered last time.
+        # Drop the commands and groups we registered last time.
         for name in self._registered:
             self.bot.tree.remove_command(name, guild=self._guild)
         self._registered.clear()
+        for gname in self._registered_groups:
+            self.bot.tree.remove_command(gname, guild=self._guild)
+        self._registered_groups.clear()
+
+        groups: Dict[str, app_commands.Group] = {}
+
+        def _group_for(raw: Optional[str]) -> Optional[app_commands.Group]:
+            gname = (raw or "").strip().lower()
+            if not gname or not SLASH_NAME_RE.match(gname):
+                return None
+            if gname not in groups:
+                groups[gname] = app_commands.Group(name=gname, description=f"{gname} commands")
+            return groups[gname]
 
         for rec in records:
             if not rec.enabled:
                 continue
             name = rec.name.lower()
             if not SLASH_NAME_RE.match(name):
-                logger.info("Skipping custom slash command %r (invalid Discord name)", rec.name)
+                logger.info("Skipping slash command %r (invalid Discord name)", rec.name)
                 continue
+            if rec.kind == "builtin":
+                cmd = self._build_builtin(rec)
+                if cmd is None:
+                    continue
+            else:
+                cmd = self._build_slash(rec)
+
+            group = _group_for(rec.group_name)
             try:
-                self.bot.tree.add_command(self._build_slash(rec), guild=self._guild)
-                self._registered.add(name)
+                if group is not None:
+                    group.add_command(cmd)
+                else:
+                    self.bot.tree.add_command(cmd, guild=self._guild)
+                    self._registered.add(name)
             except app_commands.CommandAlreadyRegistered:
-                # Collides with a code-defined command — leave the built-in in place.
-                logger.info("Custom command %r collides with an existing command; skipped", name)
+                logger.info("Command %r collides with an existing command; skipped", name)
+
+        # Attach the assembled groups to the tree.
+        for gname, group in groups.items():
+            try:
+                self.bot.tree.add_command(group, guild=self._guild)
+                self._registered_groups.add(gname)
+            except app_commands.CommandAlreadyRegistered:
+                logger.info("Group %r collides with an existing group; skipped", gname)
 
         if sync:
             try:
                 await self.bot.tree.sync(guild=self._guild)
-                logger.info("Re-synced %d custom slash command(s)%s",
-                            len(self._registered),
+                logger.info("Re-synced slash tree: %d top-level + %d group(s)%s",
+                            len(self._registered), len(self._registered_groups),
                             f" to guild {self._guild.id}" if self._guild else " globally")
             except Exception:  # noqa: BLE001
-                logger.exception("Sync of custom slash commands failed")
+                logger.exception("Sync of slash commands failed")
 
     @tasks.loop(seconds=POLL_INTERVAL_SECONDS)
     async def _poll_registry(self) -> None:
         """Detect WebUI changes and rebuild the slash tree only when needed."""
         try:
-            async with async_session_factory() as session:
+            async with database.async_session_factory() as session:
                 records = await repo.list_commands(session)
         except Exception:  # noqa: BLE001
             logger.warning("Registry poll failed; will retry", exc_info=True)
@@ -288,7 +368,7 @@ class CustomCommandsCog(commands.Cog):
         if self._cache and (now - self._cache_at) < CACHE_TTL_SECONDS:
             return self._cache
         try:
-            async with async_session_factory() as session:
+            async with database.async_session_factory() as session:
                 self._cache = await repo.list_enabled(session)
                 self._cache_at = now
         except Exception:  # noqa: BLE001 — never break message handling on a DB hiccup
@@ -316,6 +396,8 @@ class CustomCommandsCog(commands.Cog):
 
         first = content.split(maxsplit=1)[0]
         for cmd in registry:
+            if cmd.kind != "template":
+                continue  # builtins are slash-only; no `!name` prefix path
             invocation = f"{cmd.trigger}{cmd.name}"
             if first == invocation:
                 try:

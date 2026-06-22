@@ -91,6 +91,11 @@ export type BotCommand = {
   params?: string | null
   response: string
   enabled: boolean
+  /** "template" = editable text-response command; "builtin" = code-defined slash command. */
+  kind: 'template' | 'builtin'
+  handler_key?: string | null
+  /** Slash group prefix, e.g. "classroom". Null = top-level `/name`. */
+  group_name?: string | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -103,34 +108,51 @@ export type BotCommandInput = {
   params?: string | null
   response: string
   enabled?: boolean
+  group_name?: string | null
 }
 
 /** A Discord course↔channel link (mirrors the bot's `/classroom link`). */
 export type Link = {
   id: number
-  guild_id: number
+  // Snowflakes are strings: JS Number can't hold 64-bit Discord IDs losslessly.
+  guild_id: string
   course_id: string
   course_name?: string | null
-  channel_id: number
+  channel_id: string
   is_active: boolean
   last_sync_announcement?: string | null
   last_sync_coursework?: string | null
 }
 
 export type LinkInput = {
-  guild_id: number
+  guild_id: string
   course_id: string
-  channel_id: number
+  channel_id: string
   is_active?: boolean
 }
 
-/** A built-in bot response template (default merged with any WebUI override). */
+/** A reverse-synced Discord text channel (bot writes these; empty if bot offline). */
+export type DiscordChannel = {
+  guild_id: string
+  guild_name: string
+  channel_id: string
+  channel_name: string
+}
+
+/** A WebUI-editable bot response template (DB is the source of truth). */
 export type BotMessage = {
   key: string
-  default: string
-  description: string
   template: string
-  overridden: boolean
+  description?: string | null
+  /** True if the key has an in-code default (deleting reverts to it). */
+  is_default: boolean
+  updated_at?: string | null
+}
+
+export type BotMessageInput = {
+  key: string
+  template: string
+  description?: string | null
 }
 
 export type Topic = { id?: string; name?: string; [k: string]: unknown }
@@ -323,10 +345,12 @@ export const api = {
     request<{ status: string; id: number }>(`/bot/commands/${id}`, {
       method: 'DELETE',
     }),
-  listLinks: (guildId?: number) =>
+  listLinks: (guildId?: string) =>
     request<{ items: Link[]; total: number }>(
       guildId != null ? `/links?guild_id=${guildId}` : '/links'
     ),
+  listDiscordChannels: () =>
+    request<{ items: DiscordChannel[]; total: number }>('/discord/channels'),
   createLink: (body: LinkInput) =>
     request<Link>('/links', {
       method: 'POST',
@@ -343,13 +367,18 @@ export const api = {
     }),
   listBotMessages: () =>
     request<{ items: BotMessage[]; total: number }>('/bot/messages'),
-  setBotMessage: (key: string, template: string) =>
-    request<{ key: string; template: string; overridden: boolean }>(
-      `/bot/messages/${encodeURIComponent(key)}`,
-      { method: 'PUT', body: JSON.stringify({ template }) }
-    ),
-  resetBotMessage: (key: string) =>
-    request<{ key: string; template: string; overridden: boolean }>(
+  createBotMessage: (body: BotMessageInput) =>
+    request<BotMessage>('/bot/messages', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  setBotMessage: (key: string, template: string, description?: string | null) =>
+    request<BotMessage>(`/bot/messages/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ template, description }),
+    }),
+  deleteBotMessage: (key: string) =>
+    request<{ key: string; deleted: boolean; is_default: boolean }>(
       `/bot/messages/${encodeURIComponent(key)}`,
       { method: 'DELETE' }
     ),

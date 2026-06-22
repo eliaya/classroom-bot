@@ -1,8 +1,8 @@
-"""Persistence for WebUI overrides of built-in bot response templates.
+"""Persistence for WebUI-editable bot response templates.
 
-Only overridden messages live in the ``bot_messages`` table; the in-code
-defaults in ``src/message_templates.py`` are the fallback. The WebUI edits
-overrides via the API; the bot reads them (with a short cache) when rendering.
+The ``bot_messages`` table is the source of truth (seeded from
+``src/message_templates.py`` on init). The WebUI does full CRUD via the API;
+the bot reads rows (with a short cache) when rendering.
 """
 
 from __future__ import annotations
@@ -26,13 +26,20 @@ async def get_by_key(session: AsyncSession, key: str) -> Optional[BotMessage]:
     return result.scalars().first()
 
 
-async def set_override(session: AsyncSession, key: str, template: str) -> BotMessage:
-    """Create or update the override for ``key``."""
+async def set_message(
+    session: AsyncSession,
+    key: str,
+    template: str,
+    description: Optional[str] = None,
+) -> BotMessage:
+    """Create or update the message for ``key``."""
     existing = await get_by_key(session, key)
     if existing is None:
-        existing = BotMessage(key=key, template=template)
+        existing = BotMessage(key=key, template=template, description=description)
     else:
         existing.template = template
+        if description is not None:
+            existing.description = description
         existing.updated_at = now_jst()
     session.add(existing)
     await session.commit()
@@ -40,8 +47,8 @@ async def set_override(session: AsyncSession, key: str, template: str) -> BotMes
     return existing
 
 
-async def clear_override(session: AsyncSession, key: str) -> bool:
-    """Remove the override for ``key`` (revert to default). True if one existed."""
+async def delete_message(session: AsyncSession, key: str) -> bool:
+    """Delete the message row for ``key``. True if one existed."""
     existing = await get_by_key(session, key)
     if existing is None:
         return False

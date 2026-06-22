@@ -35,10 +35,11 @@ class LinkUpdate(BaseModel):
 def _serialize(link: GuildCourseLink, course_name: Optional[str]) -> dict:
     return {
         "id": link.id,
-        "guild_id": link.guild_id,
+        # Snowflakes as strings: JS Number can't hold 64-bit IDs losslessly.
+        "guild_id": str(link.guild_id),
         "course_id": link.course_id,
         "course_name": course_name,
-        "channel_id": link.channel_id,
+        "channel_id": str(link.channel_id),
         "is_active": link.is_active,
         "last_sync_announcement": link.last_sync_announcement,
         "last_sync_coursework": link.last_sync_coursework,

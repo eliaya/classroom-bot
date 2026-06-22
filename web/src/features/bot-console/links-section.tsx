@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { api, type Course, type Link, type LinkInput } from '@/lib/api'
+import {
+  api,
+  type Course,
+  type DiscordChannel,
+  type Link,
+  type LinkInput,
+} from '@/lib/api'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +61,7 @@ export function LinksSection() {
   const { t } = useTranslation()
   const [links, setLinks] = useState<Link[]>([])
   const [courses, setCourses] = useState<Course[]>([])
+  const [channels, setChannels] = useState<DiscordChannel[]>([])
   const [error, setError] = useState<string | null>(null)
   // null = closed; otherwise the link being edited, or 'new' for create.
   const [editing, setEditing] = useState<Link | 'new' | null>(null)
@@ -71,8 +78,30 @@ export function LinksSection() {
   useEffect(() => {
     reload()
     api.listCourses().then((res) => setCourses(res.items)).catch(() => {})
+    api.listDiscordChannels().then((res) => setChannels(res.items)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Distinct guilds and per-guild channels from the reverse-synced inventory.
+  const guilds = useMemo(() => {
+    const m = new Map<string, string>()
+    channels.forEach((c) => m.set(String(c.guild_id), c.guild_name))
+    return [...m].map(([id, name]) => ({ id, name }))
+  }, [channels])
+  const guildName = (id: string) => guilds.find((g) => g.id === id)?.name
+  const channelName = (id: string) =>
+    channels.find((c) => c.channel_id === id)?.channel_name
+  const channelOptions = useMemo(() => {
+    const list = channels.filter((c) => c.guild_id === form.guild_id)
+    // Keep the current value selectable even if it's not in the inventory.
+    if (form.channel_id && !list.some((c) => c.channel_id === form.channel_id)) {
+      return [
+        { channel_id: form.channel_id, channel_name: `#${form.channel_id}` },
+        ...list,
+      ]
+    }
+    return list
+  }, [channels, form.guild_id, form.channel_id])
 
   const openNew = () => {
     setForm(emptyForm())
@@ -93,10 +122,7 @@ export function LinksSection() {
 
   const handleSave = async () => {
     setError(null)
-    const guildId = Number(form.guild_id)
-    const channelId = Number(form.channel_id)
-    if (!form.course_id || !Number.isFinite(guildId) || !Number.isFinite(channelId)
-        || !form.guild_id.trim() || !form.channel_id.trim()) {
+    if (!form.course_id || !form.guild_id.trim() || !form.channel_id.trim()) {
       setError(t('links.requiredFields'))
       return
     }
@@ -104,15 +130,15 @@ export function LinksSection() {
     try {
       if (editing === 'new') {
         const body: LinkInput = {
-          guild_id: guildId,
+          guild_id: form.guild_id,
           course_id: form.course_id,
-          channel_id: channelId,
+          channel_id: form.channel_id,
           is_active: form.is_active,
         }
         await api.createLink(body)
       } else if (editing) {
         await api.updateLink(editing.id, {
-          channel_id: channelId,
+          channel_id: form.channel_id,
           is_active: form.is_active,
         })
       }
@@ -152,8 +178,8 @@ export function LinksSection() {
           <TableHeader>
             <TableRow>
               <TableHead>{t('links.course')}</TableHead>
-              <TableHead>{t('links.guildId')}</TableHead>
-              <TableHead>{t('links.channelId')}</TableHead>
+              <TableHead>{t('links.guild')}</TableHead>
+              <TableHead>{t('links.channel')}</TableHead>
               <TableHead>{t('links.active')}</TableHead>
               <TableHead className='w-px' />
             </TableRow>
@@ -178,8 +204,18 @@ export function LinksSection() {
                       {link.course_id}
                     </span>
                   </TableCell>
-                  <TableCell className='font-mono text-xs'>{link.guild_id}</TableCell>
-                  <TableCell className='font-mono text-xs'>{link.channel_id}</TableCell>
+                  <TableCell className='text-xs'>
+                    {guildName(link.guild_id) ?? (
+                      <span className='font-mono'>{link.guild_id}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className='text-xs'>
+                    {channelName(link.channel_id) ? (
+                      <span>#{channelName(link.channel_id)}</span>
+                    ) : (
+                      <span className='font-mono'>{link.channel_id}</span>
+                    )}
+                  </TableCell>
                   <TableCell>{link.is_active ? '✅' : '❌'}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <AlertDialog>
@@ -242,26 +278,69 @@ export function LinksSection() {
             </div>
 
             <div className='grid gap-2'>
-              <Label htmlFor='ln-guild'>{t('links.guildId')}</Label>
-              <Input
-                id='ln-guild'
-                value={form.guild_id}
-                onChange={(e) => setForm((f) => ({ ...f, guild_id: e.target.value }))}
-                className='font-mono'
-                disabled={!isNew}
-                inputMode='numeric'
-              />
+              <Label htmlFor='ln-guild'>{t('links.guild')}</Label>
+              {guilds.length > 0 ? (
+                <Select
+                  value={form.guild_id}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, guild_id: v, channel_id: '' }))
+                  }
+                  disabled={!isNew}
+                >
+                  <SelectTrigger id='ln-guild'>
+                    <SelectValue placeholder={t('links.selectGuild')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {guilds.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name}
+                        <span className='text-muted-foreground ms-2 font-mono text-xs'>
+                          {g.id}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id='ln-guild'
+                  value={form.guild_id}
+                  onChange={(e) => setForm((f) => ({ ...f, guild_id: e.target.value }))}
+                  className='font-mono'
+                  disabled={!isNew}
+                  inputMode='numeric'
+                />
+              )}
             </div>
 
             <div className='grid gap-2'>
-              <Label htmlFor='ln-channel'>{t('links.channelId')}</Label>
-              <Input
-                id='ln-channel'
-                value={form.channel_id}
-                onChange={(e) => setForm((f) => ({ ...f, channel_id: e.target.value }))}
-                className='font-mono'
-                inputMode='numeric'
-              />
+              <Label htmlFor='ln-channel'>{t('links.channel')}</Label>
+              {channelOptions.length > 0 ? (
+                <Select
+                  value={form.channel_id}
+                  onValueChange={(v) => setForm((f) => ({ ...f, channel_id: v }))}
+                >
+                  <SelectTrigger id='ln-channel'>
+                    <SelectValue placeholder={t('links.selectChannel')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {channelOptions.map((c) => (
+                      <SelectItem key={c.channel_id} value={String(c.channel_id)}>
+                        #{c.channel_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id='ln-channel'
+                  value={form.channel_id}
+                  onChange={(e) => setForm((f) => ({ ...f, channel_id: e.target.value }))}
+                  className='font-mono'
+                  inputMode='numeric'
+                  placeholder={t('links.channelId')}
+                />
+              )}
             </div>
 
             <div className='flex items-center gap-3'>

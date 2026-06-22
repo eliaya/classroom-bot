@@ -114,6 +114,30 @@ class ClassroomSyncBot(commands.Bot):
     async def _heartbeat(self) -> None:
         connected = self.is_ready() and not self.is_closed()
         await self._write_heartbeat("connected" if connected else "disconnected")
+        # ponytail: refresh inventory on the 60s heartbeat — channels change
+        # rarely and servers are few; add gateway event listeners if that stops
+        # being true.
+        if connected:
+            await self._sync_discord_inventory()
+
+    async def _sync_discord_inventory(self) -> None:
+        """Snapshot the bot's guilds + text channels into the DB for the WebUI."""
+        try:
+            rows = [
+                {
+                    "guild_id": guild.id,
+                    "guild_name": guild.name,
+                    "channel_id": channel.id,
+                    "channel_name": channel.name,
+                }
+                for guild in self.guilds
+                for channel in guild.text_channels
+            ]
+            from src.repositories import discord_inventory
+            async with async_session_factory() as session:
+                await discord_inventory.replace_inventory(session, rows)
+        except Exception:  # noqa: BLE001 — inventory sync must never break the bot
+            logger.warning("Failed to sync Discord guild/channel inventory", exc_info=True)
 
     async def on_disconnect(self) -> None:
         await self._write_heartbeat("disconnected", "gateway disconnect")
@@ -125,6 +149,7 @@ class ClassroomSyncBot(commands.Bot):
         """Invoked when bot establishes session with Discord gateway."""
         logger.info(f"Bot connected successfully! Logged in as: {self.user.name} ({self.user.id})")
         await self._write_heartbeat("connected")
+        await self._sync_discord_inventory()
         
         # Sync slash commands with Discord global catalog
         try:

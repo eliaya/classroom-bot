@@ -38,6 +38,7 @@ function toForm(command: BotCommand | null): BotCommandInput {
     params: command?.params ?? '',
     response: command?.response ?? '',
     enabled: command?.enabled ?? true,
+    group_name: command?.group_name ?? '',
   }
 }
 
@@ -49,6 +50,7 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
   const [error, setError] = useState<string | null>(null)
 
   const isNew = command === null
+  const isBuiltin = command?.kind === 'builtin'
 
   // Slide the panel in on mount. The component is keyed on the selection in the
   // parent, so form state initializes via useState (no reset-in-effect needed).
@@ -64,20 +66,31 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
 
   const handleSave = async () => {
     setError(null)
-    if (!form.name.trim() || !form.response.trim()) {
+    // Builtins have no text response (behavior is code-defined).
+    if (!form.name.trim() || (!isBuiltin && !form.response.trim())) {
       setError(t('botCommands.requiredFields'))
       return
     }
     setSaving(true)
     try {
-      const body: BotCommandInput = {
-        name: form.name.trim(),
-        description: form.description?.trim() || null,
-        trigger: form.trigger?.trim() || '!',
-        params: form.params?.trim() || null,
-        response: form.response,
-        enabled: form.enabled,
-      }
+      // For builtins, only metadata is editable; behavior/params live in code.
+      const body: BotCommandInput = isBuiltin
+        ? {
+            name: form.name.trim(),
+            description: form.description?.trim() || null,
+            group_name: form.group_name?.trim() || null,
+            enabled: form.enabled,
+            response: '',
+          }
+        : {
+            name: form.name.trim(),
+            description: form.description?.trim() || null,
+            trigger: form.trigger?.trim() || '!',
+            params: form.params?.trim() || null,
+            response: form.response,
+            enabled: form.enabled,
+            group_name: form.group_name?.trim() || null,
+          }
       const saved = isNew
         ? await api.createBotCommand(body)
         : await api.updateBotCommand(command!.id, body)
@@ -118,12 +131,30 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
         <div className='flex flex-col gap-4 p-4'>
           {error && <p className='text-sm text-destructive'>{error}</p>}
 
+          {isBuiltin && (
+            <div className='rounded-md border border-dashed p-3 text-xs text-muted-foreground'>
+              {t('botCommands.builtinNote')}
+            </div>
+          )}
+
           <div className='grid gap-2 sm:grid-cols-[100px_1fr] sm:items-center'>
-            <Label htmlFor='bc-trigger'>{t('botCommands.trigger')}</Label>
+            {!isBuiltin && (
+              <>
+                <Label htmlFor='bc-trigger'>{t('botCommands.trigger')}</Label>
+                <Input
+                  id='bc-trigger'
+                  value={form.trigger ?? ''}
+                  onChange={(e) => update('trigger', e.target.value)}
+                  className='font-mono'
+                />
+              </>
+            )}
+            <Label htmlFor='bc-group'>{t('botCommands.group')}</Label>
             <Input
-              id='bc-trigger'
-              value={form.trigger ?? ''}
-              onChange={(e) => update('trigger', e.target.value)}
+              id='bc-group'
+              value={form.group_name ?? ''}
+              onChange={(e) => update('group_name', e.target.value)}
+              placeholder='classroom'
               className='font-mono'
             />
             <Label htmlFor='bc-name'>{t('botCommands.name')}</Label>
@@ -144,21 +175,25 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
             />
           </div>
 
-          <div className='grid gap-2'>
-            <Label htmlFor='bc-response'>{t('botCommands.response')}</Label>
-            <Textarea
-              id='bc-response'
-              value={form.response}
-              onChange={(e) => update('response', e.target.value)}
-              rows={4}
-              placeholder={t('botCommands.responseHint')}
-            />
-          </div>
+          {!isBuiltin && (
+            <div className='grid gap-2'>
+              <Label htmlFor='bc-response'>{t('botCommands.response')}</Label>
+              <Textarea
+                id='bc-response'
+                value={form.response}
+                onChange={(e) => update('response', e.target.value)}
+                rows={4}
+                placeholder={t('botCommands.responseHint')}
+              />
+            </div>
+          )}
 
-          <ParamsEditor
-            value={form.params ?? ''}
-            onChange={(next) => update('params', next || null)}
-          />
+          {!isBuiltin && (
+            <ParamsEditor
+              value={form.params ?? ''}
+              onChange={(next) => update('params', next || null)}
+            />
+          )}
 
           <div className='flex items-center gap-3'>
             <Switch
@@ -173,7 +208,7 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
 
       {/* Footer actions */}
       <div className='flex items-center justify-between gap-2 border-t p-3'>
-        {!isNew ? (
+        {!isNew && !isBuiltin ? (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant='ghost' size='sm' className='text-destructive'>
