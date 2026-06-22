@@ -7,6 +7,7 @@ from discord.ext import commands
 from sqlmodel import select
 
 from src.cogs._api_client import ClassroomApiClient
+from src.cogs._messages import MessageStore
 from src.database import async_session_factory
 from src.google_service import google_service
 from src.models import GuildCourseLink
@@ -83,6 +84,8 @@ class ClassroomCog(commands.Cog):
         # Reads go through the local API (served from the synced SQL DB),
         # never directly to Google.
         self.api = ClassroomApiClient()
+        # WebUI-editable response templates (overrides cached from the shared DB).
+        self.messages = MessageStore()
 
     async def cog_unload(self) -> None:
         await self.api.close()
@@ -112,6 +115,46 @@ class ClassroomCog(commands.Cog):
         if fetch_all:
             return None
         return max(1, min(limit or DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT))
+
+    @staticmethod
+    def _pick_linked_course(links: List[GuildCourseLink]) -> tuple[Optional[str], Optional[str]]:
+        """Resolve a channel's active links to one course_id, else an error message.
+
+        Returns ``(course_id, None)`` on exactly one link, otherwise ``(None, error)``.
+        """
+        if not links:
+            return None, (
+                "❌ **No course linked to this channel.** "
+                "Pass `course_id`, or run `/classroom link` first."
+            )
+        if len(links) > 1:
+            ids = ", ".join(f"`{link.course_id}`" for link in links)
+            return None, (
+                f"⚠️ **This channel links multiple courses** ({ids}). Please pass `course_id`."
+            )
+        return links[0].course_id, None
+
+    async def _resolve_channel_course_id(
+        self, interaction: discord.Interaction, course_id: Optional[str]
+    ) -> Optional[str]:
+        """Return an explicit course_id, or infer it from this channel's active link.
+
+        Sends an error followup and returns None when it can't resolve to one course.
+        """
+        if course_id:
+            return course_id
+        async with async_session_factory() as session:
+            stmt = select(GuildCourseLink).where(
+                GuildCourseLink.guild_id == interaction.guild_id,
+                GuildCourseLink.channel_id == interaction.channel_id,
+                GuildCourseLink.is_active == True,  # noqa: E712
+            )
+            res = await session.execute(stmt)
+            links = res.scalars().all()
+        resolved, error = self._pick_linked_course(list(links))
+        if error:
+            await interaction.followup.send(error, ephemeral=True)
+        return resolved
 
     async def _send_embed_pages(
         self,
@@ -151,7 +194,7 @@ class ClassroomCog(commands.Cog):
             courses = await self.api.list_courses()
             if not courses:
                 await interaction.followup.send(
-                    "📭 **No cached courses found.** Run sync in the web admin (POST /api/sync) first.",
+                    await self.messages.render("courses.empty"),
                     ephemeral=True
                 )
                 return
@@ -239,7 +282,7 @@ class ClassroomCog(commands.Cog):
             rows = await self.api.list_announcements(course_id, limit=resolved_limit)
             if not rows:
                 await interaction.followup.send(
-                    f"📭 **No announcements found** for **{course.get('name')}**.",
+                    await self.messages.render("announcements.empty", course_name=course.get("name")),
                     ephemeral=True
                 )
                 return
@@ -269,7 +312,7 @@ class ClassroomCog(commands.Cog):
 
     @classroom.command(name="coursework", description="List coursework items from a Google Classroom course.")
     @app_commands.describe(
-        course_id="The unique ID of the Classroom course",
+        course_id="Classroom course ID. Omit to use the course linked to this channel.",
         limit="How many coursework items to show (1-100). Ignored when fetch_all is true.",
         fetch_all="Fetch every coursework item from Classroom, not just the latest page."
     )
@@ -277,11 +320,16 @@ class ClassroomCog(commands.Cog):
     async def list_coursework(
         self,
         interaction: discord.Interaction,
-        course_id: str,
+        course_id: Optional[str] = None,
         limit: Optional[int] = DEFAULT_LIST_LIMIT,
         fetch_all: bool = False,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
+
+        course_id = await self._resolve_channel_course_id(interaction, course_id)
+        if course_id is None:
+            return  # resolver already sent the error followup
+
         resolved_limit = self._resolve_list_limit(limit, fetch_all)
 
         try:
@@ -295,7 +343,7 @@ class ClassroomCog(commands.Cog):
             coursework_items = await self.api.list_coursework(course_id, limit=resolved_limit)
             if not coursework_items:
                 await interaction.followup.send(
-                    f"📭 **No coursework found** for **{course.get('name')}**.",
+                    await self.messages.render("coursework.empty", course_name=course.get("name")),
                     ephemeral=True
                 )
                 return
@@ -350,7 +398,7 @@ class ClassroomCog(commands.Cog):
             todo_items = await self.api.list_pending_todos()
             if not todo_items:
                 await interaction.followup.send(
-                    "✅ **No not-turned-in items found.** There is currently no pending coursework in the synced cache.",
+                    await self.messages.render("todo.empty"),
                     ephemeral=True
                 )
                 return
@@ -411,7 +459,7 @@ class ClassroomCog(commands.Cog):
             course = await self.api.get_course(course_id)
             if not course:
                 await interaction.followup.send(
-                    f"❌ **Invalid Course ID:** `{course_id}` not found in cache. Run web sync first.",
+                    await self.messages.render("link.invalid_course", course_id=course_id),
                     ephemeral=True
                 )
                 return
@@ -429,7 +477,9 @@ class ClassroomCog(commands.Cog):
                     existing.channel_id = channel.id
                     existing.is_active = True
                     session.add(existing)
-                    msg = f"🔄 **Updated Link:** Course **{course_name}** (`{course_id}`) is now mapped to {channel.mention}."
+                    msg = await self.messages.render(
+                        "link.updated", course_name=course_name, course_id=course_id, channel=channel.mention
+                    )
                 else:
                     # New mapping
                     new_link = GuildCourseLink(
@@ -439,7 +489,9 @@ class ClassroomCog(commands.Cog):
                         is_active=True
                     )
                     session.add(new_link)
-                    msg = f"✅ **Successfully Linked:** Updates for Course **{course_name}** (`{course_id}`) will post to {channel.mention}!"
+                    msg = await self.messages.render(
+                        "link.created", course_name=course_name, course_id=course_id, channel=channel.mention
+                    )
 
                 await session.commit()
             
@@ -477,7 +529,7 @@ class ClassroomCog(commands.Cog):
                 await session.commit()
 
             await interaction.followup.send(
-                f"🗑️ **Successfully Unlinked:** Synchronization has been deactivated and removed for Course ID `{course_id}`.",
+                await self.messages.render("unlink.success", course_id=course_id),
                 ephemeral=True
             )
             logger.info(f"Guild {interaction.guild_id} unlinked Course '{course_id}'")
@@ -500,7 +552,7 @@ class ClassroomCog(commands.Cog):
 
                 if not links:
                     await interaction.followup.send(
-                        "📭 **No integrations active:** There are no courses linked to this Discord server.",
+                        await self.messages.render("list.empty"),
                         ephemeral=True
                     )
                     return
@@ -582,14 +634,14 @@ class ClassroomCog(commands.Cog):
                     await session.commit()
                 mode = "backfill" if backfill else "incremental"
                 await interaction.followup.send(
-                    f"🔄 **Sync Finished!** Completed a {mode} sync for Course ID `{course_id}`.",
+                    await self.messages.render("sync.course_done", mode=mode, course_id=course_id),
                     ephemeral=True,
                 )
             else:
                 await sync_service.sync_all_links(backfill=backfill)
                 mode = "backfill" if backfill else "incremental"
                 await interaction.followup.send(
-                    f"🔄 **Global Sync Completed:** Finished a {mode} sync across all registered course links.",
+                    await self.messages.render("sync.global_done", mode=mode),
                     ephemeral=True,
                 )
 

@@ -327,6 +327,25 @@ class BotCommand(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class BotMessage(SQLModel, table=True):
+    """A WebUI-editable override for a built-in bot response template.
+
+    Only *overridden* messages are stored here; the in-code defaults in
+    ``src/message_templates.py`` remain the source of truth and fallback. The
+    bot renders ``template`` with ``str.format`` using each message's documented
+    placeholders.
+    """
+    __tablename__ = "bot_messages"
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_bot_message_key"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key: str = Field(index=True)  # registry key, e.g. "coursework.empty"
+    template: str  # override text, supports {placeholder} interpolation
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class AuditLog(SQLModel, table=True):
     """Append-only audit trail of system operations.
 

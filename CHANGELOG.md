@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-22
+
+Web app bumped to 2.3.0.
+
+### Added
+- Channel link management in the WebUI: full CRUD for course↔channel links (`guild_course_links`) via `GET/POST /api/links` and `PATCH/DELETE /api/links/{id}`. The bot reads the same table live, so links created/edited in the WebUI take effect on Discord immediately (no restart). Course existence is validated against the cache and duplicate links are rejected (409).
+- Editable bot response templates: built-in `/classroom` status messages (empty-states, link/unlink confirmations, sync-done) can be customized in the WebUI. Defaults live in `src/message_templates.py` and remain the fallback; only overrides are stored (`bot_messages` table). `GET /api/bot/messages`, `PUT /api/bot/messages/{key}` (validates placeholders → 422), `DELETE /api/bot/messages/{key}` (revert). The bot refreshes overrides within 30 s.
+- `/classroom coursework` now accepts an optional `course_id`: when omitted in a linked channel it resolves the course from that channel's active link (clear errors when zero or multiple links exist).
+- Unified "Discord bot" WebUI page (`/bot`) consolidating Channel links, Bot commands and Bot messages into a single tabbed view; replaces the three separate sidebar entries.
+
+### Changed
+- Sync Job notification (`NotificationPopUp`) now appears for *every* sync, including background/cron-started runs. The status watcher is persistent (no longer self-stops when idle) and polls fast while running (1.5 s) / calmly when idle (5 s). The Settings page "Run Now" button now nudges the watcher for instant feedback, matching the Sync page.
+
+### Notes
+- New `bot_messages` table is created automatically on API startup via `init_db` (no migration). DB schema is otherwise unchanged.
+- The WebUI cannot resolve Discord channel names (no gateway access), so channel links display/accept the numeric channel ID.
+
 ## [0.9.6] - 2026-06-20
 
 ### Added

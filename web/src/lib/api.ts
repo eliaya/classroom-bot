@@ -105,6 +105,34 @@ export type BotCommandInput = {
   enabled?: boolean
 }
 
+/** A Discord course↔channel link (mirrors the bot's `/classroom link`). */
+export type Link = {
+  id: number
+  guild_id: number
+  course_id: string
+  course_name?: string | null
+  channel_id: number
+  is_active: boolean
+  last_sync_announcement?: string | null
+  last_sync_coursework?: string | null
+}
+
+export type LinkInput = {
+  guild_id: number
+  course_id: string
+  channel_id: number
+  is_active?: boolean
+}
+
+/** A built-in bot response template (default merged with any WebUI override). */
+export type BotMessage = {
+  key: string
+  default: string
+  description: string
+  template: string
+  overridden: boolean
+}
+
 export type Topic = { id?: string; name?: string; [k: string]: unknown }
 
 export type Attachment = {
@@ -295,6 +323,36 @@ export const api = {
     request<{ status: string; id: number }>(`/bot/commands/${id}`, {
       method: 'DELETE',
     }),
+  listLinks: (guildId?: number) =>
+    request<{ items: Link[]; total: number }>(
+      guildId != null ? `/links?guild_id=${guildId}` : '/links'
+    ),
+  createLink: (body: LinkInput) =>
+    request<Link>('/links', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateLink: (id: number, body: Partial<Pick<LinkInput, 'channel_id' | 'is_active'>>) =>
+    request<Link>(`/links/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteLink: (id: number) =>
+    request<{ status: string; id: number }>(`/links/${id}`, {
+      method: 'DELETE',
+    }),
+  listBotMessages: () =>
+    request<{ items: BotMessage[]; total: number }>('/bot/messages'),
+  setBotMessage: (key: string, template: string) =>
+    request<{ key: string; template: string; overridden: boolean }>(
+      `/bot/messages/${encodeURIComponent(key)}`,
+      { method: 'PUT', body: JSON.stringify({ template }) }
+    ),
+  resetBotMessage: (key: string) =>
+    request<{ key: string; template: string; overridden: boolean }>(
+      `/bot/messages/${encodeURIComponent(key)}`,
+      { method: 'DELETE' }
+    ),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
   updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>
     request<SchedulerStatus>('/scheduler', {

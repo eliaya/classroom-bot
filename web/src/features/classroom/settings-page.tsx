@@ -27,6 +27,7 @@ import { Main } from '@/components/layout/main'
 import { useLocale } from '@/context/locale-provider'
 import { api, type AuditRetentionStatus, type SchedulerStatus } from '@/lib/api'
 import { type Locale, SUPPORTED_LOCALES } from '@/lib/i18n'
+import { useSyncStatusStore } from '@/stores/sync-status-store'
 import { ClassroomHeader } from './layout-header'
 
 type GoogleDetail = {
@@ -159,6 +160,8 @@ export function ClassroomSettingsPage() {
     setSchedulerMsg(null)
     try {
       await api.triggerSync()
+      // Nudge the global watcher so the notification pops immediately.
+      useSyncStatusStore.getState().startPolling()
       setSchedulerMsg(t('settings.syncTriggered'))
     } catch (e) {
       setSchedulerMsg(e instanceof Error ? e.message : t('settings.triggerFailed'))

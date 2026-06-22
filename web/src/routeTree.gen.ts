@@ -17,7 +17,6 @@ import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors403RouteImport } from './routes/(errors)/403'
 import { Route as errors401RouteImport } from './routes/(errors)/401'
 import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
-import { Route as authSignIn2RouteImport } from './routes/(auth)/sign-in-2'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as authOtpRouteImport } from './routes/(auth)/otp'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
@@ -27,7 +26,7 @@ import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSearchIndexRouteImport } from './routes/_authenticated/search/index'
 import { Route as AuthenticatedCoursesIndexRouteImport } from './routes/_authenticated/courses/index'
-import { Route as AuthenticatedBotCommandsIndexRouteImport } from './routes/_authenticated/bot-commands/index'
+import { Route as AuthenticatedBotIndexRouteImport } from './routes/_authenticated/bot/index'
 import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authenticated/audit/index'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedCoursesCourseIdRouteRouteImport } from './routes/_authenticated/courses/$courseId/route'
@@ -73,11 +72,6 @@ const errors401Route = errors401RouteImport.update({
 const authSignUpRoute = authSignUpRouteImport.update({
   id: '/(auth)/sign-up',
   path: '/sign-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const authSignIn2Route = authSignIn2RouteImport.update({
-  id: '/(auth)/sign-in-2',
-  path: '/sign-in-2',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authSignInRoute = authSignInRouteImport.update({
@@ -129,12 +123,11 @@ const AuthenticatedCoursesIndexRoute =
     path: '/courses/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedBotCommandsIndexRoute =
-  AuthenticatedBotCommandsIndexRouteImport.update({
-    id: '/bot-commands/',
-    path: '/bot-commands/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
+const AuthenticatedBotIndexRoute = AuthenticatedBotIndexRouteImport.update({
+  id: '/bot/',
+  path: '/bot/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAuditIndexRoute = AuthenticatedAuditIndexRouteImport.update({
   id: '/audit/',
   path: '/audit/',
@@ -183,7 +176,6 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
   '/sign-in': typeof authSignInRoute
-  '/sign-in-2': typeof authSignIn2Route
   '/sign-up': typeof authSignUpRoute
   '/401': typeof errors401Route
   '/403': typeof errors403Route
@@ -193,7 +185,7 @@ export interface FileRoutesByFullPath {
   '/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/audit/': typeof AuthenticatedAuditIndexRoute
-  '/bot-commands/': typeof AuthenticatedBotCommandsIndexRoute
+  '/bot/': typeof AuthenticatedBotIndexRoute
   '/courses/': typeof AuthenticatedCoursesIndexRoute
   '/search/': typeof AuthenticatedSearchIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -208,7 +200,6 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
   '/sign-in': typeof authSignInRoute
-  '/sign-in-2': typeof authSignIn2Route
   '/sign-up': typeof authSignUpRoute
   '/401': typeof errors401Route
   '/403': typeof errors403Route
@@ -218,7 +209,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/audit': typeof AuthenticatedAuditIndexRoute
-  '/bot-commands': typeof AuthenticatedBotCommandsIndexRoute
+  '/bot': typeof AuthenticatedBotIndexRoute
   '/courses': typeof AuthenticatedCoursesIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
@@ -236,7 +227,6 @@ export interface FileRoutesById {
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
   '/(auth)/otp': typeof authOtpRoute
   '/(auth)/sign-in': typeof authSignInRoute
-  '/(auth)/sign-in-2': typeof authSignIn2Route
   '/(auth)/sign-up': typeof authSignUpRoute
   '/(errors)/401': typeof errors401Route
   '/(errors)/403': typeof errors403Route
@@ -247,7 +237,7 @@ export interface FileRoutesById {
   '/_authenticated/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/audit/': typeof AuthenticatedAuditIndexRoute
-  '/_authenticated/bot-commands/': typeof AuthenticatedBotCommandsIndexRoute
+  '/_authenticated/bot/': typeof AuthenticatedBotIndexRoute
   '/_authenticated/courses/': typeof AuthenticatedCoursesIndexRoute
   '/_authenticated/search/': typeof AuthenticatedSearchIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -266,7 +256,6 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/otp'
     | '/sign-in'
-    | '/sign-in-2'
     | '/sign-up'
     | '/401'
     | '/403'
@@ -276,7 +265,7 @@ export interface FileRouteTypes {
     | '/courses/$courseId'
     | '/errors/$error'
     | '/audit/'
-    | '/bot-commands/'
+    | '/bot/'
     | '/courses/'
     | '/search/'
     | '/settings/'
@@ -291,7 +280,6 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/otp'
     | '/sign-in'
-    | '/sign-in-2'
     | '/sign-up'
     | '/401'
     | '/403'
@@ -301,7 +289,7 @@ export interface FileRouteTypes {
     | '/'
     | '/errors/$error'
     | '/audit'
-    | '/bot-commands'
+    | '/bot'
     | '/courses'
     | '/search'
     | '/settings'
@@ -318,7 +306,6 @@ export interface FileRouteTypes {
     | '/(auth)/forgot-password'
     | '/(auth)/otp'
     | '/(auth)/sign-in'
-    | '/(auth)/sign-in-2'
     | '/(auth)/sign-up'
     | '/(errors)/401'
     | '/(errors)/403'
@@ -329,7 +316,7 @@ export interface FileRouteTypes {
     | '/_authenticated/courses/$courseId'
     | '/_authenticated/errors/$error'
     | '/_authenticated/audit/'
-    | '/_authenticated/bot-commands/'
+    | '/_authenticated/bot/'
     | '/_authenticated/courses/'
     | '/_authenticated/search/'
     | '/_authenticated/settings/'
@@ -346,7 +333,6 @@ export interface RootRouteChildren {
   authForgotPasswordRoute: typeof authForgotPasswordRoute
   authOtpRoute: typeof authOtpRoute
   authSignInRoute: typeof authSignInRoute
-  authSignIn2Route: typeof authSignIn2Route
   authSignUpRoute: typeof authSignUpRoute
   errors401Route: typeof errors401Route
   errors403Route: typeof errors403Route
@@ -413,13 +399,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authSignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(auth)/sign-in-2': {
-      id: '/(auth)/sign-in-2'
-      path: '/sign-in-2'
-      fullPath: '/sign-in-2'
-      preLoaderRoute: typeof authSignIn2RouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/(auth)/sign-in': {
       id: '/(auth)/sign-in'
       path: '/sign-in'
@@ -483,11 +462,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCoursesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/bot-commands/': {
-      id: '/_authenticated/bot-commands/'
-      path: '/bot-commands'
-      fullPath: '/bot-commands/'
-      preLoaderRoute: typeof AuthenticatedBotCommandsIndexRouteImport
+    '/_authenticated/bot/': {
+      id: '/_authenticated/bot/'
+      path: '/bot'
+      fullPath: '/bot/'
+      preLoaderRoute: typeof AuthenticatedBotIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/audit/': {
@@ -586,7 +565,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCoursesCourseIdRouteRoute: typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedAuditIndexRoute: typeof AuthenticatedAuditIndexRoute
-  AuthenticatedBotCommandsIndexRoute: typeof AuthenticatedBotCommandsIndexRoute
+  AuthenticatedBotIndexRoute: typeof AuthenticatedBotIndexRoute
   AuthenticatedCoursesIndexRoute: typeof AuthenticatedCoursesIndexRoute
   AuthenticatedSearchIndexRoute: typeof AuthenticatedSearchIndexRoute
   AuthenticatedSyncIndexRoute: typeof AuthenticatedSyncIndexRoute
@@ -600,7 +579,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedCoursesCourseIdRouteRouteWithChildren,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedAuditIndexRoute: AuthenticatedAuditIndexRoute,
-  AuthenticatedBotCommandsIndexRoute: AuthenticatedBotCommandsIndexRoute,
+  AuthenticatedBotIndexRoute: AuthenticatedBotIndexRoute,
   AuthenticatedCoursesIndexRoute: AuthenticatedCoursesIndexRoute,
   AuthenticatedSearchIndexRoute: AuthenticatedSearchIndexRoute,
   AuthenticatedSyncIndexRoute: AuthenticatedSyncIndexRoute,
@@ -615,7 +594,6 @@ const rootRouteChildren: RootRouteChildren = {
   authForgotPasswordRoute: authForgotPasswordRoute,
   authOtpRoute: authOtpRoute,
   authSignInRoute: authSignInRoute,
-  authSignIn2Route: authSignIn2Route,
   authSignUpRoute: authSignUpRoute,
   errors401Route: errors401Route,
   errors403Route: errors403Route,
