@@ -7,6 +7,7 @@ from discord.ext import commands
 from sqlmodel import select
 
 from src.cogs._api_client import ClassroomApiClient
+from src.cogs._config import CommandConfigStore
 from src.cogs._messages import MessageStore
 from src.database import async_session_factory
 from src.google_service import google_service
@@ -86,6 +87,8 @@ class ClassroomCog(commands.Cog):
         self.api = ClassroomApiClient()
         # WebUI-editable response templates (overrides cached from the shared DB).
         self.messages = MessageStore()
+        # WebUI-editable per-command config (e.g. default item limit).
+        self.config = CommandConfigStore()
 
     async def cog_unload(self) -> None:
         await self.api.close()
@@ -200,20 +203,22 @@ class ClassroomCog(commands.Cog):
                 return
 
             embed = discord.Embed(
-                title="🏫 Cached Google Classroom Courses",
-                description="Use the **Course ID** below to link any course to a channel.",
+                title=await self.messages.render("courses.title"),
+                description=await self.messages.render("courses.header"),
                 color=0x137333
             )
 
             for course in courses[:25]:
                 url = course.get("alternate_link") or ""
                 section = course.get("section") or "No section"
+                link_line = f"\n🔗 [Class URL]({url})" if url else ""
                 embed.add_field(
                     name=course.get("name"),
-                    value=(
-                        f"ID: `{course.get('id')}`\n"
-                        f"Section: *{section}*\n"
-                        f"🔗 [Class URL]({url})" if url else f"ID: `{course.get('id')}`\nSection: *{section}*"
+                    value=await self.messages.render(
+                        "courses.item",
+                        course_id=course.get("id"),
+                        section=section,
+                        link_line=link_line,
                     ),
                     inline=True
                 )
@@ -240,15 +245,27 @@ class ClassroomCog(commands.Cog):
                 return
 
             embed = discord.Embed(
-                title=f"🏫 {course.get('name')}",
+                title=await self.messages.render("course.title", course_name=course.get("name")),
                 description=self._truncate(course.get("section") or "", 300),
                 color=0x137333,
                 url=course.get("alternate_link")
             )
-            embed.add_field(name="Course ID", value=f"`{course.get('id')}`", inline=False)
-            embed.add_field(name="Section", value=course.get("section") or "No section", inline=True)
-            embed.add_field(name="Owner", value=course.get("owner_id") or "Unavailable", inline=False)
-            embed.add_field(name="State", value=course.get("state") or "UNKNOWN", inline=True)
+            embed.add_field(
+                name=await self.messages.render("course.field_id"),
+                value=f"`{course.get('id')}`", inline=False
+            )
+            embed.add_field(
+                name=await self.messages.render("course.field_section"),
+                value=course.get("section") or "No section", inline=True
+            )
+            embed.add_field(
+                name=await self.messages.render("course.field_owner"),
+                value=course.get("owner_id") or "Unavailable", inline=False
+            )
+            embed.add_field(
+                name=await self.messages.render("course.field_state"),
+                value=course.get("state") or "UNKNOWN", inline=True
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             logger.error(f"Failed fetching course details for '{course_id}': {e}")
@@ -265,11 +282,14 @@ class ClassroomCog(commands.Cog):
         self,
         interaction: discord.Interaction,
         course_id: str,
-        limit: Optional[int] = DEFAULT_LIST_LIMIT,
+        limit: Optional[int] = None,
         fetch_all: bool = False,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        resolved_limit = self._resolve_list_limit(limit, fetch_all)
+        effective = limit if limit is not None else await self.config.limit_for(
+            "announcements", DEFAULT_LIST_LIMIT
+        )
+        resolved_limit = self._resolve_list_limit(effective, fetch_all)
 
         try:
             course = await self.api.get_course(course_id)
@@ -290,9 +310,10 @@ class ClassroomCog(commands.Cog):
             field_builders = [
                 (
                     (row.get("text") or "Untitled Announcement").splitlines()[0][:80] or "Announcement",
-                    (
-                        f"{self._truncate(row.get('text') or '', 220)}\n"
-                        f"Updated: `{row.get('update_time') or 'Unknown'}`"
+                    await self.messages.render(
+                        "announcements.item",
+                        text=self._truncate(row.get("text") or "", 220),
+                        updated=row.get("update_time") or "Unknown",
                     ),
                 )
                 for row in rows
@@ -301,8 +322,8 @@ class ClassroomCog(commands.Cog):
 
             await self._send_embed_pages(
                 interaction,
-                title=f"📢 Announcements • {course.get('name')}",
-                description=f"Showing {count_label} announcement(s), newest first.",
+                title=await self.messages.render("announcements.title", course_name=course.get("name")),
+                description=await self.messages.render("announcements.header", count=count_label),
                 color=0x137333,
                 field_builders=field_builders,
             )
@@ -321,7 +342,7 @@ class ClassroomCog(commands.Cog):
         self,
         interaction: discord.Interaction,
         course_id: Optional[str] = None,
-        limit: Optional[int] = DEFAULT_LIST_LIMIT,
+        limit: Optional[int] = None,
         fetch_all: bool = False,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -330,7 +351,10 @@ class ClassroomCog(commands.Cog):
         if course_id is None:
             return  # resolver already sent the error followup
 
-        resolved_limit = self._resolve_list_limit(limit, fetch_all)
+        effective = limit if limit is not None else await self.config.limit_for(
+            "coursework", DEFAULT_LIST_LIMIT
+        )
+        resolved_limit = self._resolve_list_limit(effective, fetch_all)
 
         try:
             course = await self.api.get_course(course_id)
@@ -358,11 +382,12 @@ class ClassroomCog(commands.Cog):
                 field_builders.append(
                     (
                         (item.get("title") or "Untitled Coursework")[:80],
-                        (
-                            f"{self._truncate(item.get('description') or '', 180)}\n"
-                            f"Due: `{due_text}`\n"
-                            f"Grade: `{grade_text}`\n"
-                            f"Updated: `{item.get('update_time') or 'Unknown'}`"
+                        await self.messages.render(
+                            "coursework.item",
+                            description=self._truncate(item.get("description") or "", 180),
+                            due=due_text,
+                            grade=grade_text,
+                            updated=item.get("update_time") or "Unknown",
                         ),
                     )
                 )
@@ -370,8 +395,8 @@ class ClassroomCog(commands.Cog):
             count_label = "all" if fetch_all else str(len(coursework_items))
             await self._send_embed_pages(
                 interaction,
-                title=f"📝 Coursework • {course.get('name')}",
-                description=f"Showing {count_label} coursework item(s), newest first.",
+                title=await self.messages.render("coursework.title", course_name=course.get("name")),
+                description=await self.messages.render("coursework.header", count=count_label),
                 color=0xf59e0b,
                 field_builders=field_builders,
             )
@@ -388,11 +413,14 @@ class ClassroomCog(commands.Cog):
     async def list_todo(
         self,
         interaction: discord.Interaction,
-        limit: Optional[int] = DEFAULT_LIST_LIMIT,
+        limit: Optional[int] = None,
         fetch_all: bool = False,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        resolved_limit = self._resolve_list_limit(limit, fetch_all)
+        effective = limit if limit is not None else await self.config.limit_for(
+            "todo", DEFAULT_LIST_LIMIT
+        )
+        resolved_limit = self._resolve_list_limit(effective, fetch_all)
 
         try:
             todo_items = await self.api.list_pending_todos()
@@ -416,25 +444,26 @@ class ClassroomCog(commands.Cog):
                 title = (item.get("title") or "Untitled Coursework")[:80]
                 course_id = item.get("course_id")
                 course_name = course_names.get(course_id, "Unknown Course")
-                status_bits = [
-                    f"Due: `{item.get('due_date') or 'No due date'}`",
-                    f"State: `{item.get('status') or 'UNKNOWN'}`",
-                ]
-                value = (
-                    f"**Course:** {course_name} (`{course_id}`)\n"
-                    f"{' • '.join(status_bits)}"
+                link_line = (
+                    f"\n[Open in Classroom]({item['course_work_link']})"
+                    if item.get("course_work_link") else ""
                 )
-                if item.get("course_work_link"):
-                    value += f"\n[Open in Classroom]({item['course_work_link']})"
+                value = await self.messages.render(
+                    "todo.item",
+                    course_name=course_name,
+                    course_id=course_id,
+                    due=item.get("due_date") or "No due date",
+                    state=item.get("status") or "UNKNOWN",
+                    link_line=link_line,
+                )
                 field_builders.append((title, value))
 
             count_label = "all" if fetch_all else str(len(visible_items))
             await self._send_embed_pages(
                 interaction,
-                title="📚 Google Classroom To-do",
-                description=(
-                    f"Showing {count_label} pending item(s) out of {len(todo_items)} total.\n"
-                    f"Served from the local synced cache (the `not-turned-in` view)."
+                title=await self.messages.render("todo.title"),
+                description=await self.messages.render(
+                    "todo.header", count=count_label, total=len(todo_items)
                 ),
                 color=0xE65100,
                 field_builders=field_builders,
@@ -558,7 +587,7 @@ class ClassroomCog(commands.Cog):
                     return
 
                 embed = discord.Embed(
-                    title="🔗 Connected Google Classroom Integrations",
+                    title=await self.messages.render("list.title"),
                     color=0x137333
                 )
 
@@ -566,18 +595,19 @@ class ClassroomCog(commands.Cog):
                     channel = self.bot.get_channel(link.channel_id)
                     chan_text = channel.mention if channel else f"Channel ID `{link.channel_id}`"
                     status = "✅ Active" if link.is_active else "❌ Disabled"
-                    
+
                     cached = await self.api.get_course(link.course_id)
                     name = cached.get("name") if cached else "Unknown Course"
-                    
+
                     embed.add_field(
-                        name=f"🏫 {name}",
-                        value=(
-                            f"**Course ID:** `{link.course_id}`\n"
-                            f"**Channel:** {chan_text}\n"
-                            f"**Status:** {status}\n"
-                            f"**Last Sync Announcement:** `{link.last_sync_announcement or 'None'}`\n"
-                            f"**Last Sync Coursework:** `{link.last_sync_coursework or 'None'}`"
+                        name=await self.messages.render("list.item_name", course_name=name),
+                        value=await self.messages.render(
+                            "list.item",
+                            course_id=link.course_id,
+                            channel=chan_text,
+                            status=status,
+                            last_announcement=link.last_sync_announcement or "None",
+                            last_coursework=link.last_sync_coursework or "None",
                         ),
                         inline=False
                     )

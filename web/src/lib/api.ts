@@ -96,6 +96,8 @@ export type BotCommand = {
   handler_key?: string | null
   /** Slash group prefix, e.g. "classroom". Null = top-level `/name`. */
   group_name?: string | null
+  /** Default item cap for list commands (coursework/announcements/todo); null = system default (10). */
+  default_limit?: number | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -109,6 +111,7 @@ export type BotCommandInput = {
   response: string
   enabled?: boolean
   group_name?: string | null
+  default_limit?: number | null
 }
 
 /** A Discord course↔channel link (mirrors the bot's `/classroom link`). */
@@ -119,6 +122,8 @@ export type Link = {
   course_id: string
   course_name?: string | null
   channel_id: string
+  /** Optional role pinged in the channel when new items are posted. */
+  notify_role_id?: string | null
   is_active: boolean
   last_sync_announcement?: string | null
   last_sync_coursework?: string | null
@@ -128,6 +133,7 @@ export type LinkInput = {
   guild_id: string
   course_id: string
   channel_id: string
+  notify_role_id?: string | null
   is_active?: boolean
 }
 
@@ -137,6 +143,14 @@ export type DiscordChannel = {
   guild_name: string
   channel_id: string
   channel_name: string
+}
+
+/** A reverse-synced Discord role (bot writes these; empty if bot offline). */
+export type DiscordRole = {
+  guild_id: string
+  guild_name: string
+  role_id: string
+  role_name: string
 }
 
 /** A WebUI-editable bot response template (DB is the source of truth). */
@@ -351,12 +365,17 @@ export const api = {
     ),
   listDiscordChannels: () =>
     request<{ items: DiscordChannel[]; total: number }>('/discord/channels'),
+  listDiscordRoles: () =>
+    request<{ items: DiscordRole[]; total: number }>('/discord/roles'),
   createLink: (body: LinkInput) =>
     request<Link>('/links', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateLink: (id: number, body: Partial<Pick<LinkInput, 'channel_id' | 'is_active'>>) =>
+  updateLink: (
+    id: number,
+    body: Partial<Pick<LinkInput, 'channel_id' | 'notify_role_id' | 'is_active'>>
+  ) =>
     request<Link>(`/links/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),

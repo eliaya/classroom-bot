@@ -29,3 +29,18 @@ async def list_channels(session: AsyncSession = Depends(get_db_session)) -> dict
         for c in await repo.list_channels(session)
     ]
     return {"items": items, "total": len(items)}
+
+
+@router.get("/roles")
+async def list_roles(session: AsyncSession = Depends(get_db_session)) -> dict:
+    items = [
+        {
+            # Snowflakes as strings: JS Number can't hold 64-bit IDs losslessly.
+            "guild_id": str(r.guild_id),
+            "guild_name": r.guild_name,
+            "role_id": str(r.role_id),
+            "role_name": r.role_name,
+        }
+        for r in await repo.list_roles(session)
+    ]
+    return {"items": items, "total": len(items)}

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { CommandMessages } from './command-messages'
 import { ParamsEditor } from './params-editor'
 import {
   AlertDialog,
@@ -39,6 +40,7 @@ function toForm(command: BotCommand | null): BotCommandInput {
     response: command?.response ?? '',
     enabled: command?.enabled ?? true,
     group_name: command?.group_name ?? '',
+    default_limit: command?.default_limit ?? null,
   }
 }
 
@@ -81,6 +83,7 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
             group_name: form.group_name?.trim() || null,
             enabled: form.enabled,
             response: '',
+            default_limit: form.default_limit ?? null,
           }
         : {
             name: form.name.trim(),
@@ -90,6 +93,7 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
             response: form.response,
             enabled: form.enabled,
             group_name: form.group_name?.trim() || null,
+            default_limit: form.default_limit ?? null,
           }
       const saved = isNew
         ? await api.createBotCommand(body)
@@ -195,6 +199,22 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
             />
           )}
 
+          <div className='grid gap-2'>
+            <Label htmlFor='bc-limit'>{t('botCommands.defaultLimit')}</Label>
+            <Input
+              id='bc-limit'
+              type='number'
+              min={1}
+              max={100}
+              value={form.default_limit ?? ''}
+              onChange={(e) =>
+                update('default_limit', e.target.value ? Number(e.target.value) : null)
+              }
+              placeholder={t('botCommands.defaultLimitPlaceholder')}
+            />
+            <p className='text-muted-foreground text-xs'>{t('botCommands.defaultLimitHint')}</p>
+          </div>
+
           <div className='flex items-center gap-3'>
             <Switch
               id='bc-enabled'
@@ -203,6 +223,10 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
             />
             <Label htmlFor='bc-enabled'>{t('botCommands.enabled')}</Label>
           </div>
+
+          {/* Response templates keyed `<command>.*` are edited here, in the
+              command they belong to (e.g. `sync.*` under the sync command). */}
+          {!isNew && command && <CommandMessages commandName={command.name} />}
         </div>
       </ScrollArea>
 

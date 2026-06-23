@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import discord
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -75,8 +75,11 @@ class ClassroomSyncService:
                 return
 
         course_name = course.name
-        await self._sync_announcements(session, link, channel, course_name, backfill=backfill)
-        await self._sync_coursework(session, link, channel, course_name, backfill=backfill)
+        # Ping the link's notify role (if any) so channel members get a real
+        # notification — embeds alone don't trigger one.
+        mention = f"<@&{link.notify_role_id}>" if link.notify_role_id else None
+        await self._sync_announcements(session, link, channel, course_name, mention, backfill=backfill)
+        await self._sync_coursework(session, link, channel, course_name, mention, backfill=backfill)
 
     async def _is_already_posted(self, session: AsyncSession, item_id: str, guild_id: int) -> bool:
         exists_stmt = select(PostedAnnouncement).where(
@@ -92,6 +95,7 @@ class ClassroomSyncService:
         link: GuildCourseLink,
         channel: Any,
         course_name: str,
+        mention: Optional[str] = None,
         *,
         backfill: bool = False,
     ) -> None:
@@ -134,7 +138,11 @@ class ClassroomSyncService:
         for new_ann in new_posts:
             try:
                 embed = EmbedBuilder.build_announcement_embed(course_name, new_ann)
-                await channel.send(embed=embed)
+                await channel.send(
+                    content=mention,
+                    embed=embed,
+                    allowed_mentions=discord.AllowedMentions(roles=True),
+                )
                 session.add(PostedAnnouncement(
                     announcement_id=new_ann["id"],
                     course_id=link.course_id,
@@ -154,6 +162,7 @@ class ClassroomSyncService:
         link: GuildCourseLink,
         channel: Any,
         course_name: str,
+        mention: Optional[str] = None,
         *,
         backfill: bool = False,
     ) -> None:
@@ -196,7 +205,11 @@ class ClassroomSyncService:
         for cw_item in new_items:
             try:
                 embed = EmbedBuilder.build_coursework_embed(course_name, cw_item)
-                await channel.send(embed=embed)
+                await channel.send(
+                    content=mention,
+                    embed=embed,
+                    allowed_mentions=discord.AllowedMentions(roles=True),
+                )
                 session.add(PostedAnnouncement(
                     announcement_id=cw_item["id"],
                     course_id=link.course_id,

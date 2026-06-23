@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-06-23
+
+Web app bumped to 2.5.0.
+
+### Added
+- Per-channel notify role: a course↔channel link can now ping a Discord role when new announcements/coursework are posted (embeds alone don't notify anyone). New `GuildCourseLink.notify_role_id`, a reverse-synced `DiscordRole` inventory (bot snapshots mentionable roles, excluding @everyone/managed) exposed at `GET /api/discord/roles`, and a role dropdown in the link panel (falls back to manual ID entry when the bot is offline). The sync posts `content="<@&role>"` with `allowed_mentions(roles=True)`. Requires the role be mentionable or the bot to hold the "Mention @everyone, @here, and All Roles" permission.
+- Per-command default item limit: each `/classroom` list command (coursework/announcements/todo) has an editable `default_limit` (`bot_commands.default_limit`), surfaced as a number field in the command detail panel. The bot reads it via a cached `CommandConfigStore`; an explicit `limit:` argument still overrides, and an empty value reverts to the system default (10).
+- WebUI-editable command content: every `/classroom` command's embed title, header, and per-item field labels are now `bot_messages` templates (20 new keys, e.g. `coursework.header` = "Showing {count} coursework item(s), newest first."), seeded on startup and edited inside each command's detail panel — previously hardcoded in `src/cogs/classroom.py`.
+
+### Changed
+- Bot messages are now edited inside each command's split-screen detail panel (filtered to `<command>.*`) instead of a separate stacked section; the standalone Bot messages section is removed.
+- Channel Links: clicking a row opens the same split-screen detail panel as Bot commands (table shrinks to 30%, sliding 70% panel) instead of a popup dialog.
+- Theme toggle in the top bar switches light/dark directly on click instead of opening a dropdown menu (the `system` option is dropped).
+
 ## [0.11.1] - 2026-06-23
 
 Web app bumped to 2.4.1.

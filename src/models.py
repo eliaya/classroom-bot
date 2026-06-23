@@ -19,6 +19,8 @@ class GuildCourseLink(SQLModel, table=True):
     guild_id: int = Field(index=True)
     course_id: str = Field(index=True)
     channel_id: int
+    # Optional role pinged in the channel when new items are posted (None = silent embed).
+    notify_role_id: Optional[int] = Field(default=None)
     last_sync_announcement: Optional[str] = Field(default=None)
     last_sync_coursework: Optional[str] = Field(default=None)
     is_active: bool = Field(default=True)
@@ -41,6 +43,25 @@ class DiscordChannel(SQLModel, table=True):
     guild_name: str
     channel_id: int = Field(index=True)
     channel_name: str
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
+class DiscordRole(SQLModel, table=True):
+    """A reverse-synced snapshot of the bot's guild roles (mirrors DiscordChannel).
+
+    Lets the WebUI offer a real role dropdown for a link's notify role instead of
+    a bare numeric ID. @everyone and managed (bot/integration) roles are excluded.
+    """
+    __tablename__ = "discord_roles"
+    __table_args__ = (
+        UniqueConstraint("role_id", name="uq_discord_role"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    guild_id: int = Field(index=True)
+    guild_name: str
+    role_id: int = Field(index=True)
+    role_name: str
     updated_at: datetime = Field(default_factory=now_jst)
 
 
@@ -348,6 +369,8 @@ class BotCommand(SQLModel, table=True):
     kind: str = Field(default="template", index=True)
     handler_key: Optional[str] = None  # builtin only: binds the row to its code callback
     group_name: Optional[str] = None  # slash group prefix, e.g. "classroom"; None = top-level
+    # Default item cap for list commands (coursework/announcements/todo); None = system default.
+    default_limit: Optional[int] = Field(default=None)
     created_at: datetime = Field(default_factory=now_jst)
     updated_at: datetime = Field(default_factory=now_jst)
 

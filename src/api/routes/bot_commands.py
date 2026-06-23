@@ -49,6 +49,8 @@ class BotCommandUpdate(BaseModel):
     params: Optional[str] = None
     enabled: Optional[bool] = None
     group_name: Optional[str] = Field(default=None, max_length=32)
+    # Item cap for list commands; explicit null reverts to the system default.
+    default_limit: Optional[int] = Field(default=None, ge=1, le=100)
 
 
 def _serialize(cmd: BotCommand) -> dict:
@@ -63,6 +65,7 @@ def _serialize(cmd: BotCommand) -> dict:
         "kind": cmd.kind,
         "handler_key": cmd.handler_key,
         "group_name": cmd.group_name,
+        "default_limit": cmd.default_limit,
         "created_at": cmd.created_at.isoformat() if cmd.created_at else None,
         "updated_at": cmd.updated_at.isoformat() if cmd.updated_at else None,
     }
@@ -124,6 +127,9 @@ async def update_command(
         clash = await repo.get_by_name(session, body.name)
         if clash is not None:
             raise HTTPException(status_code=409, detail=f"Command '{body.name}' already exists")
+    # default_limit set directly so an explicit null clears it (repo skips None).
+    if "default_limit" in fields:
+        cmd.default_limit = fields.pop("default_limit")
     updated = await repo.update_command(session, cmd, **fields)
     return _serialize(updated)
 

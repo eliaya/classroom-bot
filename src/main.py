@@ -121,7 +121,7 @@ class ClassroomSyncBot(commands.Bot):
             await self._sync_discord_inventory()
 
     async def _sync_discord_inventory(self) -> None:
-        """Snapshot the bot's guilds + text channels into the DB for the WebUI."""
+        """Snapshot the bot's guilds + text channels + roles into the DB for the WebUI."""
         try:
             rows = [
                 {
@@ -133,9 +133,23 @@ class ClassroomSyncBot(commands.Bot):
                 for guild in self.guilds
                 for channel in guild.text_channels
             ]
+            # Mentionable roles only: skip @everyone (the default role) and managed
+            # (bot/integration) roles, which aren't useful as a notify target.
+            role_rows = [
+                {
+                    "guild_id": guild.id,
+                    "guild_name": guild.name,
+                    "role_id": role.id,
+                    "role_name": role.name,
+                }
+                for guild in self.guilds
+                for role in guild.roles
+                if not role.is_default() and not role.managed
+            ]
             from src.repositories import discord_inventory
             async with async_session_factory() as session:
                 await discord_inventory.replace_inventory(session, rows)
+                await discord_inventory.replace_roles_inventory(session, role_rows)
         except Exception:  # noqa: BLE001 — inventory sync must never break the bot
             logger.warning("Failed to sync Discord guild/channel inventory", exc_info=True)
 

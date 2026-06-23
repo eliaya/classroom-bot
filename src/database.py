@@ -51,6 +51,8 @@ async def init_db() -> None:
             # column additions keyed by table -> [(name, type), ...]
             _added_columns: dict[str, list[tuple[str, str]]] = {
                 "classroom_sync_runs": [("message", "TEXT"), ("percent", "INTEGER")],
+                # Optional notify role pinged when posting new items to a channel.
+                "guild_course_links": [("notify_role_id", "INTEGER")],
                 # Soft-delete + diff timestamps on every cached entity.
                 # ``week`` = weekday extracted from the section's leading Japanese text.
                 "classroom_courses": [
@@ -71,9 +73,11 @@ async def init_db() -> None:
                     ("attachments_json", "TEXT"), ("content_url", "TEXT"),
                     ("updated_at", "DATETIME"), ("removed_at", "DATETIME"),
                 ],
-                # Unified command registry: builtin/template kind + slash grouping.
+                # Unified command registry: builtin/template kind + slash grouping
+                # + per-command default item cap for list commands.
                 "bot_commands": [
                     ("kind", "TEXT"), ("handler_key", "TEXT"), ("group_name", "TEXT"),
+                    ("default_limit", "INTEGER"),
                 ],
                 # Per-message placeholder docs (was code-only).
                 "bot_messages": [("description", "TEXT")],

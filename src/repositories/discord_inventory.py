@@ -11,7 +11,7 @@ from typing import Iterable, List
 from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.models import DiscordChannel
+from src.models import DiscordChannel, DiscordRole
 
 
 async def list_channels(session: AsyncSession) -> List[DiscordChannel]:
@@ -30,6 +30,27 @@ async def replace_inventory(
     """
     await session.execute(delete(DiscordChannel))
     items = [DiscordChannel(**row) for row in rows]
+    session.add_all(items)
+    await session.commit()
+    return len(items)
+
+
+async def list_roles(session: AsyncSession) -> List[DiscordRole]:
+    result = await session.execute(
+        select(DiscordRole).order_by(DiscordRole.guild_name, DiscordRole.role_name)
+    )
+    return list(result.scalars().all())
+
+
+async def replace_roles_inventory(
+    session: AsyncSession, rows: Iterable[dict]
+) -> int:
+    """Replace the whole role inventory with ``rows`` (full snapshot).
+
+    Each row: ``{guild_id, guild_name, role_id, role_name}``.
+    """
+    await session.execute(delete(DiscordRole))
+    items = [DiscordRole(**row) for row in rows]
     session.add_all(items)
     await session.commit()
     return len(items)

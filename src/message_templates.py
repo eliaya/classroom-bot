@@ -57,6 +57,80 @@ DEFAULT_MESSAGES: dict[str, tuple[str, str]] = {
         "🔄 **Global Sync Completed:** Finished a {mode} sync across all registered course links.",
         "Shown by /classroom sync across all courses. Placeholders: {mode}",
     ),
+    # --- Embed titles / headers / per-item labels for the list commands ---
+    # (WebUI-editable so admins can reword every command response.)
+    "courses.title": (
+        "🏫 Cached Google Classroom Courses",
+        "Embed title for /classroom courses. No placeholders.",
+    ),
+    "courses.header": (
+        "Use the **Course ID** below to link any course to a channel.",
+        "Embed description for /classroom courses. No placeholders.",
+    ),
+    "courses.item": (
+        "ID: `{course_id}`\nSection: *{section}*{link_line}",
+        "Per-course field body in /classroom courses. Placeholders: {course_id}, {section}, {link_line}",
+    ),
+    "course.title": (
+        "🏫 {course_name}",
+        "Embed title for /classroom course. Placeholders: {course_name}",
+    ),
+    "course.field_id": ("Course ID", "Field label in /classroom course. No placeholders."),
+    "course.field_section": ("Section", "Field label in /classroom course. No placeholders."),
+    "course.field_owner": ("Owner", "Field label in /classroom course. No placeholders."),
+    "course.field_state": ("State", "Field label in /classroom course. No placeholders."),
+    "announcements.title": (
+        "📢 Announcements • {course_name}",
+        "Embed title for /classroom announcements. Placeholders: {course_name}",
+    ),
+    "announcements.header": (
+        "Showing {count} announcement(s), newest first.",
+        "Embed description for /classroom announcements. Placeholders: {count}",
+    ),
+    "announcements.item": (
+        "{text}\nUpdated: `{updated}`",
+        "Per-announcement field body. Placeholders: {text}, {updated}",
+    ),
+    "coursework.title": (
+        "📝 Coursework • {course_name}",
+        "Embed title for /classroom coursework. Placeholders: {course_name}",
+    ),
+    "coursework.header": (
+        "Showing {count} coursework item(s), newest first.",
+        "Embed description for /classroom coursework. Placeholders: {count}",
+    ),
+    "coursework.item": (
+        "{description}\nDue: `{due}`\nGrade: `{grade}`\nUpdated: `{updated}`",
+        "Per-coursework field body. Placeholders: {description}, {due}, {grade}, {updated}",
+    ),
+    "todo.title": (
+        "📚 Google Classroom To-do",
+        "Embed title for /classroom todo. No placeholders.",
+    ),
+    "todo.header": (
+        "Showing {count} pending item(s) out of {total} total.\n"
+        "Served from the local synced cache (the `not-turned-in` view).",
+        "Embed description for /classroom todo. Placeholders: {count}, {total}",
+    ),
+    "todo.item": (
+        "**Course:** {course_name} (`{course_id}`)\nDue: `{due}` • State: `{state}`{link_line}",
+        "Per-todo field body. Placeholders: {course_name}, {course_id}, {due}, {state}, {link_line}",
+    ),
+    "list.title": (
+        "🔗 Connected Google Classroom Integrations",
+        "Embed title for /classroom list. No placeholders.",
+    ),
+    "list.item_name": (
+        "🏫 {course_name}",
+        "Per-link field title in /classroom list. Placeholders: {course_name}",
+    ),
+    "list.item": (
+        "**Course ID:** `{course_id}`\n**Channel:** {channel}\n**Status:** {status}\n"
+        "**Last Sync Announcement:** `{last_announcement}`\n"
+        "**Last Sync Coursework:** `{last_coursework}`",
+        "Per-link field body in /classroom list. Placeholders: {course_id}, {channel}, "
+        "{status}, {last_announcement}, {last_coursework}",
+    ),
 }
 
 

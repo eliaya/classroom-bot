@@ -46,12 +46,14 @@ async def create_link(
     guild_id: int,
     course_id: str,
     channel_id: int,
+    notify_role_id: Optional[int] = None,
     is_active: bool = True,
 ) -> GuildCourseLink:
     link = GuildCourseLink(
         guild_id=guild_id,
         course_id=course_id,
         channel_id=channel_id,
+        notify_role_id=notify_role_id,
         is_active=is_active,
     )
     session.add(link)
@@ -63,8 +65,11 @@ async def create_link(
 async def update_link(
     session: AsyncSession, link: GuildCourseLink, **fields
 ) -> GuildCourseLink:
+    # ``fields`` come from LinkUpdate(exclude_unset=True): a present key with a
+    # None value is an explicit clear (e.g. removing the notify role), so we set
+    # every provided key rather than skipping None.
     for key, value in fields.items():
-        if value is not None and hasattr(link, key):
+        if hasattr(link, key):
             setattr(link, key, value)
     session.add(link)
     await session.commit()

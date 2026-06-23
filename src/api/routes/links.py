@@ -24,11 +24,14 @@ class LinkCreate(BaseModel):
     guild_id: int
     course_id: str = Field(min_length=1)
     channel_id: int
+    notify_role_id: Optional[int] = None
     is_active: bool = True
 
 
 class LinkUpdate(BaseModel):
     channel_id: Optional[int] = None
+    # Explicit null clears the notify role; omitted leaves it unchanged.
+    notify_role_id: Optional[int] = None
     is_active: Optional[bool] = None
 
 
@@ -40,6 +43,7 @@ def _serialize(link: GuildCourseLink, course_name: Optional[str]) -> dict:
         "course_id": link.course_id,
         "course_name": course_name,
         "channel_id": str(link.channel_id),
+        "notify_role_id": str(link.notify_role_id) if link.notify_role_id else None,
         "is_active": link.is_active,
         "last_sync_announcement": link.last_sync_announcement,
         "last_sync_coursework": link.last_sync_coursework,
@@ -77,6 +81,7 @@ async def create_link(
         guild_id=body.guild_id,
         course_id=body.course_id,
         channel_id=body.channel_id,
+        notify_role_id=body.notify_role_id,
         is_active=body.is_active,
     )
     return _serialize(link, course.name)
