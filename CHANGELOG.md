@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-24
+
+Web app bumped to 2.6.0.
+
+### Added
+- `@everyone` / `@here` notify targets: a course↔channel link can now ping `@everyone` or `@here` on new posts instead of (and taking precedence over) a specific role. New `GuildCourseLink.notify_target` (`"everyone" | "here" | null`), carried through `/api/links` create/update, with the sync emitting the corresponding mention and `allowed_mentions(everyone=True, roles=True)`.
+- Action feedback toasts: create/delete operations in the bot console now surface success/error toasts (`notify.tsx`, built on the already-mounted sonner `<Toaster />`, styled to match the sync-notification popup). Toaster moved to `top-center`.
+
+### Changed
+- Channel links can be re-pointed: the link detail panel now allows editing `guild_id`/`course_id`, not just the channel. The `PATCH /api/links/{id}` route re-validates the course cache and the `(guild_id, course_id)` uniqueness constraint (like create), and resets the per-link sync cursors so the re-pointed link posts from scratch instead of skipping items behind a stale cursor.
+
 ## [0.12.0] - 2026-06-23
 
 Web app bumped to 2.5.0.

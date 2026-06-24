@@ -40,3 +40,26 @@ async def test_link_crud_and_uniqueness():
         # Delete removes it.
         await repo.delete_link(session, updated)
         assert await repo.get_link(session, created.id) is None
+
+
+@pytest.mark.asyncio
+async def test_link_repoint_guild_course():
+    """The PATCH route lets a link change guild/course; the repo must persist
+    the new identity and the uniqueness lookup must catch collisions."""
+    await _setup_tables()
+    async with database_module.async_session_factory() as session:
+        session.add(ClassroomCourse(id="c1", name="Math"))
+        session.add(ClassroomCourse(id="c2", name="Science"))
+        await session.commit()
+
+        a = await repo.create_link(session, guild_id=10, course_id="c1", channel_id=20)
+        b = await repo.create_link(session, guild_id=10, course_id="c2", channel_id=21)
+
+        # Re-point `a` to a free (guild, course) slot.
+        moved = await repo.update_link(session, a, guild_id=11, course_id="c2")
+        assert moved.guild_id == 11 and moved.course_id == "c2"
+
+        # The route's collision guard: re-pointing `a` onto `b`'s slot is caught
+        # by get_by_guild_course returning a *different* link id.
+        clash = await repo.get_by_guild_course(session, 10, "c2")
+        assert clash is not None and clash.id == b.id and clash.id != a.id

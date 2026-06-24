@@ -75,9 +75,17 @@ class ClassroomSyncService:
                 return
 
         course_name = course.name
-        # Ping the link's notify role (if any) so channel members get a real
-        # notification — embeds alone don't trigger one.
-        mention = f"<@&{link.notify_role_id}>" if link.notify_role_id else None
+        # Ping the link's notify target (if any) so channel members get a real
+        # notification — embeds alone don't trigger one. @everyone/@here take
+        # precedence over a specific role.
+        if link.notify_target == "everyone":
+            mention = "@everyone"
+        elif link.notify_target == "here":
+            mention = "@here"
+        elif link.notify_role_id:
+            mention = f"<@&{link.notify_role_id}>"
+        else:
+            mention = None
         await self._sync_announcements(session, link, channel, course_name, mention, backfill=backfill)
         await self._sync_coursework(session, link, channel, course_name, mention, backfill=backfill)
 
@@ -141,7 +149,7 @@ class ClassroomSyncService:
                 await channel.send(
                     content=mention,
                     embed=embed,
-                    allowed_mentions=discord.AllowedMentions(roles=True),
+                    allowed_mentions=discord.AllowedMentions(everyone=True, roles=True),
                 )
                 session.add(PostedAnnouncement(
                     announcement_id=new_ann["id"],
@@ -208,7 +216,7 @@ class ClassroomSyncService:
                 await channel.send(
                     content=mention,
                     embed=embed,
-                    allowed_mentions=discord.AllowedMentions(roles=True),
+                    allowed_mentions=discord.AllowedMentions(everyone=True, roles=True),
                 )
                 session.add(PostedAnnouncement(
                     announcement_id=cw_item["id"],

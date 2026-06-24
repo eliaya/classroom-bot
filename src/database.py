@@ -51,8 +51,10 @@ async def init_db() -> None:
             # column additions keyed by table -> [(name, type), ...]
             _added_columns: dict[str, list[tuple[str, str]]] = {
                 "classroom_sync_runs": [("message", "TEXT"), ("percent", "INTEGER")],
-                # Optional notify role pinged when posting new items to a channel.
-                "guild_course_links": [("notify_role_id", "INTEGER")],
+                # Optional notify role / special target pinged when posting new items.
+                "guild_course_links": [
+                    ("notify_role_id", "INTEGER"), ("notify_target", "TEXT"),
+                ],
                 # Soft-delete + diff timestamps on every cached entity.
                 # ``week`` = weekday extracted from the section's leading Japanese text.
                 "classroom_courses": [

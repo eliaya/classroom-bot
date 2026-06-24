@@ -47,6 +47,7 @@ async def create_link(
     course_id: str,
     channel_id: int,
     notify_role_id: Optional[int] = None,
+    notify_target: Optional[str] = None,
     is_active: bool = True,
 ) -> GuildCourseLink:
     link = GuildCourseLink(
@@ -54,6 +55,7 @@ async def create_link(
         course_id=course_id,
         channel_id=channel_id,
         notify_role_id=notify_role_id,
+        notify_target=notify_target,
         is_active=is_active,
     )
     session.add(link)

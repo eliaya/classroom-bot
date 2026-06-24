@@ -21,6 +21,8 @@ class GuildCourseLink(SQLModel, table=True):
     channel_id: int
     # Optional role pinged in the channel when new items are posted (None = silent embed).
     notify_role_id: Optional[int] = Field(default=None)
+    # Special mention target taking precedence over notify_role_id: "everyone" | "here" | None.
+    notify_target: Optional[str] = Field(default=None)
     last_sync_announcement: Optional[str] = Field(default=None)
     last_sync_coursework: Optional[str] = Field(default=None)
     is_active: bool = Field(default=True)

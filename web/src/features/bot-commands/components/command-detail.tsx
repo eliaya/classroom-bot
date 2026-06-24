@@ -3,6 +3,7 @@ import { animate } from 'animejs'
 import { Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, type BotCommand, type BotCommandInput } from '@/lib/api'
+import { notify } from '@/lib/notify'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,6 +72,7 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
     // Builtins have no text response (behavior is code-defined).
     if (!form.name.trim() || (!isBuiltin && !form.response.trim())) {
       setError(t('botCommands.requiredFields'))
+      notify.warning(t('botCommands.requiredFields'))
       return
     }
     setSaving(true)
@@ -99,8 +101,11 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
         ? await api.createBotCommand(body)
         : await api.updateBotCommand(command!.id, body)
       onSaved(saved)
+      notify.success(isNew ? t('common.created') : t('common.saved'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('common.loadFailed'))
+      const msg = e instanceof Error ? e.message : t('common.saveFailed')
+      setError(msg)
+      notify.error(t('common.saveFailed'), msg)
     } finally {
       setSaving(false)
     }
@@ -111,8 +116,11 @@ export function CommandDetail({ command, onClose, onSaved, onDeleted }: CommandD
     try {
       await api.deleteBotCommand(command!.id)
       onDeleted()
+      notify.success(t('common.deleted'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('common.loadFailed'))
+      const msg = e instanceof Error ? e.message : t('common.deleteFailed')
+      setError(msg)
+      notify.error(t('common.deleteFailed'), msg)
     }
   }
 

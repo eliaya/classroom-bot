@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { animate } from 'animejs'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Save, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
@@ -11,6 +11,7 @@ import {
   type Link,
   type LinkInput,
 } from '@/lib/api'
+import { notify } from '@/lib/notify'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,26 +48,45 @@ type FormState = {
   guild_id: string
   course_id: string
   channel_id: string
-  notify_role_id: string // '' = no notify role
+  // The notify selection: '' = none, '@everyone'/'@here', or a role id.
+  notify: string
   is_active: boolean
 }
 
 type Guild = { id: string; name: string }
 
-// Radix Select forbids an empty-string value, so the "no role" option uses this.
+// Radix Select forbids an empty-string value, so the "none" option uses this.
+// @everyone/@here are stored as notify_target; anything else is a role id.
 const NO_ROLE = '__none__'
+const EVERYONE = '@everyone'
+const HERE = '@here'
 
 // `null` = no panel, 'new' = create panel, otherwise the selected link.
 type Selection = Link | 'new' | null
 
 function toForm(link: Link | null): FormState {
+  const notify =
+    link?.notify_target === 'everyone'
+      ? EVERYONE
+      : link?.notify_target === 'here'
+        ? HERE
+        : link?.notify_role_id
+          ? String(link.notify_role_id)
+          : ''
   return {
     guild_id: link ? String(link.guild_id) : '',
     course_id: link?.course_id ?? '',
     channel_id: link ? String(link.channel_id) : '',
-    notify_role_id: link?.notify_role_id ? String(link.notify_role_id) : '',
+    notify,
     is_active: link?.is_active ?? true,
   }
+}
+
+/** Split the single notify selection into the API's two fields. */
+function notifyFields(notify: string): Pick<LinkInput, 'notify_role_id' | 'notify_target'> {
+  if (notify === EVERYONE) return { notify_role_id: null, notify_target: 'everyone' }
+  if (notify === HERE) return { notify_role_id: null, notify_target: 'here' }
+  return { notify_role_id: notify || null, notify_target: null }
 }
 
 export function LinksSection() {
@@ -108,8 +128,11 @@ export function LinksSection() {
       await api.deleteLink(link.id)
       setSelection(null)
       reload()
+      notify.success(t('common.deleted'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('common.loadFailed'))
+      const msg = e instanceof Error ? e.message : t('common.deleteFailed')
+      setError(msg)
+      notify.error(t('common.deleteFailed'), msg)
     }
   }
 
@@ -207,8 +230,9 @@ export function LinksSection() {
             channels={channels}
             roles={roles}
             onClose={() => setSelection(null)}
-            onSaved={(saved) => {
-              setSelection(saved)
+            onSaved={() => {
+              // Collapse the detail panel back to the full-width list after save.
+              setSelection(null)
               reload()
             }}
             onDelete={handleDelete}
@@ -269,15 +293,25 @@ function LinkDetail({
     return list
   }, [channels, form.guild_id, form.channel_id])
 
-  const roleOptions = useMemo(
-    () => roles.filter((r) => r.guild_id === form.guild_id),
-    [roles, form.guild_id]
-  )
+  const roleOptions = useMemo(() => {
+    const list = roles.filter((r) => r.guild_id === form.guild_id)
+    // Keep a saved role id selectable even if the inventory is empty/stale
+    // (e.g. the bot is offline). Sentinels (@everyone/@here) aren't role ids.
+    const isRoleId = form.notify && form.notify !== EVERYONE && form.notify !== HERE
+    if (isRoleId && !list.some((r) => r.role_id === form.notify)) {
+      return [
+        { role_id: form.notify, role_name: form.notify } as DiscordRole,
+        ...list,
+      ]
+    }
+    return list
+  }, [roles, form.guild_id, form.notify])
 
   const handleSave = async () => {
     setError(null)
     if (!form.course_id || !form.guild_id.trim() || !form.channel_id.trim()) {
       setError(t('links.requiredFields'))
+      notify.warning(t('links.requiredFields'))
       return
     }
     setSaving(true)
@@ -287,21 +321,27 @@ function LinkDetail({
           guild_id: form.guild_id,
           course_id: form.course_id,
           channel_id: form.channel_id,
-          notify_role_id: form.notify_role_id || null,
+          ...notifyFields(form.notify),
           is_active: form.is_active,
         }
         onSaved(await api.createLink(body))
+        notify.success(t('common.created'))
       } else {
         onSaved(
           await api.updateLink(link!.id, {
+            guild_id: form.guild_id,
+            course_id: form.course_id,
             channel_id: form.channel_id,
-            notify_role_id: form.notify_role_id || null,
+            ...notifyFields(form.notify),
             is_active: form.is_active,
           })
         )
+        notify.success(t('common.saved'))
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('common.loadFailed'))
+      const msg = e instanceof Error ? e.message : t('common.saveFailed')
+      setError(msg)
+      notify.error(t('common.saveFailed'), msg)
     } finally {
       setSaving(false)
     }
@@ -330,7 +370,6 @@ function LinkDetail({
             <Select
               value={form.course_id}
               onValueChange={(v) => setForm((f) => ({ ...f, course_id: v }))}
-              disabled={!isNew}
             >
               <SelectTrigger id='ln-course'>
                 <SelectValue placeholder={t('links.selectCourse')} />
@@ -353,7 +392,6 @@ function LinkDetail({
                 onValueChange={(v) =>
                   setForm((f) => ({ ...f, guild_id: v, channel_id: '' }))
                 }
-                disabled={!isNew}
               >
                 <SelectTrigger id='ln-guild'>
                   <SelectValue placeholder={t('links.selectGuild')} />
@@ -375,7 +413,6 @@ function LinkDetail({
                 value={form.guild_id}
                 onChange={(e) => setForm((f) => ({ ...f, guild_id: e.target.value }))}
                 className='font-mono'
-                disabled={!isNew}
                 inputMode='numeric'
               />
             )}
@@ -413,37 +450,26 @@ function LinkDetail({
 
           <div className='grid gap-2'>
             <Label htmlFor='ln-role'>{t('links.notifyRole')}</Label>
-            {roleOptions.length > 0 ? (
-              <Select
-                value={form.notify_role_id || NO_ROLE}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, notify_role_id: v === NO_ROLE ? '' : v }))
-                }
-              >
-                <SelectTrigger id='ln-role'>
-                  <SelectValue placeholder={t('links.selectRole')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_ROLE}>{t('links.noRole')}</SelectItem>
-                  {roleOptions.map((r) => (
-                    <SelectItem key={r.role_id} value={r.role_id}>
-                      @{r.role_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                id='ln-role'
-                value={form.notify_role_id}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, notify_role_id: e.target.value }))
-                }
-                className='font-mono'
-                inputMode='numeric'
-                placeholder={t('links.roleId')}
-              />
-            )}
+            <Select
+              value={form.notify || NO_ROLE}
+              onValueChange={(v) =>
+                setForm((f) => ({ ...f, notify: v === NO_ROLE ? '' : v }))
+              }
+            >
+              <SelectTrigger id='ln-role'>
+                <SelectValue placeholder={t('links.selectRole')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_ROLE}>{t('links.noRole')}</SelectItem>
+                <SelectItem value={EVERYONE}>@everyone</SelectItem>
+                <SelectItem value={HERE}>@here</SelectItem>
+                {roleOptions.map((r) => (
+                  <SelectItem key={r.role_id} value={r.role_id}>
+                    @{r.role_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className='text-muted-foreground text-xs'>{t('links.notifyRoleHint')}</p>
           </div>
 
@@ -458,11 +484,11 @@ function LinkDetail({
         </div>
       </ScrollArea>
 
-      <div className='flex items-center justify-between gap-2 border-t p-3'>
-        {!isNew ? (
+      <div className='flex items-center justify-end gap-2 border-t p-3'>
+        {!isNew && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant='ghost' size='sm' className='text-destructive'>
+              <Button variant='outline' size='sm' className='text-destructive'>
                 <Trash2 className='size-4' />
                 {t('links.delete')}
               </Button>
@@ -484,10 +510,9 @@ function LinkDetail({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        ) : (
-          <span />
         )}
         <Button size='sm' onClick={handleSave} disabled={saving}>
+          <Save className='size-4' />
           {t('links.save')}
         </Button>
       </div>

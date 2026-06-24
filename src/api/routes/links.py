@@ -6,7 +6,7 @@ table live on every ``/classroom`` command, so edits here apply immediately.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -25,13 +25,19 @@ class LinkCreate(BaseModel):
     course_id: str = Field(min_length=1)
     channel_id: int
     notify_role_id: Optional[int] = None
+    notify_target: Optional[Literal["everyone", "here"]] = None
     is_active: bool = True
 
 
 class LinkUpdate(BaseModel):
+    # guild_id/course_id are the link's identity; changing them re-points the
+    # mapping, so the route re-validates the course and the uniqueness constraint.
+    guild_id: Optional[int] = None
+    course_id: Optional[str] = Field(default=None, min_length=1)
     channel_id: Optional[int] = None
-    # Explicit null clears the notify role; omitted leaves it unchanged.
+    # Explicit null clears the notify role/target; omitted leaves it unchanged.
     notify_role_id: Optional[int] = None
+    notify_target: Optional[Literal["everyone", "here"]] = None
     is_active: Optional[bool] = None
 
 
@@ -44,6 +50,7 @@ def _serialize(link: GuildCourseLink, course_name: Optional[str]) -> dict:
         "course_name": course_name,
         "channel_id": str(link.channel_id),
         "notify_role_id": str(link.notify_role_id) if link.notify_role_id else None,
+        "notify_target": link.notify_target,
         "is_active": link.is_active,
         "last_sync_announcement": link.last_sync_announcement,
         "last_sync_coursework": link.last_sync_coursework,
@@ -82,6 +89,7 @@ async def create_link(
         course_id=body.course_id,
         channel_id=body.channel_id,
         notify_role_id=body.notify_role_id,
+        notify_target=body.notify_target,
         is_active=body.is_active,
     )
     return _serialize(link, course.name)
@@ -96,7 +104,32 @@ async def update_link(
     link = await repo.get_link(session, link_id)
     if link is None:
         raise HTTPException(status_code=404, detail="Link not found")
-    updated = await repo.update_link(session, link, **body.model_dump(exclude_unset=True))
+
+    fields = body.model_dump(exclude_unset=True)
+
+    # Re-pointing the link (new guild and/or course) must re-validate the course
+    # cache and the (guild_id, course_id) uniqueness constraint, like create does.
+    repoint = "guild_id" in fields or "course_id" in fields
+    if repoint:
+        new_guild = fields.get("guild_id", link.guild_id)
+        new_course = fields.get("course_id", link.course_id)
+        course = await cache.get_cached_course(session, new_course)
+        if course is None:
+            raise HTTPException(
+                status_code=404, detail="Course not found in cache. Run sync first."
+            )
+        existing = await repo.get_by_guild_course(session, new_guild, new_course)
+        if existing and existing.id != link.id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Course '{new_course}' is already linked in this guild.",
+            )
+        # The per-link sync cursors track the old course; reset so the re-pointed
+        # link posts from scratch instead of skipping items behind a stale cursor.
+        fields["last_sync_announcement"] = None
+        fields["last_sync_coursework"] = None
+
+    updated = await repo.update_link(session, link, **fields)
     course = await cache.get_cached_course(session, updated.course_id)
     return _serialize(updated, course.name if course else None)
 

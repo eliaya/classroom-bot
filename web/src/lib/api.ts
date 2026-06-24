@@ -124,6 +124,8 @@ export type Link = {
   channel_id: string
   /** Optional role pinged in the channel when new items are posted. */
   notify_role_id?: string | null
+  /** Special mention target, takes precedence over notify_role_id. */
+  notify_target?: 'everyone' | 'here' | null
   is_active: boolean
   last_sync_announcement?: string | null
   last_sync_coursework?: string | null
@@ -134,6 +136,7 @@ export type LinkInput = {
   course_id: string
   channel_id: string
   notify_role_id?: string | null
+  notify_target?: 'everyone' | 'here' | null
   is_active?: boolean
 }
 
@@ -374,7 +377,17 @@ export const api = {
     }),
   updateLink: (
     id: number,
-    body: Partial<Pick<LinkInput, 'channel_id' | 'notify_role_id' | 'is_active'>>
+    body: Partial<
+      Pick<
+        LinkInput,
+        | 'guild_id'
+        | 'course_id'
+        | 'channel_id'
+        | 'notify_role_id'
+        | 'notify_target'
+        | 'is_active'
+      >
+    >
   ) =>
     request<Link>(`/links/${id}`, {
       method: 'PATCH',

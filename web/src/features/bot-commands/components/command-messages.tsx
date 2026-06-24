@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, type BotMessage } from '@/lib/api'
+import { notify } from '@/lib/notify'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,14 +46,17 @@ export function CommandMessages({ commandName }: { commandName: string }) {
     return d.template !== m.template || d.description !== (m.description ?? '')
   }
 
-  const run = async (key: string, fn: () => Promise<unknown>) => {
+  const run = async (key: string, fn: () => Promise<unknown>, okMsg: string) => {
     setError(null)
     setBusy(key)
     try {
       await fn()
       reload()
+      notify.success(okMsg)
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('common.loadFailed'))
+      const msg = e instanceof Error ? e.message : t('common.saveFailed')
+      setError(msg)
+      notify.error(t('common.saveFailed'), msg)
     } finally {
       setBusy(null)
     }
@@ -60,20 +64,25 @@ export function CommandMessages({ commandName }: { commandName: string }) {
 
   const handleSave = (m: BotMessage) => {
     const d = draftFor(m)
-    return run(m.key, () => api.setBotMessage(m.key, d.template, d.description || null))
+    return run(m.key, () => api.setBotMessage(m.key, d.template, d.description || null), t('common.saved'))
   }
-  const handleDelete = (m: BotMessage) => run(m.key, () => api.deleteBotMessage(m.key))
+  const handleDelete = (m: BotMessage) =>
+    run(m.key, () => api.deleteBotMessage(m.key), t('common.deleted'))
   const handleCreate = () => {
     if (!creating) return
     const { suffix, description, template } = creating
-    return run('__new__', async () => {
-      await api.createBotMessage({
-        key: prefix + suffix.trim(),
-        template,
-        description: description || null,
-      })
-      setCreating(null)
-    })
+    return run(
+      '__new__',
+      async () => {
+        await api.createBotMessage({
+          key: prefix + suffix.trim(),
+          template,
+          description: description || null,
+        })
+        setCreating(null)
+      },
+      t('common.created')
+    )
   }
 
   return (
