@@ -318,6 +318,10 @@ class SchedulerSetting(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     interval_minutes: int = Field(default=30)
+    # How often the bot process polls the cache and posts new items to Discord
+    # (runs in a separate process from the cache sync above). Seeded from
+    # SYNC_INTERVAL_MINUTES; the bot reconciles it live on its heartbeat.
+    poll_interval_minutes: int = Field(default=10)
     enabled: bool = Field(default=True)
     updated_at: datetime = Field(default_factory=now_jst)
 

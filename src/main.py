@@ -60,16 +60,12 @@ class ClassroomSyncBot(commands.Bot):
         await self.add_cog(CustomCommandsCog(self))
         logger.info("Bot cogs loaded successfully.")
 
-        # 4. Configure Scheduler and register Polling job
-        interval = settings.SYNC_INTERVAL_MINUTES
-        self.scheduler.add_job(
-            self.sync_service.sync_all_links,
-            "interval",
-            minutes=interval,
-            id="classroom_poll_sync",
-            replace_existing=True,
-            next_run_time=None  # Starts after the interval completes, or use run_now if needed
-        )
+        # 4. Configure Scheduler and register Polling job. The interval is
+        # WebUI-editable (scheduler_settings.poll_interval_minutes); the bot
+        # reconciles live changes on its heartbeat (separate process from the
+        # API that writes it).
+        interval = await self._poll_interval_minutes()
+        self._schedule_poll(interval)
         # 5. Periodic heartbeat so the API/dashboard can report bot status.
         self.scheduler.add_job(
             self._heartbeat,
@@ -81,6 +77,42 @@ class ClassroomSyncBot(commands.Bot):
 
         self.scheduler.start()
         logger.info(f"Background Sync Daemon scheduled to check for classroom updates every {interval} minutes.")
+
+    async def _poll_interval_minutes(self) -> int:
+        """Read the WebUI-editable poll interval from the DB (env default fallback)."""
+        try:
+            from src.repositories.app_settings import get_scheduler_setting
+
+            async with async_session_factory() as session:
+                row = await get_scheduler_setting(session)
+            return row.poll_interval_minutes
+        except Exception:  # noqa: BLE001 — never block startup on a settings read
+            logger.warning("Failed to read poll interval; using env default", exc_info=True)
+            return settings.SYNC_INTERVAL_MINUTES
+
+    def _schedule_poll(self, interval: int) -> None:
+        """(Re)register the cache->Discord poll job at the given interval (minutes).
+
+        No next_run_time: the interval trigger defaults the first run to
+        now + interval. Passing next_run_time=None would PAUSE the job so it
+        never fires (that was the auto-push regression).
+        """
+        self.scheduler.add_job(
+            self.sync_service.sync_all_links,
+            "interval",
+            minutes=interval,
+            id="classroom_poll_sync",
+            replace_existing=True,
+        )
+
+    async def _reconcile_poll_interval(self) -> None:
+        """Reschedule the poll job if the WebUI changed its interval."""
+        desired = await self._poll_interval_minutes()
+        job = self.scheduler.get_job("classroom_poll_sync")
+        current = job.trigger.interval.total_seconds() / 60 if job else None
+        if current != desired:
+            self._schedule_poll(desired)
+            logger.info("Poll interval updated to %s minute(s) via WebUI", desired)
 
     async def on_app_command_completion(self, interaction, command) -> None:
         """Audit every successfully-completed slash command (category=discord)."""
@@ -114,6 +146,8 @@ class ClassroomSyncBot(commands.Bot):
     async def _heartbeat(self) -> None:
         connected = self.is_ready() and not self.is_closed()
         await self._write_heartbeat("connected" if connected else "disconnected")
+        # Pick up WebUI poll-interval changes (≤60s lag; bot is a separate process).
+        await self._reconcile_poll_interval()
         # ponytail: refresh inventory on the 60s heartbeat — channels change
         # rarely and servers are few; add gateway event listeners if that stops
         # being true.

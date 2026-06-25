@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-06-25
+
+Web app bumped to 2.7.0.
+
+### Fixed
+- Bot auto-push to Discord never fired: the `classroom_poll_sync` job (cache→Discord) was registered with `next_run_time=None`, which APScheduler treats as **paused**, so it never ran regardless of `notify_target`/`notify_role_id`. Removed the argument so the interval trigger schedules the first run at `now + interval` as intended. (The 60s heartbeat job was unaffected.)
+
+### Added
+- WebUI-editable Discord push interval: the bot poll interval (cache→Discord posting) is now editable in **Settings → Scheduler** as a dedicated "Discord push (minutes)" field, independent of the Classroom cache-sync interval. Persisted as `scheduler_settings.poll_interval_minutes` (seeded from `SYNC_INTERVAL_MINUTES`); because the bot runs in a separate process from the API, it reconciles the value on its 60s heartbeat (≤60s to take effect) — no restart needed.
+
 ## [0.13.0] - 2026-06-24
 
 Web app bumped to 2.6.0.

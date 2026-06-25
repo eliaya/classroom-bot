@@ -59,6 +59,7 @@ export function ClassroomSettingsPage() {
   // Scheduler setting (persisted + live)
   const [scheduler, setScheduler] = useState<SchedulerStatus | null>(null)
   const [intervalInput, setIntervalInput] = useState('')
+  const [pollIntervalInput, setPollIntervalInput] = useState('')
   const [enabledInput, setEnabledInput] = useState(true)
   const [savingScheduler, setSavingScheduler] = useState(false)
   const [runningNow, setRunningNow] = useState(false)
@@ -67,6 +68,7 @@ export function ClassroomSettingsPage() {
   const applyScheduler = (s: SchedulerStatus) => {
     setScheduler(s)
     setIntervalInput(String(s.interval_minutes))
+    setPollIntervalInput(String(s.poll_interval_minutes))
     setEnabledInput(s.enabled)
   }
 
@@ -142,8 +144,13 @@ export function ClassroomSettingsPage() {
       if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
         throw new Error(t('settings.intervalError'))
       }
+      const pollMinutes = Number(pollIntervalInput)
+      if (!Number.isInteger(pollMinutes) || pollMinutes < 1 || pollMinutes > 1440) {
+        throw new Error(t('settings.pollIntervalError'))
+      }
       const updated = await api.updateScheduler({
         interval_minutes: minutes,
+        poll_interval_minutes: pollMinutes,
         enabled: enabledInput,
       })
       applyScheduler(updated)
@@ -200,6 +207,7 @@ export function ClassroomSettingsPage() {
   const schedulerDirty =
     scheduler != null &&
     (Number(intervalInput) !== scheduler.interval_minutes ||
+      Number(pollIntervalInput) !== scheduler.poll_interval_minutes ||
       enabledInput !== scheduler.enabled)
 
   return (
@@ -342,6 +350,20 @@ export function ClassroomSettingsPage() {
                   max={1440}
                   value={intervalInput}
                   onChange={(e) => setIntervalInput(e.target.value)}
+                  className='w-32'
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label htmlFor='scheduler-poll-interval'>
+                  {t('settings.pollInterval')}
+                </Label>
+                <Input
+                  id='scheduler-poll-interval'
+                  type='number'
+                  min={1}
+                  max={1440}
+                  value={pollIntervalInput}
+                  onChange={(e) => setPollIntervalInput(e.target.value)}
                   className='w-32'
                 />
               </div>
