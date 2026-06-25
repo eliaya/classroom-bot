@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
-# Local one-command promotion of main into the production branch:
+# Local one-command merge into main AND push (production deploy):
 #   chmod +x ./scripts/mergeAndPushToProdBranch.sh
 #   ./scripts/mergeAndPushToProdBranch.sh
 #
-# Unlike ./scripts/mergeToDevelopBranch.sh (feature -> main), this script
-# promotes the integration branch to production and pushes automatically:
-#   update main -> merge main into production -> push production
+# Same flow as ./scripts/mergeToDevelopBranch.sh (feature -> main), but instead
+# of asking whether to push, it pushes main to origin automatically — main is
+# the deployed/production branch here, so this is the "release" command.
+#   update main → merge main into your branch → merge your branch into main → push main
 #
-# Run it after main already contains everything you want released (e.g. you
-# integrated your feature with mergeToDevelopBranch.sh first).
+# Run from a feature branch (not main).
 #
 # Never auto force-pushes, deletes branches, or overwrites conflicted files.
 
@@ -20,8 +20,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 GIT_REMOTE="${GIT_REMOTE:-origin}"
-TARGET_BRANCH="${TARGET_BRANCH:-production}"
-SOURCE_BRANCH="${SOURCE_BRANCH:-main}"
+TARGET_BRANCH="${TARGET_BRANCH:-main}"
 # Set AUTO_PUSH=0 to stop before pushing (e.g. to inspect the merge first).
 AUTO_PUSH="${AUTO_PUSH:-1}"
 ORIGINAL_BRANCH=""
@@ -84,23 +83,23 @@ First-time setup:
   chmod +x ./scripts/mergeAndPushToProdBranch.sh
 
 What it does:
-  Promote the integration branch (main) into the production branch and push it.
+  Merge your current feature branch into main and push main (the production deploy).
 
 Flow:
-  1. Verify a clean working tree
-  2. Fetch and update local main from origin/main (the release source)
-  3. Checkout production (creating it from main on first run), pull origin/production
-  4. Merge main into production (surface conflicts before pushing)
-  5. Push production to origin (auto; set AUTO_PUSH=0 to skip)
+  1. Verify a clean working tree and that you are not on main
+  2. Fetch and update local main from origin/main
+  3. Merge main into your current branch (surface conflicts early)
+  4. Switch to main, merge your branch into main
+  5. Push main to origin (auto; set AUTO_PUSH=0 to skip)
 
 Requirements:
+  - Run from a feature branch, not main
   - All changes committed or stashed
   - Git remote origin configured with origin/main
 
 Environment (optional):
   GIT_REMOTE=origin
-  TARGET_BRANCH=production
-  SOURCE_BRANCH=main
+  TARGET_BRANCH=main
   AUTO_PUSH=1            # 0 to stop before pushing
 USAGE
 }
@@ -111,6 +110,15 @@ current_branch() {
 
 ensure_git_repo() {
   git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository: $PROJECT_ROOT"
+}
+
+ensure_not_on_target() {
+  local current
+  current="$(current_branch)"
+  [[ -n "$current" ]] || die "detached HEAD detected; checkout a feature branch first"
+  if [[ "$current" == "$TARGET_BRANCH" ]]; then
+    die "do not run this script on ${TARGET_BRANCH}. Checkout a feature branch first."
+  fi
 }
 
 ensure_clean_tree() {
@@ -126,10 +134,10 @@ fetch_remote() {
   git fetch "$GIT_REMOTE" --prune
 }
 
-ensure_remote_source() {
+ensure_remote_target() {
   fetch_remote
-  if ! git show-ref --verify --quiet "refs/remotes/$GIT_REMOTE/$SOURCE_BRANCH"; then
-    die "remote source branch ${GIT_REMOTE}/${SOURCE_BRANCH} not found; check remote and branch name"
+  if ! git show-ref --verify --quiet "refs/remotes/$GIT_REMOTE/$TARGET_BRANCH"; then
+    die "remote branch ${GIT_REMOTE}/${TARGET_BRANCH} not found; check remote and branch name"
   fi
 }
 
@@ -144,29 +152,11 @@ checkout_branch() {
   fi
 }
 
-update_source_branch() {
-  log "switching to ${SOURCE_BRANCH} and updating from ${GIT_REMOTE}/${SOURCE_BRANCH}..."
-  checkout_branch "$SOURCE_BRANCH"
-  if ! git pull --no-rebase "$GIT_REMOTE" "$SOURCE_BRANCH"; then
-    MERGE_PHASE="updating ${SOURCE_BRANCH}"
+pull_target_branch() {
+  log "pulling latest ${GIT_REMOTE}/${TARGET_BRANCH}..."
+  if ! git pull --no-rebase "$GIT_REMOTE" "$TARGET_BRANCH"; then
+    MERGE_PHASE="updating ${TARGET_BRANCH}"
     handle_merge_conflict
-  fi
-}
-
-# Checkout production; create it from the freshly-updated main on first run.
-checkout_or_create_target() {
-  if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
-    log "switching to existing local ${TARGET_BRANCH}..."
-    git checkout "$TARGET_BRANCH"
-    if ! git pull --no-rebase "$GIT_REMOTE" "$TARGET_BRANCH" 2>/dev/null; then
-      log "no remote ${GIT_REMOTE}/${TARGET_BRANCH} to pull (or pull conflict); continuing"
-    fi
-  elif git show-ref --verify --quiet "refs/remotes/$GIT_REMOTE/$TARGET_BRANCH"; then
-    log "checking out ${TARGET_BRANCH} from ${GIT_REMOTE}/${TARGET_BRANCH}..."
-    git checkout -B "$TARGET_BRANCH" "$GIT_REMOTE/$TARGET_BRANCH"
-  else
-    log "${TARGET_BRANCH} does not exist; creating it from ${SOURCE_BRANCH}..."
-    git checkout -B "$TARGET_BRANCH" "$SOURCE_BRANCH"
   fi
 }
 
@@ -211,7 +201,17 @@ handle_merge_conflict() {
   while true; do
     if ! has_unresolved_conflicts && [[ -d .git/MERGE_HEAD || -f .git/MERGE_HEAD ]]; then
       log "conflicts resolved; completing merge commit..."
-      complete_merge_commit "merge: resolve conflicts during ${phase}"
+      case "$phase" in
+        "merge ${TARGET_BRANCH} into ${ORIGINAL_BRANCH}")
+          complete_merge_commit "merge: integrate ${TARGET_BRANCH} into ${ORIGINAL_BRANCH}"
+          ;;
+        "merge ${ORIGINAL_BRANCH} into ${TARGET_BRANCH}")
+          complete_merge_commit "merge: integrate ${ORIGINAL_BRANCH} into ${TARGET_BRANCH}"
+          ;;
+        *)
+          complete_merge_commit "merge: resolve conflicts during ${phase}"
+          ;;
+      esac
       log "merge commit created"
       return 0
     fi
@@ -267,14 +267,42 @@ handle_merge_conflict() {
   done
 }
 
-merge_source_into_target() {
-  MERGE_PHASE="merge ${SOURCE_BRANCH} into ${TARGET_BRANCH}"
-  log "${MERGE_PHASE}..."
-  if git merge --no-ff --no-edit "$SOURCE_BRANCH" -m "merge: promote ${SOURCE_BRANCH} into ${TARGET_BRANCH}"; then
-    log "merged ${SOURCE_BRANCH} into ${TARGET_BRANCH}"
+merge_target_into_feature() {
+  MERGE_PHASE="merge ${TARGET_BRANCH} into ${ORIGINAL_BRANCH}"
+  log "${MERGE_PHASE} (surface conflicts early)..."
+  if git merge --no-ff --no-edit "$TARGET_BRANCH" -m "merge: integrate ${TARGET_BRANCH} into ${ORIGINAL_BRANCH}"; then
+    log "merged ${TARGET_BRANCH} into ${ORIGINAL_BRANCH}"
     return 0
   fi
   handle_merge_conflict
+}
+
+merge_feature_into_target() {
+  MERGE_PHASE="merge ${ORIGINAL_BRANCH} into ${TARGET_BRANCH}"
+  log "${MERGE_PHASE}..."
+  if git merge --no-ff --no-edit "$ORIGINAL_BRANCH" -m "merge: integrate ${ORIGINAL_BRANCH} into ${TARGET_BRANCH}"; then
+    log "merged ${ORIGINAL_BRANCH} into ${TARGET_BRANCH}"
+    return 0
+  fi
+  handle_merge_conflict
+}
+
+prompt_continue() {
+  is_interactive || return 0
+
+  local reply
+  printf '\nThis script will:\n' >&2
+  printf '  1. Update local %s (pull %s/%s)\n' "$TARGET_BRANCH" "$GIT_REMOTE" "$TARGET_BRANCH" >&2
+  printf '  2. Merge %s into your branch %s\n' "$TARGET_BRANCH" "$ORIGINAL_BRANCH" >&2
+  printf '  3. Switch to %s, merge %s into %s\n' "$TARGET_BRANCH" "$ORIGINAL_BRANCH" "$TARGET_BRANCH" >&2
+  if [[ "$AUTO_PUSH" == "1" ]]; then
+    printf '  4. Push %s to %s %s\n' "$TARGET_BRANCH" "$GIT_REMOTE" "$TARGET_BRANCH" >&2
+  else
+    printf '  4. Skip push (AUTO_PUSH=0)\n' >&2
+  fi
+  printf '\nContinue? [Y/n]: ' >&2
+  read -r reply
+  [[ -z "$reply" || "$reply" =~ ^[Yy]$ ]] || die "cancelled"
 }
 
 push_target() {
@@ -289,24 +317,6 @@ push_target() {
     warn "push failed. Check remote state, then run: git push ${GIT_REMOTE} ${TARGET_BRANCH}"
     exit 1
   fi
-}
-
-prompt_continue() {
-  is_interactive || return 0
-
-  local reply
-  printf '\nThis script will:\n' >&2
-  printf '  1. Update local %s (pull %s/%s)\n' "$SOURCE_BRANCH" "$GIT_REMOTE" "$SOURCE_BRANCH" >&2
-  printf '  2. Checkout %s (create from %s if missing)\n' "$TARGET_BRANCH" "$SOURCE_BRANCH" >&2
-  printf '  3. Merge %s into %s\n' "$SOURCE_BRANCH" "$TARGET_BRANCH" >&2
-  if [[ "$AUTO_PUSH" == "1" ]]; then
-    printf '  4. Push %s to %s\n' "$TARGET_BRANCH" "$GIT_REMOTE" >&2
-  else
-    printf '  4. Skip push (AUTO_PUSH=0)\n' >&2
-  fi
-  printf '\nContinue? [Y/n]: ' >&2
-  read -r reply
-  [[ -z "$reply" || "$reply" =~ ^[Yy]$ ]] || die "cancelled"
 }
 
 main() {
@@ -327,29 +337,35 @@ main() {
 
   require_command git
   ensure_git_repo
+  ensure_not_on_target
   ensure_clean_tree
 
   ORIGINAL_BRANCH="$(current_branch)"
-  [[ -n "$ORIGINAL_BRANCH" ]] || die "detached HEAD detected; checkout a branch first"
   log "current branch: ${ORIGINAL_BRANCH}"
-  log "source branch: ${SOURCE_BRANCH}"
   log "target branch: ${TARGET_BRANCH}"
 
-  ensure_remote_source
+  ensure_remote_target
   prompt_continue
 
-  update_source_branch
-  checkout_or_create_target
-  merge_source_into_target
+  log "switching to ${TARGET_BRANCH} and updating..."
+  checkout_branch "$TARGET_BRANCH"
+  pull_target_branch
 
-  log "merge complete: ${SOURCE_BRANCH} -> ${TARGET_BRANCH}"
+  log "switching back to ${ORIGINAL_BRANCH}..."
+  checkout_branch "$ORIGINAL_BRANCH"
+  merge_target_into_feature
+
+  log "switching to ${TARGET_BRANCH}..."
+  checkout_branch "$TARGET_BRANCH"
+  merge_feature_into_target
+
+  log "merge complete: ${ORIGINAL_BRANCH} → ${TARGET_BRANCH}"
   git log --oneline -5
 
   push_target
 
-  log "switching back to ${ORIGINAL_BRANCH}..."
-  checkout_branch "$ORIGINAL_BRANCH"
-  log "done. ${TARGET_BRANCH} now contains ${SOURCE_BRANCH}"
+  log "done. currently on ${TARGET_BRANCH}"
+  log "to return to your feature branch: git checkout ${ORIGINAL_BRANCH}"
 }
 
 main "$@"
