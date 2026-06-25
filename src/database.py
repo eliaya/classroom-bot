@@ -83,6 +83,8 @@ async def init_db() -> None:
                 ],
                 # Per-message placeholder docs (was code-only).
                 "bot_messages": [("description", "TEXT")],
+                # Bot poll interval (cache->Discord), editable in the WebUI.
+                "scheduler_settings": [("poll_interval_minutes", "INTEGER")],
             }
             for table_name, columns in _added_columns.items():
                 # Skip tables that don't exist yet (create_all already made new ones complete).
@@ -108,6 +110,13 @@ async def init_db() -> None:
                     "WHEN '日曜日' THEN 7 ELSE 8 END "
                     "WHERE week IS NULL"
                 ))
+            # Existing scheduler row predates the poll-interval column → seed it
+            # from the env default so the bot has a value to schedule with.
+            if await _has_column(conn, "scheduler_settings", "poll_interval_minutes"):
+                await conn.execute(text(
+                    "UPDATE scheduler_settings SET poll_interval_minutes = :v "
+                    "WHERE poll_interval_minutes IS NULL"
+                ), {"v": settings.SYNC_INTERVAL_MINUTES})
             # Rows created before the unified registry default to template commands.
             if await _has_column(conn, "bot_commands", "kind"):
                 await conn.execute(text(

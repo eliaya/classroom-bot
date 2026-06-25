@@ -62,6 +62,7 @@ export type SyncRun = {
 export type SchedulerStatus = {
   enabled: boolean
   interval_minutes: number
+  poll_interval_minutes: number
   running: boolean
   job_scheduled: boolean
   next_run_time?: string | null
@@ -415,7 +416,11 @@ export const api = {
       { method: 'DELETE' }
     ),
   getScheduler: () => request<SchedulerStatus>('/scheduler'),
-  updateScheduler: (body: { interval_minutes?: number; enabled?: boolean }) =>
+  updateScheduler: (body: {
+    interval_minutes?: number
+    poll_interval_minutes?: number
+    enabled?: boolean
+  }) =>
     request<SchedulerStatus>('/scheduler', {
       method: 'PATCH',
       body: JSON.stringify(body),

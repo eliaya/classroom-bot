@@ -23,6 +23,7 @@ async def get_scheduler_setting(session: AsyncSession) -> SchedulerSetting:
         row = SchedulerSetting(
             id=_SINGLETON_ID,
             interval_minutes=interval,
+            poll_interval_minutes=settings.SYNC_INTERVAL_MINUTES,
             enabled=interval > 0,
         )
         session.add(row)
@@ -35,11 +36,14 @@ async def update_scheduler_setting(
     session: AsyncSession,
     *,
     interval_minutes: Optional[int] = None,
+    poll_interval_minutes: Optional[int] = None,
     enabled: Optional[bool] = None,
 ) -> SchedulerSetting:
     row = await get_scheduler_setting(session)
     if interval_minutes is not None:
         row.interval_minutes = interval_minutes
+    if poll_interval_minutes is not None:
+        row.poll_interval_minutes = poll_interval_minutes
     if enabled is not None:
         row.enabled = enabled
     row.updated_at = now_jst()
