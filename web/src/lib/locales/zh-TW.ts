@@ -258,6 +258,8 @@ const zhTW: Resources = {
   botMessages: {
     title: '機器人訊息',
     desc: '新增、編輯或刪除機器人的回應範本（儲存於資料庫）',
+    intro: '這些是機器人在 Discord 回覆的文字，可自由改寫用詞。{大括號} 是會自動帶入實際內容（如課程名稱）的變數，請原樣保留、勿自行新增。',
+    variables: '可用變數（請保留）：',
     customized: '已自訂',
     builtin: '內建',
     new: '新增訊息',
@@ -439,6 +441,13 @@ const zhTW: Resources = {
   settings: {
     title: '設定',
     desc: 'API 健康狀態、OAuth 憑證與同步設定',
+    nav: {
+      status: '狀態',
+      language: '語言',
+      scheduler: '排程',
+      audit: '稽核紀錄',
+      setup: '設定指南',
+    },
     loadFailed: '載入失敗',
     apiHealth: 'API 健康狀態',
     apiHealthDesc: 'FastAPI 後端狀態',

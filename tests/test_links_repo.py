@@ -4,7 +4,8 @@ import pytest
 from sqlmodel import SQLModel
 
 import src.database as database_module
-from src.models import ClassroomCourse
+from src.models import ClassroomAnnouncement, ClassroomCourse, ClassroomCoursework
+from src.repositories import classroom_cache as cache
 from src.repositories import links as repo
 
 
@@ -63,3 +64,36 @@ async def test_link_repoint_guild_course():
         # by get_by_guild_course returning a *different* link id.
         clash = await repo.get_by_guild_course(session, 10, "c2")
         assert clash is not None and clash.id == b.id and clash.id != a.id
+
+
+@pytest.mark.asyncio
+async def test_link_seeds_cursor_to_high_water_mark():
+    """A new link must start with its sync cursors at the course's latest
+    update_time, so the bot posts only items updated after linking (no backlog)."""
+    await _setup_tables()
+    async with database_module.async_session_factory() as session:
+        session.add(ClassroomCourse(id="c1", name="Math"))
+        session.add(ClassroomAnnouncement(id="a1", course_id="c1", update_time="2026-01-01T00:00:00Z"))
+        session.add(ClassroomCoursework(id="w1", course_id="c1", update_time="2026-05-01T00:00:00Z"))
+        session.add(ClassroomCoursework(id="w2", course_id="c1", update_time="2026-06-11T00:00:00Z"))
+        await session.commit()
+
+        ann_seed, cw_seed = await cache.link_seed_timestamps(session, "c1")
+        assert ann_seed == "2026-01-01T00:00:00Z"
+        assert cw_seed == "2026-06-11T00:00:00Z"  # the latest of the two coursework
+
+        link = await repo.create_link(
+            session,
+            guild_id=10,
+            course_id="c1",
+            channel_id=20,
+            last_sync_announcement=ann_seed,
+            last_sync_coursework=cw_seed,
+        )
+        assert link.last_sync_announcement == ann_seed
+        assert link.last_sync_coursework == cw_seed
+
+        # A course with no cached items seeds to None (first-ever item still posts).
+        session.add(ClassroomCourse(id="empty", name="Empty"))
+        await session.commit()
+        assert await cache.link_seed_timestamps(session, "empty") == (None, None)

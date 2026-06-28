@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -10,8 +10,11 @@ from src.cogs._api_client import ClassroomApiClient
 from src.cogs._config import CommandConfigStore
 from src.cogs._messages import MessageStore
 from src.database import async_session_factory
+from src.discord_attachments import build_item_files
+from src.embed_builder import EmbedBuilder
 from src.google_service import google_service
 from src.models import GuildCourseLink
+from src.repositories import classroom_cache as cache
 from src.utils.permissions import is_guild_admin
 
 logger = logging.getLogger("classroom_sync.cogs.classroom")
@@ -105,13 +108,6 @@ class ClassroomCog(commands.Cog):
         if len(text) <= limit:
             return text or "*No content provided.*"
         return text[: limit - 3] + "..."
-
-    @staticmethod
-    def _format_due_date(coursework: Dict[str, Any]) -> str:
-        due_date = coursework.get("due_date")
-        if not due_date:
-            return "No due date"
-        return f"{due_date.get('year')}-{due_date.get('month', 0):02d}-{due_date.get('day', 0):02d}"
 
     @staticmethod
     def _resolve_list_limit(limit: Optional[int], fetch_all: bool) -> Optional[int]:
@@ -357,49 +353,31 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(effective, fetch_all)
 
         try:
-            course = await self.api.get_course(course_id)
-            if not course:
-                await interaction.followup.send(
-                    f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
-                    ephemeral=True
-                )
-                return
-            coursework_items = await self.api.list_coursework(course_id, limit=resolved_limit)
-            if not coursework_items:
-                await interaction.followup.send(
-                    await self.messages.render("coursework.empty", course_name=course.get("name")),
-                    ephemeral=True
-                )
-                return
-
-            field_builders = []
-            for item in coursework_items:
-                due_text = self._format_due_date(item)
-                grade_text = (
-                    f"{item.get('max_points')} points"
-                    if item.get("max_points") is not None else "Ungraded"
-                )
-                field_builders.append(
-                    (
-                        (item.get("title") or "Untitled Coursework")[:80],
-                        await self.messages.render(
-                            "coursework.item",
-                            description=self._truncate(item.get("description") or "", 180),
-                            due=due_text,
-                            grade=grade_text,
-                            updated=item.get("update_time") or "Unknown",
-                        ),
+            async with async_session_factory() as session:
+                course = await cache.get_cached_course(session, course_id)
+                if not course:
+                    await interaction.followup.send(
+                        f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
+                        ephemeral=True
                     )
-                )
+                    return
+                rows = await cache.list_cached_coursework(session, course_id, limit=resolved_limit)
+                if not rows:
+                    await interaction.followup.send(
+                        await self.messages.render("coursework.empty", course_name=course.name),
+                        ephemeral=True
+                    )
+                    return
 
-            count_label = "all" if fetch_all else str(len(coursework_items))
-            await self._send_embed_pages(
-                interaction,
-                title=await self.messages.render("coursework.title", course_name=course.get("name")),
-                description=await self.messages.render("coursework.header", count=count_label),
-                color=0xf59e0b,
-                field_builders=field_builders,
-            )
+                # One post per coursework item: full embed, with each item's Drive
+                # files uploaded directly and other materials shown as Classroom URLs.
+                for row in rows:
+                    cw = cache.coursework_to_discord_dict(row)
+                    embed = await EmbedBuilder.build_coursework_embed(self.messages, course.name, cw)
+                    files, fallback = await build_item_files(session, course_id, cw["id"])
+                    if fallback:
+                        embed.add_field(name="📎 Attachments", value="\n".join(fallback), inline=False)
+                    await interaction.followup.send(embed=embed, files=files, ephemeral=True)
         except Exception as e:
             logger.error(f"Failed fetching coursework for '{course_id}': {e}")
             await interaction.followup.send(f"❌ **Failed to load coursework:** {e}", ephemeral=True)

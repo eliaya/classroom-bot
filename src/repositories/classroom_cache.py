@@ -590,6 +590,28 @@ async def announcement_signature(
     return int(count or 0), max_update
 
 
+async def link_seed_timestamps(
+    session: AsyncSession, course_id: str
+) -> tuple[Optional[str], Optional[str]]:
+    """Latest ``update_time`` of a course's active announcements and coursework,
+    as ``(announcement_max, coursework_max)``. Used to seed a new/re-pointed
+    link's sync cursors so Discord only posts items updated *after* the link was
+    created — not the whole course history. ISO-8601 strings sort correctly."""
+    ann = await session.execute(
+        select(func.max(ClassroomAnnouncement.update_time)).where(
+            ClassroomAnnouncement.course_id == course_id,
+            ClassroomAnnouncement.removed_at.is_(None),
+        )
+    )
+    cw = await session.execute(
+        select(func.max(ClassroomCoursework.update_time)).where(
+            ClassroomCoursework.course_id == course_id,
+            ClassroomCoursework.removed_at.is_(None),
+        )
+    )
+    return ann.scalar_one_or_none(), cw.scalar_one_or_none()
+
+
 async def list_cached_coursework(
     session: AsyncSession,
     course_id: str,

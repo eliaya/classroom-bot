@@ -57,6 +57,43 @@ DEFAULT_MESSAGES: dict[str, tuple[str, str]] = {
         "🔄 **Global Sync Completed:** Finished a {mode} sync across all registered course links.",
         "Shown by /classroom sync across all courses. Placeholders: {mode}",
     ),
+    # --- Auto-push embeds (background + manual sync post new items to Discord) ---
+    "sync.announcement_title": (
+        "📢 New Announcement • {course_name}",
+        "Pushed-announcement embed title. Placeholders: {course_name}",
+    ),
+    "sync.announcement_footer": (
+        "Synced from Google Classroom • Posted: {updated}",
+        "Pushed-announcement embed footer. Placeholders: {updated}",
+    ),
+    "sync.announcement_attachments": (
+        "Attachments & Materials",
+        "Pushed-announcement attachments field label. No placeholders.",
+    ),
+    "sync.coursework_title": (
+        "📝 Assignment Assigned: {title}",
+        "Pushed-coursework embed title. Placeholders: {title}",
+    ),
+    "sync.coursework_footer": (
+        "Synced from Google Classroom • Modified: {updated}",
+        "Pushed-coursework embed footer. Placeholders: {updated}",
+    ),
+    "sync.coursework_class": (
+        "Class",
+        "Pushed-coursework 'class' field label. No placeholders.",
+    ),
+    "sync.coursework_grading": (
+        "Grading",
+        "Pushed-coursework 'grading' field label. No placeholders.",
+    ),
+    "sync.coursework_due": (
+        "📅 Due Date",
+        "Pushed-coursework 'due date' field label. No placeholders.",
+    ),
+    "sync.coursework_attachments": (
+        "Assignment Attachments",
+        "Pushed-coursework attachments field label. No placeholders.",
+    ),
     # --- Embed titles / headers / per-item labels for the list commands ---
     # (WebUI-editable so admins can reword every command response.)
     "courses.title": (

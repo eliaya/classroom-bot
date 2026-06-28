@@ -9,6 +9,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.database import async_session_factory
 from src.models import GuildCourseLink, PostedAnnouncement
 from src.repositories import classroom_cache as cache
+from src.discord_attachments import build_item_files
+from src.cogs._messages import MessageStore
 from src.embed_builder import EmbedBuilder
 
 logger = logging.getLogger("classroom_sync.sync")
@@ -20,6 +22,7 @@ class ClassroomSyncService:
     def __init__(self, bot: discord.Client) -> None:
         self.bot = bot
         self._sync_lock = asyncio.Lock()
+        self.messages = MessageStore()
 
     async def sync_all_links(self, *, backfill: bool = False) -> None:
         if self._sync_lock.locked():
@@ -145,7 +148,7 @@ class ClassroomSyncService:
 
         for new_ann in new_posts:
             try:
-                embed = EmbedBuilder.build_announcement_embed(course_name, new_ann)
+                embed = await EmbedBuilder.build_announcement_embed(self.messages, course_name, new_ann)
                 await channel.send(
                     content=mention,
                     embed=embed,
@@ -212,10 +215,15 @@ class ClassroomSyncService:
 
         for cw_item in new_items:
             try:
-                embed = EmbedBuilder.build_coursework_embed(course_name, cw_item)
+                embed = await EmbedBuilder.build_coursework_embed(self.messages, course_name, cw_item)
+                # Attach the item's Drive files directly; link any we couldn't upload.
+                files, fallback = await build_item_files(session, link.course_id, cw_item["id"])
+                if fallback:
+                    embed.add_field(name="📎 Attachments", value="\n".join(fallback), inline=False)
                 await channel.send(
                     content=mention,
                     embed=embed,
+                    files=files,
                     allowed_mentions=discord.AllowedMentions(everyone=True, roles=True),
                 )
                 session.add(PostedAnnouncement(
