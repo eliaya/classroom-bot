@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-06-29
+
+Web app bumped to 2.8.0.
+
+### Added
+- Bot now uploads Google Classroom **Drive attachments as real Discord files** instead of only linking them. `src/discord_attachments.py` (`build_item_files`) turns files already fetched to disk by `AttachmentSyncService` (`ClassroomAttachment.local_path`) into `discord.File` objects so the bot posts the file itself. Drive attachments that weren't fetched (no Drive scope, too large, or failed) fall back to their Classroom/Drive URL so the link is never lost; non-Drive materials (link/form/youtube) are still rendered as URLs in the embed.
+- Auto-push embed strings are now **WebUI-editable templates** (`sync.*`): announcement and coursework titles, footers, and field labels (`sync.announcement_title`, `sync.coursework_due`, `sync.*_attachments`, etc.) added to `DEFAULT_MESSAGES` and the en/ja/zh-CN/zh-TW locales.
+
+### Changed
+- **Settings UI restructured** from a single `settings-page.tsx` into dedicated routes/sections: Setup, Scheduler, Language, Audit, and Status (`web/src/routes/_authenticated/settings/*` + `web/src/features/classroom/settings/*`).
+- `EmbedBuilder.build_announcement_embed` is now async and renders titles/labels/footer from the editable `sync.*` templates; `parse_materials` gained a `skip_drive` flag so Drive files aren't double-listed when uploaded as attachments.
+- `/coursework` reads directly from the `classroom_cache` DB instead of the API client.
+
 ## [0.14.0] - 2026-06-25
 
 Web app bumped to 2.7.0.

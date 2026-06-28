@@ -258,6 +258,8 @@ const ja: Resources = {
   botMessages: {
     title: 'ボットメッセージ',
     desc: 'ボットの応答テンプレートを追加・編集・削除します（データベースに保存）',
+    intro: 'これらは Discord でボットが返信する文章です。文言は自由に書き換えられます。{波かっこ} の変数は実際の値（コース名など）に自動で置き換わるため、そのまま残し、新規追加はしないでください。',
+    variables: '使用できる変数（残してください）：',
     customized: 'カスタム済み',
     builtin: '組み込み',
     new: 'メッセージを追加',
@@ -439,6 +441,13 @@ const ja: Resources = {
   settings: {
     title: '設定',
     desc: 'API の正常性、OAuth 認証情報、同期設定',
+    nav: {
+      status: 'ステータス',
+      language: '言語',
+      scheduler: 'スケジューラ',
+      audit: '監査ログ',
+      setup: 'セットアップ',
+    },
     loadFailed: '読み込みに失敗しました',
     apiHealth: 'API の正常性',
     apiHealthDesc: 'FastAPI バックエンドの状態',

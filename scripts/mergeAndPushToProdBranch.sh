@@ -25,6 +25,7 @@ TARGET_BRANCH="${TARGET_BRANCH:-main}"
 AUTO_PUSH="${AUTO_PUSH:-1}"
 ORIGINAL_BRANCH=""
 MERGE_PHASE=""
+STASHED=0
 
 log() {
   printf '[merge-to-prod] %s\n' "$*"
@@ -121,11 +122,20 @@ ensure_not_on_target() {
   fi
 }
 
-ensure_clean_tree() {
+stash_tree() {
   if [[ -n "$(git status --porcelain)" ]]; then
-    warn "uncommitted changes detected:"
-    git status --short >&2
-    die "commit your changes (git add && git commit) or stash them (git stash) before running this script"
+    log "stashing uncommitted changes..."
+    git stash push --include-untracked -m "mergeAndPushToProdBranch auto-stash"
+    STASHED=1
+  fi
+}
+
+# ponytail: pop lands on the target branch (script ends there), not the feature
+# branch the changes came from; git stash is content-based so that's harmless.
+restore_stash() {
+  if [[ "$STASHED" == "1" ]]; then
+    log "restoring stashed changes..."
+    git stash pop || warn "git stash pop had conflicts; resolve manually (git stash list)"
   fi
 }
 
@@ -338,7 +348,6 @@ main() {
   require_command git
   ensure_git_repo
   ensure_not_on_target
-  ensure_clean_tree
 
   ORIGINAL_BRANCH="$(current_branch)"
   log "current branch: ${ORIGINAL_BRANCH}"
@@ -346,6 +355,9 @@ main() {
 
   ensure_remote_target
   prompt_continue
+
+  stash_tree
+  trap restore_stash EXIT
 
   log "switching to ${TARGET_BRANCH} and updating..."
   checkout_branch "$TARGET_BRANCH"

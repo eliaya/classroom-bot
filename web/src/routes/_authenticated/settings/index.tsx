@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ClassroomSettingsPage } from '@/features/classroom/settings-page'
+import { StatusSection } from '@/features/classroom/settings/status-section'
 
 export const Route = createFileRoute('/_authenticated/settings/')({
-  component: ClassroomSettingsPage,
+  component: StatusSection,
 })

@@ -83,6 +83,9 @@ async def create_link(
             status_code=409,
             detail=f"Course '{body.course_id}' is already linked in this guild.",
         )
+    # Seed the sync cursors to the course's current high-water mark so the bot
+    # only posts items updated *after* linking — not the whole course backlog.
+    ann_seed, cw_seed = await cache.link_seed_timestamps(session, body.course_id)
     link = await repo.create_link(
         session,
         guild_id=body.guild_id,
@@ -91,6 +94,8 @@ async def create_link(
         notify_role_id=body.notify_role_id,
         notify_target=body.notify_target,
         is_active=body.is_active,
+        last_sync_announcement=ann_seed,
+        last_sync_coursework=cw_seed,
     )
     return _serialize(link, course.name)
 
@@ -124,10 +129,12 @@ async def update_link(
                 status_code=409,
                 detail=f"Course '{new_course}' is already linked in this guild.",
             )
-        # The per-link sync cursors track the old course; reset so the re-pointed
-        # link posts from scratch instead of skipping items behind a stale cursor.
-        fields["last_sync_announcement"] = None
-        fields["last_sync_coursework"] = None
+        # The old cursors track the previous course. Re-seed to the new course's
+        # high-water mark so the re-pointed link posts only items updated after
+        # the change — not the new course's entire backlog.
+        ann_seed, cw_seed = await cache.link_seed_timestamps(session, new_course)
+        fields["last_sync_announcement"] = ann_seed
+        fields["last_sync_coursework"] = cw_seed
 
     updated = await repo.update_link(session, link, **fields)
     course = await cache.get_cached_course(session, updated.course_id)

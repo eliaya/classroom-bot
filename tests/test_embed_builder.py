@@ -2,6 +2,14 @@ from __future__ import annotations
 import pytest
 import discord
 from src.embed_builder import EmbedBuilder, truncate_text, parse_materials
+from src.message_templates import default_template
+
+
+class _DefaultMessages:
+    """Minimal MessageStore stand-in: renders the in-code default templates."""
+
+    async def render(self, key: str, **params: object) -> str:
+        return default_template(key).format(**params)
 
 
 def test_truncate_text():
@@ -47,7 +55,8 @@ def test_parse_materials():
     assert "🔗 [Link: Reference Website]" in parsed[2]
 
 
-def test_build_announcement_embed():
+@pytest.mark.asyncio
+async def test_build_announcement_embed():
     """Test generating a structured google announcement text embed."""
     mock_announcement = {
         "id": "ann123",
@@ -65,8 +74,8 @@ def test_build_announcement_embed():
         ]
     }
 
-    embed = EmbedBuilder.build_announcement_embed("Math 101", mock_announcement)
-    
+    embed = await EmbedBuilder.build_announcement_embed(_DefaultMessages(), "Math 101", mock_announcement)
+
     assert isinstance(embed, discord.Embed)
     assert "Announcement" in embed.title
     assert "Math 101" in embed.title
@@ -77,7 +86,8 @@ def test_build_announcement_embed():
     assert "Chapter 2 notes" in embed.fields[0].value
 
 
-def test_build_coursework_embed():
+@pytest.mark.asyncio
+async def test_build_coursework_embed():
     """Test generating a structured coursework Assignment orange embed."""
     mock_coursework = {
         "id": "cw456",
@@ -90,8 +100,8 @@ def test_build_coursework_embed():
         "dueTime": {"hour": 23, "minute": 59}
     }
 
-    embed = EmbedBuilder.build_coursework_embed("Science 101", mock_coursework)
-    
+    embed = await EmbedBuilder.build_coursework_embed(_DefaultMessages(), "Science 101", mock_coursework)
+
     assert isinstance(embed, discord.Embed)
     assert "Assignment Assigned" in embed.title
     assert "Science 101" in embed.fields[0].value

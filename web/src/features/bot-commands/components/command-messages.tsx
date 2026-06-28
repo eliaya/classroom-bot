@@ -100,6 +100,8 @@ export function CommandMessages({ commandName }: { commandName: string }) {
         </Button>
       </div>
 
+      <p className='text-muted-foreground text-xs'>{t('botMessages.intro')}</p>
+
       {error && <p className='text-destructive text-sm'>{error}</p>}
 
       {creating && (
@@ -144,54 +146,76 @@ export function CommandMessages({ commandName }: { commandName: string }) {
       {items.length === 0 && !creating ? (
         <p className='text-muted-foreground text-xs'>{t('botMessages.empty')}</p>
       ) : (
-        items.map((m) => {
-          const d = draftFor(m)
-          return (
-            <div key={m.key} className='flex flex-col gap-2 rounded-md border p-3'>
-              <div className='flex items-center gap-2'>
-                <code className='text-sm font-medium'>{m.key}</code>
-                {m.is_default && <Badge variant='secondary'>{t('botMessages.builtin')}</Badge>}
+        <div className='divide-y rounded-md border'>
+          {items.map((m) => {
+            const d = draftFor(m)
+            // Show which {placeholders} the template offers, so admins know what
+            // gets auto-filled and shouldn't invent new ones.
+            const vars = [...new Set([...d.template.matchAll(/\{(\w+)\}/g)].map((g) => g[1]))]
+            return (
+              <div key={m.key} className='flex flex-col gap-2 p-3'>
+                {/* Readable label first; the cryptic key is demoted to a tag. */}
+                <div className='flex items-start justify-between gap-2'>
+                  {m.is_default ? (
+                    <span className='text-sm font-medium'>{d.description || m.key}</span>
+                  ) : (
+                    <Input
+                      aria-label={t('botMessages.description')}
+                      value={d.description}
+                      placeholder={t('botMessages.description')}
+                      onChange={(e) =>
+                        setDrafts((prev) => ({ ...prev, [m.key]: { ...d, description: e.target.value } }))
+                      }
+                      className='h-7 text-sm font-medium'
+                    />
+                  )}
+                  <div className='flex shrink-0 items-center gap-1'>
+                    <code className='text-muted-foreground text-xs'>{m.key}</code>
+                    <Badge variant='secondary'>
+                      {m.is_default ? t('botMessages.builtin') : t('botMessages.customized')}
+                    </Badge>
+                  </div>
+                </div>
+                <Textarea
+                  aria-label={m.key}
+                  value={d.template}
+                  onChange={(e) =>
+                    setDrafts((prev) => ({ ...prev, [m.key]: { ...d, template: e.target.value } }))
+                  }
+                  rows={2}
+                  className='font-mono text-sm'
+                />
+                {vars.length > 0 && (
+                  <div className='flex flex-wrap items-center gap-1'>
+                    <span className='text-muted-foreground text-xs'>{t('botMessages.variables')}</span>
+                    {vars.map((v) => (
+                      <Badge key={v} variant='outline' className='font-mono text-xs'>{`{${v}}`}</Badge>
+                    ))}
+                  </div>
+                )}
+                <div className='flex items-center justify-between gap-2'>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='text-destructive'
+                    disabled={busy === m.key}
+                    onClick={() => void handleDelete(m)}
+                  >
+                    <Trash2 className='size-4' />
+                    {m.is_default ? t('botMessages.reset') : t('botMessages.delete')}
+                  </Button>
+                  <Button
+                    size='sm'
+                    disabled={!isDirty(m) || busy === m.key}
+                    onClick={() => void handleSave(m)}
+                  >
+                    {t('botMessages.save')}
+                  </Button>
+                </div>
               </div>
-              <Input
-                aria-label={t('botMessages.description')}
-                value={d.description}
-                placeholder={t('botMessages.description')}
-                onChange={(e) =>
-                  setDrafts((prev) => ({ ...prev, [m.key]: { ...d, description: e.target.value } }))
-                }
-                className='text-muted-foreground text-xs'
-              />
-              <Textarea
-                aria-label={m.key}
-                value={d.template}
-                onChange={(e) =>
-                  setDrafts((prev) => ({ ...prev, [m.key]: { ...d, template: e.target.value } }))
-                }
-                rows={2}
-                className='font-mono text-sm'
-              />
-              <div className='flex items-center justify-between gap-2'>
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  className='text-destructive'
-                  disabled={busy === m.key}
-                  onClick={() => void handleDelete(m)}
-                >
-                  <Trash2 className='size-4' />
-                  {m.is_default ? t('botMessages.reset') : t('botMessages.delete')}
-                </Button>
-                <Button
-                  size='sm'
-                  disabled={!isDirty(m) || busy === m.key}
-                  onClick={() => void handleSave(m)}
-                >
-                  {t('botMessages.save')}
-                </Button>
-              </div>
-            </div>
-          )
-        })
+            )
+          })}
+        </div>
       )}
     </div>
   )

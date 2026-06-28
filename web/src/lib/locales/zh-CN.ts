@@ -258,6 +258,8 @@ const zhCN: Resources = {
   botMessages: {
     title: '机器人消息',
     desc: '新增、编辑或删除机器人的回应模板（存储于数据库）',
+    intro: '这些是机器人在 Discord 回复的文字，可自由改写用词。{大括号} 是会自动带入实际内容（如课程名称）的变量，请原样保留、勿自行新增。',
+    variables: '可用变量（请保留）：',
     customized: '已自定义',
     builtin: '内建',
     new: '新增消息',
@@ -439,6 +441,13 @@ const zhCN: Resources = {
   settings: {
     title: '设置',
     desc: 'API 健康状态、OAuth 凭据与同步配置',
+    nav: {
+      status: '状态',
+      language: '语言',
+      scheduler: '调度',
+      audit: '审计日志',
+      setup: '设置指南',
+    },
     loadFailed: '加载失败',
     apiHealth: 'API 健康状态',
     apiHealthDesc: 'FastAPI 后端状态',

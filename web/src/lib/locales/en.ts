@@ -261,6 +261,8 @@ export const en = {
   botMessages: {
     title: 'Bot messages',
     desc: 'Add, edit or delete the bot’s response templates (stored in the database)',
+    intro: 'These are the texts the bot replies with in Discord — feel free to reword them. {placeholders} in braces are auto-filled with real values (e.g. the course name); keep them as-is and don’t invent new ones.',
+    variables: 'Available variables (keep these):',
     customized: 'Customized',
     builtin: 'Built-in',
     new: 'New message',
@@ -445,6 +447,13 @@ export const en = {
   settings: {
     title: 'Settings',
     desc: 'API health, OAuth credentials, and sync configuration',
+    nav: {
+      status: 'Status',
+      language: 'Language',
+      scheduler: 'Scheduler',
+      audit: 'Audit log',
+      setup: 'Setup guide',
+    },
     loadFailed: 'Load failed',
     apiHealth: 'API health',
     apiHealthDesc: 'FastAPI backend status',
