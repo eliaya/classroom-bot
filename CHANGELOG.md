@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-06-29
+
+### Fixed
+- Auto-push repeatedly posted the **same first (oldest) item** to a channel every cycle and never advanced to newer items. `_sync_announcements`/`_sync_coursework` had a "first sync" shortcut (taken whenever a link's `last_sync_*` cursor was empty) that posted item 0, `break`ed, and — critically — **skipped the `_is_already_posted` dedup check**, doing a blind `PostedAnnouncement` insert. Because `posted_announcements` is `UNIQUE(announcement_id, guild_id)`, the duplicate insert raised an IntegrityError that rolled back the whole sync pass, so the cursor never persisted and the bot re-posted item 0 on the next poll (the "bot 暴走" spam). An empty cursor is the normal seeded state for a course that had no items of that type when it was linked (`link_seed_timestamps` returns NULL). Removed the shortcut: `PostedAnnouncement` is now always the authoritative idempotency guard, and the cursor advances past every scanned item (not only posted ones) so settled courses stop re-scanning the backlog. Regression test: `tests/test_sync_service_idempotency.py`.
+
 ## [0.15.0] - 2026-06-29
 
 Web app bumped to 2.8.0.

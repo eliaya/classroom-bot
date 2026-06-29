@@ -122,29 +122,28 @@ class ClassroomSyncService:
             ann = cache.announcement_to_discord_dict(row)
             ann_id = ann["id"]
             update_time = ann.get("updateTime") or ""
-
-            if backfill:
-                if await self._is_already_posted(session, ann_id, link.guild_id):
-                    continue
-                new_posts.append(ann)
-                if not max_seen_timestamp or update_time > max_seen_timestamp:
-                    max_seen_timestamp = update_time
-                continue
-
-            if link.last_sync_announcement and update_time <= link.last_sync_announcement:
-                continue
-
-            if not link.last_sync_announcement:
-                new_posts = [ann]
+            # Advance the cursor past every item we scan (not just ones we post)
+            # so a course whose newest item is already posted still moves its
+            # watermark forward and stops re-scanning the backlog each cycle.
+            if not max_seen_timestamp or update_time > max_seen_timestamp:
                 max_seen_timestamp = update_time
-                break
 
+            # Watermark is only a cheap skip for already-seen items on an
+            # incremental pass; backfill ignores it and leans purely on dedup.
+            if not backfill and link.last_sync_announcement and update_time <= link.last_sync_announcement:
+                continue
+
+            # PostedAnnouncement (UNIQUE on announcement_id+guild_id) is the
+            # authoritative idempotency guard — always honour it. The old
+            # "first sync" shortcut skipped this check and posted item 0 with a
+            # blind insert: when the cursor was empty (e.g. a course linked
+            # before it had any items) that re-posted item 0 every cycle, and a
+            # duplicate insert raised a UNIQUE violation that rolled back the
+            # whole pass so the cursor never advanced.
             if await self._is_already_posted(session, ann_id, link.guild_id):
                 continue
 
             new_posts.append(ann)
-            if not max_seen_timestamp or update_time > max_seen_timestamp:
-                max_seen_timestamp = update_time
 
         for new_ann in new_posts:
             try:
@@ -189,29 +188,23 @@ class ClassroomSyncService:
             cw = cache.coursework_to_discord_dict(row)
             cw_id = cw["id"]
             update_time = cw.get("updateTime") or ""
-
-            if backfill:
-                if await self._is_already_posted(session, cw_id, link.guild_id):
-                    continue
-                new_items.append(cw)
-                if not max_seen_timestamp or update_time > max_seen_timestamp:
-                    max_seen_timestamp = update_time
-                continue
-
-            if link.last_sync_coursework and update_time <= link.last_sync_coursework:
-                continue
-
-            if not link.last_sync_coursework:
-                new_items = [cw]
+            # Advance the cursor past every item we scan (see _sync_announcements).
+            if not max_seen_timestamp or update_time > max_seen_timestamp:
                 max_seen_timestamp = update_time
-                break
 
+            # Watermark is only a cheap skip for already-seen items on an
+            # incremental pass; backfill ignores it and leans purely on dedup.
+            if not backfill and link.last_sync_coursework and update_time <= link.last_sync_coursework:
+                continue
+
+            # PostedAnnouncement (UNIQUE on announcement_id+guild_id) is the
+            # authoritative idempotency guard — always honour it (see the matching
+            # note in _sync_announcements for why the old first-sync shortcut
+            # re-posted item 0 forever).
             if await self._is_already_posted(session, cw_id, link.guild_id):
                 continue
 
             new_items.append(cw)
-            if not max_seen_timestamp or update_time > max_seen_timestamp:
-                max_seen_timestamp = update_time
 
         for cw_item in new_items:
             try:
