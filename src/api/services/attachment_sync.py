@@ -72,10 +72,12 @@ class AttachmentSyncService:
         """Fetch and cache attachment content for every classwork item in a course."""
         coursework = await cache.list_cached_coursework(session, course_id)
         materials = await cache.list_cached_materials(session, course_id)
+        announcements = await cache.list_cached_announcements(session, course_id)
 
         items: List[Tuple[str, str, Optional[str]]] = (
             [("coursework", cw.id, cw.materials_json) for cw in coursework]
             + [("material", m.id, m.materials_json) for m in materials]
+            + [("announcement", a.id, a.materials_json) for a in announcements]
         )
 
         drive_ok = google_service.has_drive_scope()

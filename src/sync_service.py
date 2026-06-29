@@ -148,9 +148,14 @@ class ClassroomSyncService:
         for new_ann in new_posts:
             try:
                 embed = await EmbedBuilder.build_announcement_embed(self.messages, course_name, new_ann)
+                # Attach the item's Drive files directly; link any we couldn't upload.
+                files, fallback = await build_item_files(session, link.course_id, new_ann["id"])
+                if fallback:
+                    embed.add_field(name="📎 Attachments", value="\n".join(fallback), inline=False)
                 await channel.send(
                     content=mention,
                     embed=embed,
+                    files=files,
                     allowed_mentions=discord.AllowedMentions(everyone=True, roles=True),
                 )
                 session.add(PostedAnnouncement(

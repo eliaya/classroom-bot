@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-06-29
+
+### Fixed
+- Announcement Drive attachments were always posted as **Google Drive links** instead of being uploaded as real Discord files (coursework already uploaded correctly). Two gaps: (1) `AttachmentSyncService.sync_course_attachments` only downloaded `coursework` + `material` items, so announcement Drive files were never fetched to disk; (2) `_sync_announcements` never called `build_item_files`, and `build_announcement_embed` rendered Drive materials via `parse_materials` **without** `skip_drive`. Now announcements are included in the attachment download set, `_sync_announcements` uploads fetched Drive files (falling back to a link only for files it can't upload, mirroring coursework), and the announcement embed uses `parse_materials(skip_drive=True)` so uploaded files aren't double-listed as links. Existing cached announcements backfill their files on the next Classroom cache-sync; files over Discord's 10 MB cap (and skipped/failed downloads) still fall back to a link.
+
 ## [0.15.1] - 2026-06-29
 
 ### Fixed

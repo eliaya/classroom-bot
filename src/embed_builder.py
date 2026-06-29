@@ -90,7 +90,9 @@ class EmbedBuilder:
         # Materials / Attachments section
         materials = announcement.get("materials", [])
         if materials:
-            parsed = parse_materials(materials)
+            # Drive files are uploaded as real Discord attachments by the caller,
+            # so only link the non-Drive materials (youtube/link/form) here.
+            parsed = parse_materials(materials, skip_drive=True)
             if parsed:
                 embed.add_field(
                     name=await messages.render("sync.announcement_attachments"),
