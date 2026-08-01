@@ -1,9 +1,14 @@
 #!/bin/sh
 set -e
 
-# Bind mounts replace image-owned dirs; fix ownership so the non-root app user
-# can create/update SQLite files and refresh OAuth tokens.
-chown -R app:app /app/data /app/credentials
-chmod -R u+rwX /app/data /app/credentials
+# Docker starts as root so it can fix bind-mount ownership before dropping
+# privileges. Opossum runs as the host user because Apple bind mounts reject
+# chown from inside the container.
+if [ "$(id -u)" -eq 0 ]; then
+  chown -R app:app /app/data /app/credentials
+  chmod -R u+rwX /app/data /app/credentials
 
-exec runuser -u app -- "$@"
+  exec runuser -u app -- "$@"
+fi
+
+exec "$@"

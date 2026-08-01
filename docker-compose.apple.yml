@@ -1,0 +1,69 @@
+# Apple Container/Opossum local stack.
+name: classroom-bot
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    container_name: classroom-api
+    restart: unless-stopped
+    user: "${APP_RUNTIME_USER:-501:20}"
+    env_file:
+      - .env
+    environment:
+      - API_PORT=8000
+    volumes:
+      - ${APP_DATA_SOURCE:-./data/apple-container/app}:/app/data
+      - ./credentials:/app/credentials
+    ports:
+      - ${API_PORT}:8000
+    logging: *default-logging
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  bot:
+    build:
+      context: .
+      dockerfile: docker/bot/Dockerfile
+    container_name: discord-bot
+    restart: unless-stopped
+    user: "${APP_RUNTIME_USER:-501:20}"
+    env_file:
+      - .env
+    environment:
+      - API_BASE_URL=http://api:8000
+    volumes:
+      - ${APP_DATA_SOURCE:-./data/apple-container/app}:/app/data
+      - ./credentials:/app/credentials
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *default-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    container_name: classroom-web
+    restart: unless-stopped
+    ports:
+      - ${HTTP_PORT}:80
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *default-logging

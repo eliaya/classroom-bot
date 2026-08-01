@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-08-01
+
+### Added
+- `scripts/dev.sh` now falls back to Opossum when Docker Compose is unavailable and explicitly uses the new `docker-compose.apple.yml` stack for Apple Container. The existing `--no-build` option now works with both runtimes.
+
+### Fixed
+- Apple Container now runs the API and bot with the host UID/GID against a shared bind-mounted data directory, avoiding unsupported ownership changes while preserving Docker's existing root-to-`app` privilege drop.
+- Bot and Web startup now wait for the API health check, preventing the Nginx upstream DNS race that stopped the Web container during Opossum startup.
+
 ## [0.15.2] - 2026-06-29
 
 ### Fixed
