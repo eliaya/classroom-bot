@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     ATTACHMENT_MAX_BYTES: int = 52_428_800  # 50 MB; larger files are skipped
     ATTACHMENT_DOWNLOAD_RETRIES: int = 2
 
+    # Backup / restore. Archives land under the shared app_data volume so they
+    # survive a container rebuild; nothing is ever uploaded off-box.
+    BACKUP_STORAGE_DIR: str = "/app/data/backups"
+    BACKUP_RETENTION_DAYS: int = 7
+    # Daily scheduled backup, in JST (the schedule itself is WebUI-editable and
+    # persisted in backup_settings; these are only the first-run seeds).
+    BACKUP_HOUR: int = 3
+    BACKUP_MINUTE: int = 0
+
     # Reserved for the next phase: Gmail inbox notifications delivered to Discord.
     # These settings are intentionally inert until the Gmail sync service is implemented.
     GMAIL_NOTIFICATIONS_ENABLED: bool = False
@@ -180,6 +189,18 @@ def normalize_database_url(database_url: str) -> str:
 
 
 settings.DATABASE_URL = normalize_database_url(settings.DATABASE_URL)
+
+
+def database_file_path() -> Path:
+    """Filesystem path of the live SQLite file behind ``settings.DATABASE_URL``.
+
+    Read at call time (not import time) so the test fixture's DB swap is picked up.
+    """
+    prefix = "sqlite+aiosqlite:///"
+    url = settings.DATABASE_URL
+    if not url.startswith(prefix):
+        raise RuntimeError(f"Backups require a SQLite DATABASE_URL, got: {url}")
+    return Path(url[len(prefix):])
 
 logger = logging.getLogger("classroom_sync")
 

@@ -43,10 +43,14 @@ class ClassroomSyncService:
                 for link in links:
                     try:
                         await self.sync_single_link(session, link, backfill=backfill)
+                        # Commit per link: one link's failure must not discard the
+                        # posts and cursor bumps the earlier links already earned.
+                        await session.commit()
                     except Exception as e:
+                        # Roll back so a failed statement doesn't leave the session
+                        # in "invalid transaction" state for every remaining link.
+                        await session.rollback()
                         logger.error(f"Uncaught failure synching link (ID {link.id}) for course '{link.course_id}': {e}")
-
-                await session.commit()
             logger.info("Background synchronization pass completed.")
 
     async def sync_single_link(
@@ -163,8 +167,17 @@ class ClassroomSyncService:
                     course_id=link.course_id,
                     guild_id=link.guild_id,
                 ))
+                # Persist the dedup row before sending anything else. The old
+                # pass-wide transaction stayed open across every channel.send
+                # (attachment uploads included), so one SQLite lock error or a
+                # restart discarded the rows for messages Discord had already
+                # received — and the next cycle re-posted them forever.
+                # ponytail: at-least-once; a crash between send and commit can
+                # still repeat a single item.
+                await session.commit()
                 logger.info(f"Posted new announcement '{new_ann['id']}' to Discord.")
             except Exception as discord_err:
+                await session.rollback()
                 logger.error(f"Failed to post announcement '{new_ann['id']}' to Discord: {discord_err}")
 
         if max_seen_timestamp != link.last_sync_announcement:
@@ -229,8 +242,11 @@ class ClassroomSyncService:
                     course_id=link.course_id,
                     guild_id=link.guild_id,
                 ))
+                # Durable before the next send (see _sync_announcements).
+                await session.commit()
                 logger.info(f"Posted new coursework '{cw_item['id']}' to Discord.")
             except Exception as discord_err:
+                await session.rollback()
                 logger.error(f"Failed to post coursework '{cw_item['id']}' to Discord: {discord_err}")
 
         if max_seen_timestamp != link.last_sync_coursework:

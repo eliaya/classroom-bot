@@ -31,6 +31,7 @@ import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedSettingsSetupRouteImport } from './routes/_authenticated/settings/setup'
 import { Route as AuthenticatedSettingsSchedulerRouteImport } from './routes/_authenticated/settings/scheduler'
 import { Route as AuthenticatedSettingsLanguageRouteImport } from './routes/_authenticated/settings/language'
+import { Route as AuthenticatedSettingsBackupRouteImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAuditRouteImport } from './routes/_authenticated/settings/audit'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedCoursesCourseIdRouteRouteImport } from './routes/_authenticated/courses/$courseId/route'
@@ -155,6 +156,12 @@ const AuthenticatedSettingsLanguageRoute =
     path: '/language',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsBackupRoute =
+  AuthenticatedSettingsBackupRouteImport.update({
+    id: '/backup',
+    path: '/backup',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedSettingsAuditRoute =
   AuthenticatedSettingsAuditRouteImport.update({
     id: '/audit',
@@ -213,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
+  '/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
@@ -241,6 +249,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
+  '/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
@@ -273,6 +282,7 @@ export interface FileRoutesById {
   '/_authenticated/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/audit': typeof AuthenticatedSettingsAuditRoute
+  '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/_authenticated/settings/language': typeof AuthenticatedSettingsLanguageRoute
   '/_authenticated/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/_authenticated/settings/setup': typeof AuthenticatedSettingsSetupRoute
@@ -305,6 +315,7 @@ export interface FileRouteTypes {
     | '/courses/$courseId'
     | '/errors/$error'
     | '/settings/audit'
+    | '/settings/backup'
     | '/settings/language'
     | '/settings/scheduler'
     | '/settings/setup'
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | '/'
     | '/errors/$error'
     | '/settings/audit'
+    | '/settings/backup'
     | '/settings/language'
     | '/settings/scheduler'
     | '/settings/setup'
@@ -364,6 +376,7 @@ export interface FileRouteTypes {
     | '/_authenticated/courses/$courseId'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/audit'
+    | '/_authenticated/settings/backup'
     | '/_authenticated/settings/language'
     | '/_authenticated/settings/scheduler'
     | '/_authenticated/settings/setup'
@@ -549,6 +562,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsLanguageRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/backup': {
+      id: '/_authenticated/settings/backup'
+      path: '/backup'
+      fullPath: '/settings/backup'
+      preLoaderRoute: typeof AuthenticatedSettingsBackupRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/audit': {
       id: '/_authenticated/settings/audit'
       path: '/audit'
@@ -603,6 +623,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAuditRoute: typeof AuthenticatedSettingsAuditRoute
+  AuthenticatedSettingsBackupRoute: typeof AuthenticatedSettingsBackupRoute
   AuthenticatedSettingsLanguageRoute: typeof AuthenticatedSettingsLanguageRoute
   AuthenticatedSettingsSchedulerRoute: typeof AuthenticatedSettingsSchedulerRoute
   AuthenticatedSettingsSetupRoute: typeof AuthenticatedSettingsSetupRoute
@@ -612,6 +633,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
 const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteChildren =
   {
     AuthenticatedSettingsAuditRoute: AuthenticatedSettingsAuditRoute,
+    AuthenticatedSettingsBackupRoute: AuthenticatedSettingsBackupRoute,
     AuthenticatedSettingsLanguageRoute: AuthenticatedSettingsLanguageRoute,
     AuthenticatedSettingsSchedulerRoute: AuthenticatedSettingsSchedulerRoute,
     AuthenticatedSettingsSetupRoute: AuthenticatedSettingsSetupRoute,

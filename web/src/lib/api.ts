@@ -76,6 +76,48 @@ export type AuditRetentionStatus = {
   max_retention_days: number
 }
 
+export type BackupScope = 'database' | 'full'
+
+export type BackupJob = {
+  id: string
+  scope: BackupScope
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'deleted'
+  phase: string
+  actor: string
+  archive_filename?: string | null
+  archive_bytes?: number | null
+  file_count: number
+  error_summary?: string | null
+  created_at?: string | null
+  completed_at?: string | null
+  expires_at?: string | null
+}
+
+export type RestoreJob = {
+  id: string
+  backup_id: string
+  safety_backup_id?: string | null
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  phase: string
+  safe_to_retry: boolean
+  error_summary?: string | null
+  created_at?: string | null
+  completed_at?: string | null
+}
+
+export type BackupSettings = {
+  enabled: boolean
+  scope: BackupScope
+  hour: number
+  minute: number
+  job_scheduled: boolean
+  next_run_time?: string | null
+  retention_days: number
+  max_retention_days: number
+  /** false = download and restore are refused until ADMIN_API_TOKEN is set. */
+  admin_token_configured: boolean
+}
+
 export type BotStatus = {
   status: 'connected' | 'disconnected' | 'disabled' | 'unknown' | 'error'
   last_heartbeat?: string | null
@@ -431,4 +473,52 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+
+  listBackups: () =>
+    request<{ items: BackupJob[]; total: number }>('/backup?limit=50'),
+  getBackup: (id: string) => request<BackupJob>(`/backup/${id}`),
+  createBackup: (scope: BackupScope) =>
+    request<BackupJob>('/backup', {
+      method: 'POST',
+      body: JSON.stringify({ scope }),
+    }),
+  deleteBackup: (id: string) =>
+    request<{ status: string }>(`/backup/${id}`, { method: 'DELETE' }),
+  getBackupSettings: () => request<BackupSettings>('/backup/settings'),
+  updateBackupSettings: (body: {
+    enabled?: boolean
+    scope?: BackupScope
+    hour?: number
+    minute?: number
+    retention_days?: number
+  }) =>
+    request<BackupSettings>('/backup/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  restoreBackup: (id: string) =>
+    request<RestoreJob>(`/backup/${id}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ confirmation: id }),
+    }),
+  getRestore: (id: string) => request<RestoreJob>(`/backup/restores/${id}`),
+
+  /** Download an archive. A plain <a href> cannot carry the admin header, so
+   *  fetch it and hand the browser a blob.
+   *  ponytail: buffers the whole archive in memory — fine at 33 MB (database
+   *  scope) and workable at ~350 MB (full); swap for a signed one-time URL if
+   *  archives outgrow that. `curl -H "Authorization: Bearer …"` always works. */
+  downloadBackup: async (id: string, filename: string) => {
+    const token = import.meta.env.VITE_ADMIN_API_TOKEN
+    const res = await fetch(`${API_BASE}/backup/${id}/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new Error((await res.text()) || res.statusText)
+    const url = URL.createObjectURL(await res.blob())
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  },
 }

@@ -37,6 +37,8 @@ class ClassroomSyncBot(commands.Bot):
         # Extensions & services
         self.scheduler = AsyncIOScheduler()
         self.sync_service: ClassroomSyncService = ClassroomSyncService(self)
+        # Set while a restore holds the maintenance marker (see _paused_for_restore).
+        self._restore_paused = False
 
     async def setup_hook(self) -> None:
         """Hook called by discord.py once internal websocket state is ready, before login."""
@@ -98,7 +100,7 @@ class ClassroomSyncBot(commands.Bot):
         never fires (that was the auto-push regression).
         """
         self.scheduler.add_job(
-            self.sync_service.sync_all_links,
+            self._sync_all_links,
             "interval",
             minutes=interval,
             id="classroom_poll_sync",
@@ -143,7 +145,41 @@ class ClassroomSyncBot(commands.Bot):
         except Exception:
             logger.exception("Failed to write bot heartbeat")
 
+    async def _paused_for_restore(self) -> bool:
+        """Stand down while the API is swapping the SQLite file underneath us.
+
+        Reports ``paused`` (which is what the restore waits for) and drops the
+        connection pool, so no write lands in the inode that is about to be
+        replaced.
+        """
+        from src import maintenance
+
+        if not maintenance.is_active():
+            if self._restore_paused:
+                self._restore_paused = False
+                logger.info("Restore finished — bot resuming")
+            return False
+        # Announce + disconnect exactly once, then stay silent: every extra
+        # write is another chance to touch the inode being replaced.
+        if not self._restore_paused:
+            await self._write_heartbeat("paused", "Restore in progress")
+            await engine.dispose()
+            self._restore_paused = True
+            logger.warning("Restore in progress — bot paused")
+        return True
+
+    async def _sync_all_links(self) -> None:
+        """Poll job wrapper: skip the whole pass during a restore."""
+        from src import maintenance
+
+        if maintenance.is_active():
+            logger.info("Poll sync skipped — restore in progress")
+            return
+        await self.sync_service.sync_all_links()
+
     async def _heartbeat(self) -> None:
+        if await self._paused_for_restore():
+            return
         connected = self.is_ready() and not self.is_closed()
         await self._write_heartbeat("connected" if connected else "disconnected")
         # Pick up WebUI poll-interval changes (≤60s lag; bot is a separate process).

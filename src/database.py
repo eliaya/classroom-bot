@@ -14,7 +14,10 @@ logger = logging.getLogger("classroom_sync.database")
 # We check if it is SQLite to apply specific arguments context (e.g. check_same_thread=False)
 connect_args = {}
 if settings.DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
+    # The API and bot are separate processes on one SQLite file. pysqlite's
+    # 5s default busy timeout is easily exceeded while a sync pass is writing,
+    # so a contended write failed outright ("database is locked").
+    connect_args = {"check_same_thread": False, "timeout": 30}
 
 engine = create_async_engine(
     settings.DATABASE_URL,

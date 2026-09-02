@@ -21,7 +21,7 @@ from typing import Awaitable, Callable, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from src.config import settings
+from src.config import TOKYO_TZ, settings
 
 logger = logging.getLogger("classroom_sync.scheduler")
 
@@ -29,6 +29,7 @@ JOB_ID = "classroom_cache_sync"
 AUDIT_PURGE_JOB_ID = "audit_log_purge"
 # How often the auto-rotation job runs (the retention window itself is in days).
 AUDIT_PURGE_INTERVAL_HOURS = 6
+BACKUP_JOB_ID = "database_backup"
 
 
 async def _default_runner() -> None:
@@ -56,6 +57,16 @@ async def _purge_audit_logs(retention_days: int) -> None:
         logger.exception("Audit log rotation failed")
 
 
+async def _run_scheduled_backup() -> None:
+    """Enqueue + run one scheduled backup (best-effort; never raises)."""
+    from src.api.services.backup_service import run_scheduled_backup
+
+    try:
+        await run_scheduled_backup()
+    except Exception:  # noqa: BLE001 - a failed backup must not kill the scheduler
+        logger.exception("Scheduled backup failed")
+
+
 class SchedulerService:
     """Owns the scheduled-execution concern for Classroom sync."""
 
@@ -78,6 +89,12 @@ class SchedulerService:
         # Audit-log auto-rotation config (applied via apply_audit_retention).
         self._audit_retention_enabled = True
         self._audit_retention_days = 30
+        # Scheduled-backup config (applied via apply_backup). Off by default:
+        # unlike the other jobs this one writes archives to disk.
+        self._backup_enabled = False
+        self._backup_scope = "database"
+        self._backup_hour = settings.BACKUP_HOUR
+        self._backup_minute = settings.BACKUP_MINUTE
 
     @property
     def enabled(self) -> bool:
@@ -183,6 +200,60 @@ class SchedulerService:
         elif self._scheduler.get_job(AUDIT_PURGE_JOB_ID):
             self._scheduler.remove_job(AUDIT_PURGE_JOB_ID)
             logger.info("Audit-log rotation job removed (disabled)")
+
+    # ------------------------------------------------------- scheduled backup
+
+    def backup_status(self) -> dict:
+        """Current scheduled-backup state for the WebUI."""
+        job = self._scheduler.get_job(BACKUP_JOB_ID)
+        next_run = getattr(job, "next_run_time", None)
+        return {
+            "enabled": self._backup_enabled,
+            "scope": self._backup_scope,
+            "hour": self._backup_hour,
+            "minute": self._backup_minute,
+            "job_scheduled": job is not None,
+            "next_run_time": next_run.isoformat() if next_run else None,
+        }
+
+    def apply_backup(self, *, enabled: bool, scope: str, hour: int, minute: int) -> None:
+        """Update backup-schedule config at runtime and (re)schedule the job."""
+        self._backup_enabled = enabled
+        self._backup_scope = scope
+        self._backup_hour = hour
+        self._backup_minute = minute
+        if not self._scheduler.running:
+            self._scheduler.start()
+        self._sync_backup_job()
+
+    async def apply_persisted_backup(self, session) -> None:
+        from src.repositories.app_settings import get_backup_setting
+
+        row = await get_backup_setting(session)
+        self.apply_backup(
+            enabled=row.enabled, scope=row.scope, hour=row.hour, minute=row.minute
+        )
+
+    def _sync_backup_job(self) -> None:
+        # A cron trigger, not an interval: backups belong at a fixed off-peak
+        # time, not "24h after whenever the process last restarted".
+        if self._backup_enabled:
+            self._scheduler.add_job(
+                _run_scheduled_backup,
+                "cron",
+                hour=self._backup_hour,
+                minute=self._backup_minute,
+                timezone=TOKYO_TZ,
+                id=BACKUP_JOB_ID,
+                replace_existing=True,
+            )
+            logger.info(
+                "Scheduled %s backup daily at %02d:%02d JST",
+                self._backup_scope, self._backup_hour, self._backup_minute,
+            )
+        elif self._scheduler.get_job(BACKUP_JOB_ID):
+            self._scheduler.remove_job(BACKUP_JOB_ID)
+            logger.info("Scheduled backup job removed (disabled)")
 
     def _sync_job(self) -> None:
         if self.enabled:

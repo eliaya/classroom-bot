@@ -4,12 +4,14 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src import __version__
-from src.api.routes import audit, auth, bot, bot_commands, bot_messages, courses, discord_meta, health, links, scheduler, search, sync, todos
+from src.api.routes import audit, auth, backup, bot, bot_commands, bot_messages, courses, discord_meta, health, links, scheduler, search, sync, todos
 from src.api.services.scheduler_service import SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
+from src import maintenance
 
 logger = logging.getLogger("classroom_sync.api")
 
@@ -20,7 +22,7 @@ def _skip_audit(path: str, method: str) -> bool:
     if path.startswith("/api/audit") or path.startswith("/api/health"):
         return True
     if method == "GET" and path.startswith(
-        ("/api/sync/status", "/api/bot/status", "/api/scheduler", "/api/version")
+        ("/api/sync/status", "/api/bot/status", "/api/scheduler", "/api/version", "/api/backup")
     ):
         return True
     return False
@@ -52,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api")
     app.include_router(search.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
+    app.include_router(backup.router, prefix="/api")
 
     @app.middleware("http")
     async def audit_requests(request: Request, call_next):
@@ -79,6 +82,28 @@ def create_app() -> FastAPI:
             logger.warning("Audit middleware failed", exc_info=True)
         return response
 
+    @app.middleware("http")
+    async def restore_maintenance(request: Request, call_next):
+        """Refuse API traffic while a restore is swapping the database file.
+
+        Registered last on purpose: add_middleware inserts at the front, so the
+        last one added is the outermost and short-circuits before
+        audit_requests gets a chance to write a row into the file being
+        replaced.
+        """
+        path = request.url.path
+        if (
+            path.startswith("/api/")
+            and path != "/api/health"
+            and not path.startswith("/api/backup/restores")
+            and maintenance.is_active()
+        ):
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Restore in progress", "code": "RESTORE_IN_PROGRESS"},
+            )
+        return await call_next(request)
+
     scheduler_service = SchedulerService()
     app.state.scheduler_service = scheduler_service
 
@@ -88,9 +113,24 @@ def create_app() -> FastAPI:
         logger.info("API database initialized")
         from src.database import async_session_factory
 
+        # A restore that died mid-flight left the marker behind; clear it so the
+        # API is reachable again, and fail whatever rows are stuck 'running'.
+        if maintenance.is_active():
+            logger.warning("Clearing a stale restore marker left by a previous run")
+            maintenance.clear()
+
         async with async_session_factory() as session:
+            from src.repositories import backup_jobs
+
+            stuck_backups, stuck_restores = await backup_jobs.recover_interrupted(session)
+            if stuck_backups or stuck_restores:
+                logger.warning(
+                    "Recovered %d interrupted backup(s) and %d restore(s)",
+                    stuck_backups, stuck_restores,
+                )
             await scheduler_service.apply_persisted_setting(session)
             await scheduler_service.apply_persisted_audit_retention(session)
+            await scheduler_service.apply_persisted_backup(session)
             from src.repositories import audit_log
 
             await audit_log.record(

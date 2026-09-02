@@ -340,6 +340,69 @@ class AuditRetentionSetting(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class BackupSetting(SQLModel, table=True):
+    """Singleton row (id=1) holding the scheduled-backup config.
+
+    Opt-in: unlike the other scheduled jobs this one writes ~33 MB (or ~350 MB
+    for ``full``) to disk every run, so it stays off until switched on in the
+    WebUI. Seeded from BACKUP_* env vars on first read.
+    """
+    __tablename__ = "backup_settings"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    enabled: bool = Field(default=False)
+    scope: str = Field(default="database")  # database | full
+    hour: int = Field(default=3)            # daily run time, JST
+    minute: int = Field(default=0)
+    retention_days: int = Field(default=7)
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
+class BackupJob(SQLModel, table=True):
+    """One backup run: its progress, its archive, and its expiry.
+
+    ``status='deleted'`` keeps the audit trail after the archive is rotated
+    away — the row survives, the file does not.
+    """
+    __tablename__ = "backup_jobs"
+
+    id: str = Field(primary_key=True)  # uuid4 hex-dashed; doubles as the restore confirmation code
+    scope: str = Field(default="full")  # database | full
+    status: str = Field(default="pending", index=True)  # pending|running|completed|failed|deleted
+    phase: str = Field(default="preparing")
+    actor: str = Field(default="manual")  # manual | scheduler | restore-safety
+    archive_filename: Optional[str] = None
+    archive_bytes: Optional[int] = None
+    archive_sha256: Optional[str] = None
+    file_count: int = Field(default=0)
+    error_summary: Optional[str] = None
+    created_at: datetime = Field(default_factory=now_jst, index=True)
+    completed_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+
+class RestoreJob(SQLModel, table=True):
+    """One restore run.
+
+    ``destructive_started`` flips to True immediately before the first
+    irreversible write. A job found ``running`` at boot (i.e. the process died
+    mid-restore) is failed with ``safe_to_retry = not destructive_started`` —
+    when it is False the operator must inspect ``safety_backup_id`` by hand.
+    """
+    __tablename__ = "restore_jobs"
+
+    id: str = Field(primary_key=True)
+    backup_id: str = Field(index=True)
+    safety_backup_id: Optional[str] = None
+    status: str = Field(default="pending", index=True)  # pending|running|completed|failed
+    phase: str = Field(default="queued")
+    destructive_started: bool = Field(default=False)
+    safe_to_retry: bool = Field(default=True)
+    error_summary: Optional[str] = None
+    created_at: datetime = Field(default_factory=now_jst, index=True)
+    completed_at: Optional[datetime] = None
+
+
 class BotHeartbeat(SQLModel, table=True):
     """Singleton row (id=1) written by the Discord bot process so the API can
     report live bot connection status to the dashboard."""

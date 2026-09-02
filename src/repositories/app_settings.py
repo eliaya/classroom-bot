@@ -7,12 +7,15 @@ from typing import Optional
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst, settings
-from src.models import AuditRetentionSetting, SchedulerSetting
+from src.models import AuditRetentionSetting, BackupSetting, SchedulerSetting
 
 _SINGLETON_ID = 1
 
 # Hard cap on audit-log retention (days). The WebUI cannot exceed this.
 MAX_AUDIT_RETENTION_DAYS = 30
+
+# Hard cap on backup retention (days). Archives are 33 MB–350 MB apiece.
+MAX_BACKUP_RETENTION_DAYS = 90
 
 
 async def get_scheduler_setting(session: AsyncSession) -> SchedulerSetting:
@@ -80,6 +83,53 @@ async def update_audit_retention_setting(
         row.retention_days = max(1, min(retention_days, MAX_AUDIT_RETENTION_DAYS))
     if enabled is not None:
         row.enabled = enabled
+    row.updated_at = now_jst()
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+async def get_backup_setting(session: AsyncSession) -> BackupSetting:
+    """Return the scheduled-backup setting, seeding it from env on first use."""
+    row = await session.get(BackupSetting, _SINGLETON_ID)
+    if row is None:
+        row = BackupSetting(
+            id=_SINGLETON_ID,
+            enabled=False,  # opt-in: it writes archives to disk
+            scope="database",
+            hour=settings.BACKUP_HOUR,
+            minute=settings.BACKUP_MINUTE,
+            retention_days=settings.BACKUP_RETENTION_DAYS,
+        )
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+    return row
+
+
+async def update_backup_setting(
+    session: AsyncSession,
+    *,
+    enabled: Optional[bool] = None,
+    scope: Optional[str] = None,
+    hour: Optional[int] = None,
+    minute: Optional[int] = None,
+    retention_days: Optional[int] = None,
+) -> BackupSetting:
+    row = await get_backup_setting(session)
+    if enabled is not None:
+        row.enabled = enabled
+    if scope is not None:
+        # Fail-safe to "full": an unrecognised value must never silently
+        # downgrade a backup to DB-only and drop every attachment.
+        row.scope = "database" if scope == "database" else "full"
+    if hour is not None:
+        row.hour = max(0, min(hour, 23))
+    if minute is not None:
+        row.minute = max(0, min(minute, 59))
+    if retention_days is not None:
+        row.retention_days = max(1, min(retention_days, MAX_BACKUP_RETENTION_DAYS))
     row.updated_at = now_jst()
     session.add(row)
     await session.commit()

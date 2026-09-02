@@ -3,6 +3,7 @@ import {
   Activity,
   BookOpen,
   CalendarClock,
+  DatabaseBackup,
   Languages,
   ScrollText,
   type LucideIcon,
@@ -20,6 +21,7 @@ const navItems: NavItem[] = [
   { to: '/settings/language', label: 'settings.nav.language', icon: Languages },
   { to: '/settings/scheduler', label: 'settings.nav.scheduler', icon: CalendarClock },
   { to: '/settings/audit', label: 'settings.nav.audit', icon: ScrollText },
+  { to: '/settings/backup', label: 'settings.nav.backup', icon: DatabaseBackup },
   { to: '/settings/setup', label: 'settings.nav.setup', icon: BookOpen },
 ]
 

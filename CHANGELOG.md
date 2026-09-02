@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-02
+
+Web app bumped to 2.9.0.
+
+### Added
+- **Backup & restore** (`Settings -> Backup`). `BackupService` snapshots SQLite with `VACUUM INTO` — a read transaction, so a live writer is never interrupted and the copy is never torn — writes a `tar.gz` under a temporary name and publishes it with `os.replace`, so a half-written archive is never visible. Two scopes: `database` (~33 MB) or `full` (adds the fetched Drive attachments, ~350 MB). Every run is tracked in the new `backup_jobs` table with its phase, sha256, size and expiry; a rotated archive keeps its row as `status='deleted'` so the audit trail outlives the file. Error summaries are redacted before they reach a user.
+- **Scheduled daily backup**, opt-in and off by default (one run writes tens to hundreds of MB). The schedule lives in the new `backup_settings` singleton and is editable in the WebUI; `BACKUP_STORAGE_DIR`, `BACKUP_RETENTION_DAYS`, `BACKUP_HOUR` and `BACKUP_MINUTE` only seed the first read. Archives stay on the box — nothing is uploaded anywhere.
+- **Restore with a maintenance handshake.** Restoring requires typing the backup's own id as confirmation, so no click can trigger it by accident. `src/maintenance.py` then raises a marker the bot picks up on its 60s heartbeat: the bot reports `paused`, disposes its connection pool, and stands down so no write lands in the inode the API is about to replace. Jobs interrupted by a crash are reconciled on API startup via `backup_jobs.recover_interrupted`.
+- `require_admin_token` — backup download, delete and restore now **fail closed**, returning 503 until `ADMIN_API_TOKEN` is configured, because they hand out or overwrite the entire database. The ordinary admin endpoints keep their previous permissive behaviour for a trusted LAN.
+- `scripts/seed_posted_announcements.py` — marks every cached Classroom item as already posted for a guild, so linking a course does not flood its Discord channel with the whole backlog. `INSERT OR IGNORE` (safe to re-run), touches no other table, skips soft-deleted items, and warns when the last Classroom sync did not finish.
+
+### Fixed
+- Auto-push could still **re-post the same oldest item on every cycle**, which v0.15.1 only half-cured. The dedup logic was right; the transaction boundary was not. `sync_all_links` ran a single transaction for *every* link and committed once at the very end, outside the per-link `try` — and that transaction stayed open across each `channel.send`, attachment uploads included. Any abort before the final commit (a SQLite `database is locked` between the separate API and bot processes, the `PendingRollbackError` recorded in `audit_logs`, or a container restart) therefore discarded every `PostedAnnouncement` row and cursor bump for the whole pass while Discord had already received the messages, so the next poll found no record and sent them again. `PostedAnnouncement` is now committed as soon as its message is delivered; each link commits and rolls back independently, so one link's failure can neither discard another link's work nor leave the session in "invalid transaction" state for the links after it. Regression test: `tests/test_sync_commit_durability.py`.
+
+### Changed
+- SQLite connections now use a 30s busy timeout instead of pysqlite's 5s default. The API and bot are separate processes sharing one database file, and a sync pass holding the write lock easily outlasts five seconds.
+
 ## [0.15.3] - 2026-08-01
 
 ### Added
