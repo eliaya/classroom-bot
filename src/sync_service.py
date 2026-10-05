@@ -149,6 +149,8 @@ class ClassroomSyncService:
 
             new_posts.append(ann)
 
+        # A single failed send must not carry the watermark past its own item.
+        posted_all = True
         for new_ann in new_posts:
             try:
                 embed = await EmbedBuilder.build_announcement_embed(self.messages, course_name, new_ann)
@@ -178,9 +180,17 @@ class ClassroomSyncService:
                 logger.info(f"Posted new announcement '{new_ann['id']}' to Discord.")
             except Exception as discord_err:
                 await session.rollback()
+                # rollback expires every ORM object in this session, and reading an
+                # expired attribute from async code raises MissingGreenlet — which used
+                # to abort the rest of this link's pass and bury the real Discord error.
+                await session.refresh(link)
+                posted_all = False
                 logger.error(f"Failed to post announcement '{new_ann['id']}' to Discord: {discord_err}")
 
-        if max_seen_timestamp != link.last_sync_announcement:
+        # Nothing was written to posted_announcements for a failed item either, so
+        # advancing the watermark would skip it forever. Re-scanning next pass is
+        # cheap and safe — PostedAnnouncement dedups everything already delivered.
+        if posted_all and max_seen_timestamp != link.last_sync_announcement:
             link.last_sync_announcement = max_seen_timestamp
             session.add(link)
 
@@ -224,6 +234,8 @@ class ClassroomSyncService:
 
             new_items.append(cw)
 
+        # A single failed send must not carry the watermark past its own item.
+        posted_all = True
         for cw_item in new_items:
             try:
                 embed = await EmbedBuilder.build_coursework_embed(self.messages, course_name, cw_item)
@@ -247,8 +259,16 @@ class ClassroomSyncService:
                 logger.info(f"Posted new coursework '{cw_item['id']}' to Discord.")
             except Exception as discord_err:
                 await session.rollback()
+                # rollback expires every ORM object in this session, and reading an
+                # expired attribute from async code raises MissingGreenlet — which used
+                # to abort the rest of this link's pass and bury the real Discord error.
+                await session.refresh(link)
+                posted_all = False
                 logger.error(f"Failed to post coursework '{cw_item['id']}' to Discord: {discord_err}")
 
-        if max_seen_timestamp != link.last_sync_coursework:
+        # Nothing was written to posted_announcements for a failed item either, so
+        # advancing the watermark would skip it forever. Re-scanning next pass is
+        # cheap and safe — PostedAnnouncement dedups everything already delivered.
+        if posted_all and max_seen_timestamp != link.last_sync_coursework:
             link.last_sync_coursework = max_seen_timestamp
             session.add(link)
