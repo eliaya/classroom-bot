@@ -6,15 +6,16 @@ from discord import app_commands
 from discord.ext import commands
 from sqlmodel import select
 
+from src import database
 from src.cogs._api_client import ClassroomApiClient
 from src.cogs._config import CommandConfigStore
 from src.cogs._messages import MessageStore
-from src.database import async_session_factory
 from src.discord_attachments import build_item_files
 from src.embed_builder import EmbedBuilder
-from src.google_service import google_service
 from src.models import GuildCourseLink
 from src.repositories import classroom_cache as cache
+from src.repositories import google_connections
+from src.repositories.guild_bindings import guild_session
 from src.utils.permissions import is_guild_admin
 
 logger = logging.getLogger("classroom_sync.cogs.classroom")
@@ -57,7 +58,9 @@ class ClassroomAnnouncementModal(discord.ui.Modal):
             # Structure the text for classroom (since Google Classroom announcements only have a markdown 'text' field)
             announcement_text = f"**{self.heading.value}**\n\n{self.content.value}"
             
-            # Post using Google API service
+            # Post as the user this server is bound to, with their Google account.
+            async with guild_session(interaction.guild_id) as session:
+                google_service = await google_connections.service_for(session)
             result = await google_service.create_announcement(self.course_id, announcement_text)
             alt_link = result.get("alternateLink", "")
             
@@ -85,16 +88,12 @@ class ClassroomCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        # Reads go through the local API (served from the synced SQL DB),
-        # never directly to Google.
+        # Reads are served from the synced SQL DB, never directly from Google.
         self.api = ClassroomApiClient()
         # WebUI-editable response templates (overrides cached from the shared DB).
         self.messages = MessageStore()
         # WebUI-editable per-command config (e.g. default item limit).
         self.config = CommandConfigStore()
-
-    async def cog_unload(self) -> None:
-        await self.api.close()
 
     # Register '/classroom' command grouping
     classroom = app_commands.Group(
@@ -142,7 +141,9 @@ class ClassroomCog(commands.Cog):
         """
         if course_id:
             return course_id
-        async with async_session_factory() as session:
+        # Links are keyed by server, not by user, so no owner is needed here; an
+        # unbound server is reported by the data lookup that follows.
+        async with database.async_session_factory() as session:
             stmt = select(GuildCourseLink).where(
                 GuildCourseLink.guild_id == interaction.guild_id,
                 GuildCourseLink.channel_id == interaction.channel_id,
@@ -190,7 +191,7 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            courses = await self.api.list_courses()
+            courses = await self.api.list_courses(interaction.guild_id)
             if not courses:
                 await interaction.followup.send(
                     await self.messages.render("courses.empty"),
@@ -232,7 +233,7 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            course = await self.api.get_course(course_id)
+            course = await self.api.get_course(interaction.guild_id, course_id)
             if not course:
                 await interaction.followup.send(
                     f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
@@ -288,14 +289,14 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(effective, fetch_all)
 
         try:
-            course = await self.api.get_course(course_id)
+            course = await self.api.get_course(interaction.guild_id, course_id)
             if not course:
                 await interaction.followup.send(
                     f"❌ **Course not found in cache:** `{course_id}`. Run web sync first.",
                     ephemeral=True
                 )
                 return
-            rows = await self.api.list_announcements(course_id, limit=resolved_limit)
+            rows = await self.api.list_announcements(interaction.guild_id, course_id, limit=resolved_limit)
             if not rows:
                 await interaction.followup.send(
                     await self.messages.render("announcements.empty", course_name=course.get("name")),
@@ -353,7 +354,7 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(effective, fetch_all)
 
         try:
-            async with async_session_factory() as session:
+            async with guild_session(interaction.guild_id) as session:
                 course = await cache.get_cached_course(session, course_id)
                 if not course:
                     await interaction.followup.send(
@@ -401,7 +402,7 @@ class ClassroomCog(commands.Cog):
         resolved_limit = self._resolve_list_limit(effective, fetch_all)
 
         try:
-            todo_items = await self.api.list_pending_todos()
+            todo_items = await self.api.list_pending_todos(interaction.guild_id)
             if not todo_items:
                 await interaction.followup.send(
                     await self.messages.render("todo.empty"),
@@ -410,7 +411,7 @@ class ClassroomCog(commands.Cog):
                 return
 
             # Resolve course names from the cached course list (one API call).
-            courses = await self.api.list_courses()
+            courses = await self.api.list_courses(interaction.guild_id)
             course_names = {c.get("id"): c.get("name") for c in courses}
 
             # Sort by due date (no due date sinks to the bottom).
@@ -463,7 +464,7 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            course = await self.api.get_course(course_id)
+            course = await self.api.get_course(interaction.guild_id, course_id)
             if not course:
                 await interaction.followup.send(
                     await self.messages.render("link.invalid_course", course_id=course_id),
@@ -471,7 +472,7 @@ class ClassroomCog(commands.Cog):
                 )
                 return
             course_name = course.get("name")
-            async with async_session_factory() as session:
+            async with guild_session(interaction.guild_id) as session:
                 stmt = select(GuildCourseLink).where(
                     GuildCourseLink.guild_id == interaction.guild_id,
                     GuildCourseLink.course_id == course_id
@@ -517,7 +518,7 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            async with async_session_factory() as session:
+            async with guild_session(interaction.guild_id) as session:
                 stmt = select(GuildCourseLink).where(
                     GuildCourseLink.guild_id == interaction.guild_id,
                     GuildCourseLink.course_id == course_id
@@ -552,7 +553,7 @@ class ClassroomCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            async with async_session_factory() as session:
+            async with guild_session(interaction.guild_id) as session:
                 stmt = select(GuildCourseLink).where(GuildCourseLink.guild_id == interaction.guild_id)
                 res = await session.execute(stmt)
                 links = res.scalars().all()
@@ -574,7 +575,7 @@ class ClassroomCog(commands.Cog):
                     chan_text = channel.mention if channel else f"Channel ID `{link.channel_id}`"
                     status = "✅ Active" if link.is_active else "❌ Disabled"
 
-                    cached = await self.api.get_course(link.course_id)
+                    cached = await self.api.get_course(interaction.guild_id, link.course_id)
                     name = cached.get("name") if cached else "Unknown Course"
 
                     embed.add_field(
@@ -618,7 +619,7 @@ class ClassroomCog(commands.Cog):
                 return
 
             if course_id:
-                async with async_session_factory() as session:
+                async with guild_session(interaction.guild_id) as session:
                     stmt = select(GuildCourseLink).where(
                         GuildCourseLink.guild_id == interaction.guild_id,
                         GuildCourseLink.course_id == course_id
@@ -664,7 +665,7 @@ class ClassroomCog(commands.Cog):
         """Bidirectional command posting text to Google Classroom via a Modal popup."""
         try:
             # Verify course exists and retrieve name for visual title
-            course = await self.api.get_course(course_id)
+            course = await self.api.get_course(interaction.guild_id, course_id)
             if not course:
                 await interaction.response.send_message(
                     f"❌ **Failed:** Course `{course_id}` not found in cache.",

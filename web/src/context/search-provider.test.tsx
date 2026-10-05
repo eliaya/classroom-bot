@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
+import { useAuthStore } from '@/stores/auth-store'
 import { SearchProvider } from '@/context/search-provider'
 
-const COMMAND_MENU_PLACEHOLDER = 'Type a command or search...'
+const COMMAND_MENU_PLACEHOLDER = 'Search the app or jump to a page...'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -58,6 +59,15 @@ async function openCommandPalette(
 describe('SearchProvider and CommandMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // The palette only lists pages the signed-in user may open.
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      email: 'admin@example.com',
+      name: null,
+      picture_url: null,
+      role: 'admin',
+      permissions: ['*'],
+    })
   })
 
   it('renders the command palette when the palette is open', async () => {

@@ -32,6 +32,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { api, type BackupJob, type BackupScope, type BackupSettings } from '@/lib/api'
+import { useCan } from '@/lib/permissions'
 
 const ACTIVE = ['pending', 'running']
 
@@ -50,6 +51,8 @@ function statusVariant(status: string) {
 /** Scheduled + manual backups, downloads, retention and restore. */
 export function BackupSection() {
   const { t } = useTranslation()
+  // Everything that changes or hands out data needs backup:use.
+  const locked = !useCan('backup:use')
   const [config, setConfig] = useState<BackupSettings | null>(null)
   const [jobs, setJobs] = useState<BackupJob[]>([])
   const [retentionInput, setRetentionInput] = useState('')
@@ -135,8 +138,6 @@ export function BackupSection() {
       setBusy(false)
     }
   }
-
-  const locked = config ? !config.admin_token_configured : false
 
   return (
     <div className='flex flex-col gap-4 sm:gap-6'>
@@ -230,13 +231,10 @@ export function BackupSection() {
           <CardDescription>{t('settings.backup.listDesc')}</CardDescription>
         </CardHeader>
         <CardContent className='flex flex-col gap-4'>
-          {locked && (
-            <p className='text-destructive text-sm'>{t('settings.backup.tokenMissing')}</p>
-          )}
           <div className='flex flex-wrap gap-2'>
             <Button
               variant='outline'
-              disabled={busy}
+              disabled={busy || locked}
               onClick={() =>
                 act(() => api.createBackup('database'), t('settings.backup.started'))
               }
@@ -245,7 +243,7 @@ export function BackupSection() {
             </Button>
             <Button
               variant='outline'
-              disabled={busy}
+              disabled={busy || locked}
               onClick={() =>
                 act(() => api.createBackup('full'), t('settings.backup.started'))
               }
@@ -285,13 +283,7 @@ export function BackupSection() {
                     size='sm'
                     variant='ghost'
                     disabled={busy || locked || job.status !== 'completed'}
-                    onClick={() =>
-                      act(
-                        () =>
-                          api.downloadBackup(job.id, job.archive_filename ?? `${job.id}.tar.gz`),
-                        t('settings.backup.downloaded')
-                      )
-                    }
+                    onClick={() => api.downloadBackup(job.id)}
                   >
                     {t('settings.backup.download')}
                   </Button>

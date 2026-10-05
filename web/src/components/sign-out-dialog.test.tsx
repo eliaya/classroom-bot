@@ -5,6 +5,7 @@ import { SignOutDialog } from './sign-out-dialog'
 
 const navigate = vi.fn()
 const reset = vi.fn()
+const logout = vi.fn()
 
 const MOCK_HREF = 'https://app.test/dashboard?tab=1'
 
@@ -12,6 +13,10 @@ vi.mock('@/stores/auth-store', () => ({
   useAuthStore: () => ({
     auth: { reset },
   }),
+}))
+
+vi.mock('@/lib/api', () => ({
+  api: { logout: () => logout() },
 }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
@@ -26,21 +31,37 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 describe('SignOutDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    logout.mockResolvedValue({ ok: true })
   })
 
-  it('calls auth.reset and navigates to sign-in with current location as redirect', async () => {
+  it('ends the server session, then resets and navigates to sign-in with current location as redirect', async () => {
     const { getByRole } = await render(
       <SignOutDialog open onOpenChange={vi.fn()} />
     )
 
     await userEvent.click(getByRole('button', { name: /^Sign out$/i }))
 
+    await vi.waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        to: '/sign-in',
+        search: { redirect: MOCK_HREF },
+        replace: true,
+      })
+    )
+    expect(logout).toHaveBeenCalledOnce()
     expect(reset).toHaveBeenCalledOnce()
-    expect(navigate).toHaveBeenCalledWith({
-      to: '/sign-in',
-      search: { redirect: MOCK_HREF },
-      replace: true,
-    })
+  })
+
+  it('still signs out locally when the server cannot be reached', async () => {
+    logout.mockRejectedValue(new Error('offline'))
+    const { getByRole } = await render(
+      <SignOutDialog open onOpenChange={vi.fn()} />
+    )
+
+    await userEvent.click(getByRole('button', { name: /^Sign out$/i }))
+
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalled())
+    expect(reset).toHaveBeenCalledOnce()
   })
 
   it('does not call reset or navigate when Cancel is clicked', async () => {
@@ -50,6 +71,7 @@ describe('SignOutDialog', () => {
 
     await userEvent.click(getByRole('button', { name: /^Cancel$/i }))
 
+    expect(logout).not.toHaveBeenCalled()
     expect(reset).not.toHaveBeenCalled()
     expect(navigate).not.toHaveBeenCalled()
   })

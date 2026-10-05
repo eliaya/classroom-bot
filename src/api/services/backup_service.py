@@ -314,10 +314,11 @@ async def _wait_for_bot_pause() -> bool:
 
 async def execute_restore(restore_id: str) -> None:
     """Restore a backup over the live data. Destructive; heavily guarded."""
+    from sqlalchemy import delete
     from sqlmodel import select
 
     from src.database import async_session_factory, init_db
-    from src.models import BackupJob, RestoreJob
+    from src.models import BackupJob, RestoreJob, UserSession
     from src.repositories import audit_log, backup_jobs
 
     started = now_jst()
@@ -428,6 +429,9 @@ async def execute_restore(restore_id: str) -> None:
                     await session.merge(BackupJob(**data))
                 for data in ledger_restores:
                     await session.merge(RestoreJob(**data))
+                # Sessions that were valid when the backup was taken must not
+                # come back to life; everyone signs in again after a restore.
+                await session.execute(delete(UserSession))
                 await session.commit()
 
             if scope != "database":

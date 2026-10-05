@@ -8,6 +8,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { can, usePermissions } from '@/lib/permissions'
 import { humanReadableTime, fullTimestamp } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,15 +49,17 @@ export function ClassroomDashboard() {
   const [recentRuns, setRecentRuns] = useState<SyncRun[]>([])
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const permissions = usePermissions()
 
   const load = async () => {
     try {
       setError(null)
+      // Only ask for what this user may see; the API would answer 403 otherwise.
       const [courses, status, sync, botRes] = await Promise.all([
-        api.listCourses(),
+        can(permissions, 'courses:view') ? api.listCourses() : { total: 0 },
         api.status(),
-        api.syncStatus(),
-        api.botStatus().catch(() => null),
+        can(permissions, 'sync:view') ? api.syncStatus() : { runs: [] as SyncRun[] },
+        can(permissions, 'bot:view') ? api.botStatus().catch(() => null) : null,
       ])
       setCourseCount(courses.total)
       setGoogleStatus(status.google_credentials)

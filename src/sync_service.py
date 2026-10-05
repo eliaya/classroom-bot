@@ -6,9 +6,10 @@ import discord
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.database import async_session_factory
+from src.database import OWNER_KEY, async_session_factory
 from src.models import GuildCourseLink, PostedAnnouncement
 from src.repositories import classroom_cache as cache
+from src.repositories import guild_bindings
 from src.discord_attachments import build_item_files
 from src.cogs._messages import MessageStore
 from src.embed_builder import EmbedBuilder
@@ -60,6 +61,17 @@ class ClassroomSyncService:
         *,
         backfill: bool = False,
     ) -> None:
+        # A server posts the Classroom data of the user it is bound to. The
+        # session is reused across links, so the owner is set for each one.
+        owner_id = await guild_bindings.owner_of_guild(session, link.guild_id)
+        if owner_id is None:
+            logger.warning(
+                f"Guild '{link.guild_id}' is not bound to a user; "
+                f"skipping its link to course '{link.course_id}'."
+            )
+            return
+        session.info[OWNER_KEY] = owner_id
+
         logger.info(
             f"Checking updates for Course '{link.course_id}' -> Discord Channel '{link.channel_id}'"
             f"{' (backfill)' if backfill else ''}"

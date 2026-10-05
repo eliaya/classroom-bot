@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import { Logo } from '@/assets/logo'
 import { cn } from '@/lib/utils'
@@ -21,13 +20,7 @@ export function SignIn2() {
           <div className='flex flex-col space-y-2 text-start'>
             <h2 className='text-lg font-semibold tracking-tight'>{t('auth.signInTitle')}</h2>
             <p className='text-sm text-muted-foreground'>
-              {t('auth.signInDesc')}{' '}
-              <Link
-                to='/sign-up'
-                className='text-nowrap underline underline-offset-4 hover:text-primary'
-              >
-                {t('auth.signUpLink')}
-              </Link>
+              {t('auth.signInDesc')}
             </p>
           </div>
           <UserAuthForm />

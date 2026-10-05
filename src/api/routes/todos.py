@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session
+from src.api.deps import get_owned_session
 from src.repositories import classroom_cache as cache
 
 router = APIRouter(prefix="/todos", tags=["todos"])
@@ -22,7 +22,7 @@ async def list_all_todos(
         description="Filter group: 'not_turned_in', 'turned_in', or 'missing' (overdue + not turned in)",
     ),
     course_id: Optional[str] = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
 ) -> dict:
     todos = await cache.list_cached_todos(session, course_id=course_id)
     update_times = await cache.get_coursework_update_times(session, course_id=course_id)

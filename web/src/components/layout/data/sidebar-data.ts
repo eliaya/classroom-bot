@@ -11,11 +11,6 @@ import {
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
-  user: {
-    name: 'Classroom Admin',
-    email: 'admin@classroom-bot.local',
-    avatar: '/avatars/shadcn.jpg',
-  },
   teams: [
     {
       name: 'Classroom Bot Admin',

@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session, verify_admin_token
+from src.api.deps import get_db_session
 from src.message_templates import DEFAULT_MESSAGES
 from src.repositories import bot_messages as repo
 
@@ -53,7 +53,7 @@ async def list_messages(session: AsyncSession = Depends(get_db_session)) -> dict
     return {"items": items, "total": len(items)}
 
 
-@router.post("", status_code=201, dependencies=[Depends(verify_admin_token)])
+@router.post("", status_code=201)
 async def create_message(
     body: MessageCreate, session: AsyncSession = Depends(get_db_session)
 ) -> dict:
@@ -68,7 +68,7 @@ async def create_message(
     return _serialize(saved)
 
 
-@router.put("/{key}", dependencies=[Depends(verify_admin_token)])
+@router.put("/{key}")
 async def set_message(
     key: str, body: MessageUpdate, session: AsyncSession = Depends(get_db_session)
 ) -> dict:
@@ -76,7 +76,7 @@ async def set_message(
     return _serialize(saved)
 
 
-@router.delete("/{key}", dependencies=[Depends(verify_admin_token)])
+@router.delete("/{key}")
 async def delete_message(
     key: str, session: AsyncSession = Depends(get_db_session)
 ) -> dict:

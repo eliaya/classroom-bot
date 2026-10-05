@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session, verify_admin_token
+from src.api.deps import get_db_session
 from src.api.services.scheduler_service import SchedulerService
 from src.repositories import app_settings
 
@@ -35,7 +35,7 @@ async def get_scheduler(
     return status
 
 
-@router.patch("", dependencies=[Depends(verify_admin_token)])
+@router.patch("")
 async def update_scheduler(
     body: SchedulerUpdate,
     request: Request,

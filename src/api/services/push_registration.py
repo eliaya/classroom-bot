@@ -18,8 +18,10 @@ import asyncio
 import logging
 from typing import Any, Dict, List
 
+from src import database
 from src.config import settings
-from src.google_service import google_service
+from src.google_service import GoogleClassroomService
+from src.repositories import google_connections
 
 logger = logging.getLogger("classroom_sync.push.registration")
 
@@ -34,7 +36,7 @@ def _coursework_feed_body(course_id: str) -> Dict[str, Any]:
     }
 
 
-async def _create_registration(course_id: str) -> Dict[str, Any]:
+async def _create_registration(google_service: GoogleClassroomService, course_id: str) -> Dict[str, Any]:
     """Create one COURSE_WORK_CHANGES registration (blocking call off-thread)."""
     def _sync_create() -> Dict[str, Any]:
         service = google_service._get_api_service()
@@ -44,7 +46,8 @@ async def _create_registration(course_id: str) -> Dict[str, Any]:
 
 
 async def register_all() -> List[Dict[str, Any]]:
-    """Register/renew the COURSE_WORK_CHANGES feed for every course.
+    """Register/renew the COURSE_WORK_CHANGES feed for every course of every
+    connected user whose token carries the push scope.
 
     Best-effort per course: a failure for one course is logged and skipped.
     Returns the list of created registration resources.
@@ -53,20 +56,28 @@ async def register_all() -> List[Dict[str, Any]]:
         logger.warning("Push registration skipped: GOOGLE_PUBSUB_TOPIC not configured")
         return []
 
-    courses = await google_service.list_courses()
+    async with database.async_session_factory() as session:
+        services = [
+            await google_connections.service_for_user(session, user_id)
+            for user_id in await google_connections.connected_user_ids(session)
+        ]
+
     created: List[Dict[str, Any]] = []
-    for course in courses:
-        cid = course.get("id")
-        if not cid:
-            continue
-        try:
-            reg = await _create_registration(cid)
-            created.append(reg)
-            logger.info(
-                "Registered push feed for course %s (expires %s)",
-                cid, reg.get("expiryTime"),
-                extra={"category": "general"},
-            )
-        except Exception:  # noqa: BLE001 — per-course best effort
-            logger.exception("Push registration failed for course %s", cid)
+    for google_service in services:
+        if not google_service.load_credentials() or not google_service.has_push_scope():
+            continue  # this user has not granted push; the scheduled sync still covers them
+        for course in await google_service.list_courses():
+            cid = course.get("id")
+            if not cid:
+                continue
+            try:
+                reg = await _create_registration(google_service, cid)
+                created.append(reg)
+                logger.info(
+                    "Registered push feed for course %s (expires %s)",
+                    cid, reg.get("expiryTime"),
+                    extra={"category": "general"},
+                )
+            except Exception:  # noqa: BLE001 — per-course best effort
+                logger.exception("Push registration failed for course %s", cid)
     return created

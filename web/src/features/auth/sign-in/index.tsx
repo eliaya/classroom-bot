@@ -1,4 +1,4 @@
-import { Link, useSearch } from '@tanstack/react-router'
+import { useSearch } from '@tanstack/react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import {
   Card,
@@ -12,7 +12,8 @@ import { AuthLayout } from '../auth-layout'
 import { UserAuthForm } from './components/user-auth-form'
 
 export function SignIn() {
-  const { redirect } = useSearch({ from: '/(auth)/sign-in' })
+  // `auth` / `reason` are set by the API when a Google sign-in attempt fails.
+  const { redirect, auth, reason } = useSearch({ from: '/(auth)/sign-in' })
   const { t } = useTranslation()
 
   return (
@@ -20,17 +21,16 @@ export function SignIn() {
       <Card className='max-w-sm gap-4'>
         <CardHeader>
           <CardTitle className='text-lg tracking-tight'>{t('auth.signInTitle')}</CardTitle>
-          <CardDescription>
-            {t('auth.signInDesc')}{' '}
-            <Link
-              to='/sign-up'
-              className='text-nowrap underline underline-offset-4 hover:text-primary'
-            >
-              {t('auth.signUpLink')}
-            </Link>
-          </CardDescription>
+          <CardDescription>{t('auth.signInDesc')}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className='grid gap-3'>
+          {auth === 'error' && (
+            <p role='alert' className='text-destructive text-sm'>
+              {t('auth.signInFailed', {
+                reason: t(`auth.signInErrors.${reason}`, { defaultValue: reason ?? '' }),
+              })}
+            </p>
+          )}
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>

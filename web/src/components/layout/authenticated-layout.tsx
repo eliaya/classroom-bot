@@ -1,5 +1,7 @@
 import { Outlet } from '@tanstack/react-router'
+import { useAuthStore } from '@/stores/auth-store'
 import { getCookie } from '@/lib/cookies'
+import { useCan } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
@@ -7,6 +9,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { NotificationPopUp } from '@/components/notification-popup'
 import { SkipToMain } from '@/components/skip-to-main'
+import { PendingApproval } from '@/features/auth/pending-approval'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -14,13 +17,19 @@ type AuthenticatedLayoutProps = {
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+  const canSeeSync = useCan('sync:view')
+  const user = useAuthStore((state) => state.auth.user)
+  // Signed in but no role yet: nothing in the app is reachable.
+  if (user && user.permissions.length === 0) {
+    return <PendingApproval email={user.email} />
+  }
   return (
     <SearchProvider>
       <LayoutProvider>
         <SidebarProvider defaultOpen={defaultOpen}>
           <SkipToMain />
           {/* Single shared, app-wide Sync Job notification (subscriber only). */}
-          <NotificationPopUp />
+          {canSeeSync && <NotificationPopUp />}
           <AppSidebar />
           <SidebarInset
             className={cn(

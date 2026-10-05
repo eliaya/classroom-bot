@@ -2,6 +2,9 @@
 
 The WebUI ``/links`` page consumes these endpoints. The bot reads the same
 table live on every ``/classroom`` command, so edits here apply immediately.
+
+A user only sees and manages the links of Discord servers bound to them
+(``guild_bindings``), and links those servers to courses from their own cache.
 """
 
 from __future__ import annotations
@@ -12,9 +15,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session, verify_admin_token
+from src.api.deps import Principal, get_owned_session, get_principal
 from src.models import GuildCourseLink
 from src.repositories import classroom_cache as cache
+from src.repositories import guild_bindings
 from src.repositories import links as repo
 
 router = APIRouter(prefix="/links", tags=["links"])
@@ -57,12 +61,34 @@ def _serialize(link: GuildCourseLink, course_name: Optional[str]) -> dict:
     }
 
 
+async def _my_link(session: AsyncSession, principal: Principal, link_id: int) -> GuildCourseLink:
+    """The link, if it belongs to one of the caller's servers. Someone else's
+    link answers 404 like a missing one, so ids cannot be probed."""
+    link = await repo.get_link(session, link_id)
+    if link is None or link.guild_id not in await guild_bindings.guilds_of(session, principal.user_id):
+        raise HTTPException(status_code=404, detail="Link not found")
+    return link
+
+
+async def _require_my_guild(session: AsyncSession, principal: Principal, guild_id: int) -> None:
+    if guild_id not in await guild_bindings.guilds_of(session, principal.user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="This Discord server is not connected to your account. Claim it first.",
+        )
+
+
 @router.get("")
 async def list_links(
     guild_id: Optional[int] = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
-    items = await repo.list_links(session, guild_id=guild_id)
+    mine = await guild_bindings.guilds_of(session, principal.user_id)
+    items = [
+        link for link in await repo.list_links(session, guild_id=guild_id)
+        if link.guild_id in mine
+    ]
     # Resolve course names in one query (the web process can't ask Discord).
     names = {c.id: c.name for c in await cache.list_cached_courses(session)}
     return {
@@ -71,10 +97,13 @@ async def list_links(
     }
 
 
-@router.post("", status_code=201, dependencies=[Depends(verify_admin_token)])
+@router.post("", status_code=201)
 async def create_link(
-    body: LinkCreate, session: AsyncSession = Depends(get_db_session)
+    body: LinkCreate,
+    session: AsyncSession = Depends(get_owned_session),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
+    await _require_my_guild(session, principal, body.guild_id)
     course = await cache.get_cached_course(session, body.course_id)
     if course is None:
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
@@ -100,15 +129,14 @@ async def create_link(
     return _serialize(link, course.name)
 
 
-@router.patch("/{link_id}", dependencies=[Depends(verify_admin_token)])
+@router.patch("/{link_id}")
 async def update_link(
     link_id: int,
     body: LinkUpdate,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
-    link = await repo.get_link(session, link_id)
-    if link is None:
-        raise HTTPException(status_code=404, detail="Link not found")
+    link = await _my_link(session, principal, link_id)
 
     fields = body.model_dump(exclude_unset=True)
 
@@ -118,6 +146,7 @@ async def update_link(
     if repoint:
         new_guild = fields.get("guild_id", link.guild_id)
         new_course = fields.get("course_id", link.course_id)
+        await _require_my_guild(session, principal, new_guild)
         course = await cache.get_cached_course(session, new_course)
         if course is None:
             raise HTTPException(
@@ -141,12 +170,12 @@ async def update_link(
     return _serialize(updated, course.name if course else None)
 
 
-@router.delete("/{link_id}", dependencies=[Depends(verify_admin_token)])
+@router.delete("/{link_id}")
 async def delete_link(
-    link_id: int, session: AsyncSession = Depends(get_db_session)
+    link_id: int,
+    session: AsyncSession = Depends(get_owned_session),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
-    link = await repo.get_link(session, link_id)
-    if link is None:
-        raise HTTPException(status_code=404, detail="Link not found")
+    link = await _my_link(session, principal, link_id)
     await repo.delete_link(session, link)
     return {"status": "deleted", "id": link_id}

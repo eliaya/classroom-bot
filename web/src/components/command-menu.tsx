@@ -19,6 +19,7 @@ import {
   type SearchResult,
   type SearchResultKind,
 } from '@/lib/api'
+import { useCan, usePermissions, visibleNav } from '@/lib/permissions'
 import { useSearch } from '@/context/search-provider'
 import { useTheme } from '@/context/theme-provider'
 import {
@@ -58,6 +59,8 @@ export function CommandMenu() {
   const { t } = useTranslation()
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
+  const permissions = usePermissions()
+  const canSearch = useCan('search:view')
   const [query, setQuery] = React.useState('')
   const [categories, setCategories] = React.useState<SearchCategory[]>([])
   const [searching, setSearching] = React.useState(false)
@@ -120,7 +123,7 @@ export function CommandMenu() {
   // Debounced full-text search across the whole app's cached content.
   React.useEffect(() => {
     const q = query.trim()
-    if (q.length < 2) {
+    if (q.length < 2 || !canSearch) {
       setCategories([])
       setSearching(false)
       return
@@ -144,7 +147,7 @@ export function CommandMenu() {
       cancelled = true
       clearTimeout(handle)
     }
-  }, [query])
+  }, [query, canSearch])
 
   const hasResults = categories.some((c) => (c.items?.length ?? 0) > 0)
 
@@ -270,7 +273,7 @@ export function CommandMenu() {
             </>
           )}
 
-          {sidebarData.navGroups.map((group) => {
+          {visibleNav(sidebarData.navGroups, permissions).map((group) => {
             const items = group.items.flatMap((navItem, i) => {
               if (navItem.url) {
                 if (!matchesNav(t(navItem.title))) return []

@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { api } from '@/lib/api'
+import { useCan } from '@/lib/permissions'
 
 type GoogleDetail = {
   token_exists: boolean
@@ -20,6 +21,7 @@ type GoogleDetail = {
   missing_scopes?: string[]
   expired?: boolean | null
   error?: string | null
+  account?: string | null
 }
 
 /** API health + Google OAuth status, with the authorize/re-authorize flow. */
@@ -30,6 +32,8 @@ export function StatusSection() {
   const [googleDetail, setGoogleDetail] = useState<GoogleDetail | null>(null)
   const [authorizing, setAuthorizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Connecting a Classroom account is part of the courses module.
+  const canConnect = useCan('courses:view')
 
   const loadStatus = () =>
     Promise.all([api.health(), api.status()])
@@ -110,6 +114,11 @@ export function StatusSection() {
                 <Badge variant='outline'>{t('settings.expired')}</Badge>
               ) : null}
             </div>
+            {googleDetail?.account && (
+              <p className='text-muted-foreground text-xs'>
+                {t('settings.connectedAs', { account: googleDetail.account })}
+              </p>
+            )}
             {googleDetail?.missing_scopes &&
               googleDetail.missing_scopes.length > 0 && (
                 <p className='text-muted-foreground text-xs'>
@@ -123,7 +132,7 @@ export function StatusSection() {
             )}
             <Button
               onClick={() => void handleAuthorize()}
-              disabled={authorizing || googleDetail?.client_secret_exists === false}
+              disabled={authorizing || !canConnect || googleDetail?.client_secret_exists === false}
               className='w-fit'
             >
               <KeyRound className={authorizing ? 'animate-pulse' : ''} />

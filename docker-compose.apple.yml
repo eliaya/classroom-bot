@@ -45,8 +45,6 @@ services:
     user: "${APP_RUNTIME_USER:-501:20}"
     env_file:
       - .env
-    environment:
-      - API_BASE_URL=http://api:8000
     volumes:
       - ${APP_DATA_SOURCE:-./data/apple-container/app}:/app/data
       - ./credentials:/app/credentials

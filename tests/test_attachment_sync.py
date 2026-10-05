@@ -43,11 +43,9 @@ async def _seed_coursework(session, item):
 
 
 @pytest.fixture
-def gs(monkeypatch):
-    from src.google_service import google_service as service
-
-    monkeypatch.setattr(service, "has_drive_scope", lambda: True)
-    return service
+def gs(monkeypatch, google_service):
+    monkeypatch.setattr(google_service, "has_drive_scope", lambda: True)
+    return google_service
 
 
 @pytest.mark.asyncio

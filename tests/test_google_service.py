@@ -1,7 +1,9 @@
 from __future__ import annotations
 from unittest.mock import MagicMock, patch
 import pytest
-from src.google_service import GoogleClassroomService, google_service
+from src.google_service import GoogleClassroomService
+
+google_service = GoogleClassroomService(None)
 
 
 @pytest.mark.asyncio
@@ -9,7 +11,7 @@ from src.google_service import GoogleClassroomService, google_service
 async def test_api_service_build(mock_build):
     """Test standard service loading and credential checks."""
     # Setup mocks
-    service = GoogleClassroomService()
+    service = GoogleClassroomService(None)
     service.creds = MagicMock()
     service.creds.valid = True
 
@@ -24,7 +26,7 @@ async def test_api_service_build(mock_build):
 
 
 @pytest.mark.asyncio
-@patch("src.google_service.google_service._get_api_service")
+@patch.object(GoogleClassroomService, "_get_api_service")
 async def test_list_courses(mock_get_api):
     """Verify list_courses maps the Google Classroom execute response JSON structures correctly."""
     # Setup mock chain
@@ -49,7 +51,7 @@ async def test_list_courses(mock_get_api):
 
 
 @pytest.mark.asyncio
-@patch("src.google_service.google_service._get_api_service")
+@patch.object(GoogleClassroomService, "_get_api_service")
 async def test_get_course(mock_get_api):
     """Verify single course detail endpoint queries mock responses."""
     mock_service = MagicMock()
@@ -67,7 +69,7 @@ async def test_get_course(mock_get_api):
 
 
 @pytest.mark.asyncio
-@patch("src.google_service.google_service._get_api_service")
+@patch.object(GoogleClassroomService, "_get_api_service")
 async def test_create_announcement(mock_get_api):
     """Test manual text announcements are routed and returned cleanly."""
     mock_service = MagicMock()
@@ -83,7 +85,7 @@ async def test_create_announcement(mock_get_api):
 
 
 @pytest.mark.asyncio
-@patch("src.google_service.google_service._get_api_service")
+@patch.object(GoogleClassroomService, "_get_api_service")
 async def test_fetch_announcements_paginates(mock_get_api):
     """Verify announcements are fetched across multiple API pages."""
     mock_service = MagicMock()
@@ -107,7 +109,7 @@ async def test_fetch_announcements_paginates(mock_get_api):
 
 
 @pytest.mark.asyncio
-@patch("src.google_service.google_service._get_api_service")
+@patch.object(GoogleClassroomService, "_get_api_service")
 async def test_fetch_coursework_respects_limit(mock_get_api):
     """Verify coursework fetching can cap results after pagination."""
     mock_service = MagicMock()
@@ -129,7 +131,7 @@ async def test_fetch_coursework_respects_limit(mock_get_api):
 
 
 @pytest.mark.asyncio
-@patch("src.google_service.google_service._get_api_service")
+@patch.object(GoogleClassroomService, "_get_api_service")
 async def test_list_student_submissions(mock_get_api):
     """Verify student submissions are returned from the Classroom API list endpoint."""
     mock_service = MagicMock()

@@ -1,5 +1,6 @@
 import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { useCan } from '@/lib/permissions'
 import { Main } from '@/components/layout/main'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClassroomHeader } from '../classroom/layout-header'
@@ -12,6 +13,9 @@ export function BotConsolePage() {
   const { t } = useTranslation()
   const search = route.useSearch()
   const navigate = route.useNavigate()
+  // Two modules share this page: channel links (per user) and bot commands (system).
+  const canLinks = useCan('links:view')
+  const canCommands = useCan('bot:view')
 
   return (
     <>
@@ -21,19 +25,23 @@ export function BotConsolePage() {
         description={t('botConsole.desc')}
       />
       <Main fluid className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <Tabs defaultValue='links' className='flex flex-1 flex-col gap-4'>
+        <Tabs defaultValue={canLinks ? 'links' : 'commands'} className='flex flex-1 flex-col gap-4'>
           <TabsList>
-            <TabsTrigger value='links'>{t('links.title')}</TabsTrigger>
-            <TabsTrigger value='commands'>{t('botCommands.title')}</TabsTrigger>
+            {canLinks && <TabsTrigger value='links'>{t('links.title')}</TabsTrigger>}
+            {canCommands && <TabsTrigger value='commands'>{t('botCommands.title')}</TabsTrigger>}
           </TabsList>
-          <TabsContent value='links'>
-            <LinksSection />
-          </TabsContent>
+          {canLinks && (
+            <TabsContent value='links'>
+              <LinksSection />
+            </TabsContent>
+          )}
           {/* Message templates (`<command>.*`) are edited inside each command's
               detail panel — see CommandMessages. */}
-          <TabsContent value='commands'>
-            <BotCommandsSection search={search} navigate={navigate} />
-          </TabsContent>
+          {canCommands && (
+            <TabsContent value='commands'>
+              <BotCommandsSection search={search} navigate={navigate} />
+            </TabsContent>
+          )}
         </Tabs>
       </Main>
     </>

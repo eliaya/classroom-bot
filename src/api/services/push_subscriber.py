@@ -25,7 +25,6 @@ from typing import Optional, Set
 
 from src.api.services import push_registration
 from src.config import settings
-from src.google_service import google_service
 
 logger = logging.getLogger("classroom_sync.push.subscriber")
 
@@ -52,14 +51,6 @@ class PushSubscriber:
                 extra={"category": "general"},
             )
             return
-        if not google_service.load_credentials() or not google_service.has_push_scope():
-            logger.warning(
-                "CLASSROOM_PUSH_ENABLED but token lacks the push scope; re-run "
-                "setup_google_auth.py. Push sync disabled.",
-                extra={"category": "general"},
-            )
-            return
-
         self._running = True
         try:
             await push_registration.register_all()
@@ -162,17 +153,23 @@ class PushSubscriber:
         courses = list(self._pending)
         self._pending.clear()
         # Lazy import avoids a circular import (routes import services).
+        from src import database
         from src.api.routes.sync import _run_course_sync
+        from src.repositories import classroom_cache as cache
 
         for course_id in courses:
-            try:
-                logger.info(
-                    "Push-triggered sync for course %s", course_id,
-                    extra={"category": "general"},
-                )
-                await _run_course_sync(course_id)
-            except Exception:  # noqa: BLE001
-                logger.exception("Push-triggered sync failed for course %s", course_id)
+            # A notification names a course, not a user: sync it for everyone caching it.
+            async with database.async_session_factory() as session:
+                owners = await cache.owners_of_course(session, course_id)
+            for user_id in owners:
+                try:
+                    logger.info(
+                        "Push-triggered sync for course %s (user %s)", course_id, user_id,
+                        extra={"category": "general"},
+                    )
+                    await _run_course_sync(user_id, course_id)
+                except Exception:  # noqa: BLE001
+                    logger.exception("Push-triggered sync failed for course %s", course_id)
 
     # ── renewal loop ────────────────────────────────────────────────────────--
     async def _renew_loop(self) -> None:

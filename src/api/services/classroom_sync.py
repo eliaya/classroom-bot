@@ -8,7 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.services.attachment_sync import attachment_sync_service
 from src.config import settings
-from src.google_service import google_service
+from src.google_service import GoogleClassroomService
 from src.models import (
     ClassroomCoursework,
     ClassroomMaterial,
@@ -18,6 +18,7 @@ from src.models import (
     ClassroomAnnouncement,
 )
 from src.repositories import classroom_cache as cache
+from src.repositories import google_connections
 
 logger = logging.getLogger("classroom_sync.api.sync")
 
@@ -38,7 +39,11 @@ def _todo_due_iso(cw: Dict[str, Any]) -> Optional[str]:
 
 
 class ClassroomSyncService:
-    """Pulls full Google Classroom data into the shared SQLite cache."""
+    """Pulls full Google Classroom data into the shared SQLite cache.
+
+    Every method syncs one user: the owner of the ``session`` it is given
+    (``database.owned_session``), using that user's connected Google account.
+    """
 
     async def sync_all(self, session: AsyncSession) -> dict:
         run = await cache.start_sync_run(session, resource="all")
@@ -48,6 +53,7 @@ class ClassroomSyncService:
         run_id = run.id
         total = 0
         try:
+            google_service = await google_connections.service_for(session)
             if not google_service.load_credentials():
                 detail = google_service.last_credential_error or (
                     "Google credentials missing or invalid. Run setup_google_auth.py."
@@ -71,7 +77,7 @@ class ClassroomSyncService:
             async def _fetch_one(i: int, course: Dict[str, Any]):
                 async with sem:
                     try:
-                        return i, await self._fetch_course_bundle(course["id"], course), None
+                        return i, await self._fetch_course_bundle(google_service, course["id"], course), None
                     except Exception as exc:  # noqa: BLE001 — captured per course
                         return i, None, exc
 
@@ -158,6 +164,7 @@ class ClassroomSyncService:
     async def sync_course(self, session: AsyncSession, course_id: str) -> dict:
         run = await cache.start_sync_run(session, resource="course", course_id=course_id)
         try:
+            google_service = await google_connections.service_for(session)
             if not google_service.load_credentials():
                 detail = google_service.last_credential_error or (
                     "Google credentials missing or invalid."
@@ -170,7 +177,7 @@ class ClassroomSyncService:
                 message=f"Starting sync for course {course_id}"
             )
 
-            bundle = await self._fetch_course_bundle(course_id)
+            bundle = await self._fetch_course_bundle(google_service, course_id)
             await cache.update_sync_run_progress(
                 session, run, percent=55, message=f"Fetched course {course_id}; persisting..."
             )
@@ -196,6 +203,7 @@ class ClassroomSyncService:
         when a signature check shows a change. No ClassroomSyncRun is created —
         this is meant to run on a short interval. Returns ``{"changed": bool, ...}``.
         """
+        google_service = await google_connections.service_for(session)
         announcements = await google_service.fetch_announcements(course_id)
         new_count = len(announcements)
         new_max = max((a.get("updateTime") or "" for a in announcements), default="") or None
@@ -218,7 +226,10 @@ class ClassroomSyncService:
         return {"changed": True, "course_id": course_id, "upserted": n, "removed": removed}
 
     async def _fetch_course_bundle(
-        self, course_id: str, course: Optional[Dict[str, Any]] = None
+        self,
+        google_service: GoogleClassroomService,
+        course_id: str,
+        course: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Fetch every Classroom resource for one course in parallel (network
         only, no DB writes). Returns a bundle consumed by ``_persist_course_bundle``.
