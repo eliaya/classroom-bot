@@ -1,11 +1,14 @@
 from __future__ import annotations
 import platform
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src import __version__
+from src.api.deps import Principal, get_db_session, get_principal
 from src.config import now_jst
-from src.google_service import google_service
+from src.repositories import google_connections
 
 router = APIRouter(tags=["health"])
 
@@ -21,7 +24,7 @@ async def health() -> dict:
     return {"status": "ok", "timestamp": now_jst().isoformat()}
 
 
-@router.get("/time")
+@router.get("/time", dependencies=[Depends(get_principal)])
 async def get_time() -> dict:
     """Current server time (Asia/Tokyo) with today's weekday.
 
@@ -38,9 +41,16 @@ async def get_time() -> dict:
 
 
 @router.get("/status")
-async def status() -> dict:
+async def status(
+    principal: Principal = Depends(get_principal),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Health of the signed-in user's own Google Classroom connection."""
+    connection = await google_connections.get(session, principal.user_id)
+    google_service = await google_connections.service_for_user(session, principal.user_id)
     creds = google_service.credential_status()
     creds["drive_scope"] = google_service.has_drive_scope()
+    creds["account"] = connection.google_email if connection else None
     return {
         "google_credentials": "valid" if creds["valid"] else "missing",
         "google": creds,
@@ -49,7 +59,7 @@ async def status() -> dict:
     }
 
 
-@router.get("/version")
+@router.get("/version", dependencies=[Depends(get_principal)])
 async def get_version() -> dict:
     """Lightweight endpoint to get the current application version.
     Used by the admin sidebar for real-time version display.

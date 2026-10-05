@@ -3,6 +3,7 @@ import { animate } from 'animejs'
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { GuildsCard } from './guilds-card'
 import {
   api,
   type Course,
@@ -105,11 +106,16 @@ export function LinksSection() {
       .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
   }
 
-  useEffect(() => {
+  // Links, channels and roles all depend on which servers are connected to you.
+  const reloadServers = () => {
     reload()
-    api.listCourses().then((res) => setCourses(res.items)).catch(() => {})
     api.listDiscordChannels().then((res) => setChannels(res.items)).catch(() => {})
     api.listDiscordRoles().then((res) => setRoles(res.items)).catch(() => {})
+  }
+
+  useEffect(() => {
+    reloadServers()
+    api.listCourses().then((res) => setCourses(res.items)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -141,6 +147,7 @@ export function LinksSection() {
 
   return (
     <div className='flex flex-col gap-4'>
+      <GuildsCard onChange={reloadServers} />
       <div className='flex items-center justify-between gap-2'>
         {error && <p className='text-destructive text-sm'>{error}</p>}
         <span className='flex-1' />

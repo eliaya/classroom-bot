@@ -7,10 +7,9 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session, require_admin_token, verify_admin_token
+from src.api.deps import Principal, get_db_session, get_principal, require_permission
 from src.api.services import backup_service
 from src.api.services.scheduler_service import SchedulerService
-from src.config import settings
 from src.repositories import app_settings, audit_log, backup_jobs
 from src.repositories.app_settings import MAX_BACKUP_RETENTION_DAYS
 
@@ -89,12 +88,10 @@ async def get_backup_settings(
     result = _service(request).backup_status()
     result["retention_days"] = row.retention_days
     result["max_retention_days"] = MAX_BACKUP_RETENTION_DAYS
-    # The WebUI needs to know whether download/restore will be refused.
-    result["admin_token_configured"] = bool(settings.ADMIN_API_TOKEN)
     return result
 
 
-@router.patch("/settings", dependencies=[Depends(verify_admin_token)])
+@router.patch("/settings")
 async def update_backup_settings(
     body: BackupSettingsUpdate,
     request: Request,
@@ -118,7 +115,7 @@ async def update_backup_settings(
     return result
 
 
-@router.post("", dependencies=[Depends(verify_admin_token)], status_code=status.HTTP_202_ACCEPTED)
+@router.post("", status_code=status.HTTP_202_ACCEPTED)
 async def create_backup(
     body: BackupCreate,
     background_tasks: BackgroundTasks,
@@ -152,9 +149,13 @@ async def get_backup(job_id: str, session: AsyncSession = Depends(get_db_session
     return _job_dict(row)
 
 
-@router.get("/{job_id}/download", dependencies=[Depends(require_admin_token)])
+@router.get("/{job_id}/download")
 async def download_backup(
-    job_id: str, session: AsyncSession = Depends(get_db_session)
+    job_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    # A GET, so the router-level guard only asks for backup:view; handing out
+    # the whole database needs backup:use.
+    principal: Principal = Depends(require_permission("backup:use")),
 ) -> FileResponse:
     row = await backup_jobs.get_backup(session, job_id)
     if row is None or row.status != "completed" or not row.archive_filename:
@@ -163,7 +164,7 @@ async def download_backup(
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Archive is missing from disk")
     await audit_log.record(
-        session, category="api", action="backup.downloaded", actor="admin",
+        session, category="api", action="backup.downloaded", actor=principal.email,
         target=job_id, status="ok", detail={"bytes": row.archive_bytes},
     )
     return FileResponse(
@@ -171,8 +172,12 @@ async def download_backup(
     )
 
 
-@router.delete("/{job_id}", dependencies=[Depends(require_admin_token)])
-async def delete_backup(job_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
+@router.delete("/{job_id}")
+async def delete_backup(
+    job_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(get_principal),
+) -> dict:
     row = await backup_jobs.get_backup(session, job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Backup not found")
@@ -188,7 +193,7 @@ async def delete_backup(job_id: str, session: AsyncSession = Depends(get_db_sess
         session, job_id, status="deleted", phase="deleted", archive_filename=None
     )
     await audit_log.record(
-        session, category="api", action="backup.deleted", actor="admin",
+        session, category="api", action="backup.deleted", actor=principal.email,
         target=job_id, status="ok",
     )
     return {"status": "deleted", "id": job_id}
@@ -196,7 +201,6 @@ async def delete_backup(job_id: str, session: AsyncSession = Depends(get_db_sess
 
 @router.post(
     "/{job_id}/restore",
-    dependencies=[Depends(require_admin_token)],
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def restore_backup(
@@ -204,6 +208,7 @@ async def restore_backup(
     body: RestoreRequest,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
     row = await backup_jobs.get_backup(session, job_id)
     if row is None or row.status != "completed" or not row.archive_filename:
@@ -225,7 +230,7 @@ async def restore_backup(
 
     restore = await backup_jobs.create_restore(session, backup_id=job_id)
     await audit_log.record(
-        session, category="api", action="backup.restore_started", actor="admin",
+        session, category="api", action="backup.restore_started", actor=principal.email,
         target=restore.id, status="ok", detail={"backup_id": job_id, "scope": row.scope},
     )
     background_tasks.add_task(backup_service.execute_restore, restore.id)

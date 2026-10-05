@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, ClipboardList } from 'lucide-react'
 import { type TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
+import { useCan } from '@/lib/permissions'
 import { cn, fullTimestamp, humanReadableTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -203,10 +204,12 @@ export function TodoPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const canCourses = useCan('courses:view')
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([api.listTodos(), api.listCourses()])
+    // Course names are a nicety; without courses:view the ids are shown instead.
+    Promise.all([api.listTodos(), canCourses ? api.listCourses() : { items: [] as Course[] }])
       .then(([todosRes, coursesRes]) => {
         setItems(todosRes.items)
         setCourses(coursesRes.items)
@@ -214,7 +217,7 @@ export function TodoPage() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : t('todo.loadFailed')))
       .finally(() => setLoading(false))
-  }, [])
+  }, [canCourses])
 
   const courseMap = useMemo(
     () => Object.fromEntries(courses.map((c) => [c.id, c.name])),

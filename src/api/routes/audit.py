@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session, verify_admin_token
+from src.api.deps import get_db_session
 from src.api.services.scheduler_service import SchedulerService
 from src.repositories import app_settings, audit_log
 from src.repositories.app_settings import MAX_AUDIT_RETENTION_DAYS
@@ -46,7 +46,7 @@ async def get_audit_retention(request: Request) -> dict:
     return status
 
 
-@router.patch("/retention", dependencies=[Depends(verify_admin_token)])
+@router.patch("/retention")
 async def update_audit_retention(
     body: AuditRetentionUpdate,
     request: Request,

@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-05
+
+Web app bumped to 2.10.0.
+
+**Upgrade notes.** Set `ADMIN_EMAILS` in `.env` before starting: its first address becomes the owner of everything the database already holds, and the API and bot refuse to start on an existing database without it. Take a full backup first — the schema change is one-way, and going back means restoring that backup. `client_secret.json` must now be a *Web application* OAuth client. `ADMIN_API_TOKEN`, `API_BASE_URL` and the web build's `VITE_ADMIN_API_TOKEN` are gone.
+
+### Added
+- **Sign in with Google.** The web UI is no longer open: every `/api` route except `/api/health` and the sign-in handshake needs a session. `GET /api/auth/login/start` asks Google for identity only (`openid`, email, profile); the callback verifies the ID token, requires a verified email, and sets an HttpOnly, SameSite=Lax session cookie backed by the new `user_sessions` table (only a SHA-256 of the cookie is stored; fixed 30-day lifetime). The pending handshake — state, PKCE verifier, return path — now lives in a short-lived HttpOnly cookie instead of process memory, which binds the callback to the browser that started the flow. Regression tests: `tests/test_auth_routes.py`, `tests/test_users_repo.py`.
+- **Users and roles (RBAC).** New `users` and `roles` tables. A role is a set of permission keys of the form `<module>:view` (browse) or `<module>:use` (act) across ten modules: `courses`, `todos`, `search`, `sync`, `links`, `bot`, `scheduler`, `audit`, `backup`, `users`. Each user has one role. Anyone may sign in, but a user without a role is *awaiting approval* and can reach nothing until an administrator assigns one in **Settings -> Users**; `ADMIN_EMAILS` names the accounts that are always administrators and is re-applied on every sign-in. Roles are edited in **Settings -> Roles**; the seeded `admin` role cannot be edited and system roles cannot be deleted. Users are deactivated, never deleted. Regression tests: `tests/test_users_routes.py`.
+- **Permissions enforced on every route.** `require_module` guards each router at `include_router` (GET needs `:view`, anything else `:use`), so a route added later is protected by default — `/api/bot/commands` writes had no check at all before. `tests/test_route_permissions.py` walks every operation in the OpenAPI schema and fails if any answers an anonymous request.
+- **Each user connects their own Google Classroom account, and sees only their own data.** Every `classroom_*` row now carries `owner_user_id`, and its uniqueness includes it, so two users in the same course each hold their own copy (Classroom shows different content to different members). The owner rides on the database session (`database.owned_session`): `classroom_cache.owned` filters every read and new rows are stamped on flush, so a session with no owner fails instead of reading across users. Tokens are one file per consent under `credentials/tokens/`, pointed at by the new `google_connections` table and still excluded from backups. Scheduled sync and the announcement poller run once per active, connected user; a manual sync is always the caller's own. Regression tests: `tests/test_owner_isolation.py`, `tests/test_owner_seam.py`, `tests/test_google_connections.py`, `tests/test_multi_user_sync.py`.
+- **Discord servers belong to a user.** New `discord_guild_bindings` table. A user connects a server to themselves in **Discord bot -> Channel links** before linking its channels; slash commands, auto-push and `/classroom post` in that server then use that user's Classroom data and Google account. An unbound server gets nothing, and its links keep their cursors until it is claimed. Regression tests: `tests/test_guild_binding.py`, `tests/test_bot_api_client.py`.
+- **One-time ownership migration** in `init_db()`. The eight cache tables are rebuilt (SQLite cannot alter a unique constraint in place) and all existing data, the existing `token.json` and every known Discord server are handed to the first `ADMIN_EMAILS` address, so an upgraded deployment keeps working and nothing is re-posted. `init_db()` now runs inside `BEGIN IMMEDIATE`: a failed rebuild rolls back completely, and the API and bot take turns instead of racing. Regression test: `tests/test_owner_migration.py`.
+- Web: Google sign-in page, an *awaiting approval* screen, a route guard, and navigation (sidebar, settings, command menu) filtered by permission; **Users**, **Roles** and server-claiming screens; the profile menus show the signed-in user.
+
+### Changed
+- The Discord bot reads Classroom data **in-process** through the API's read handlers instead of over HTTP. The API now requires a signed-in user, and the bot shares the database anyway, so this avoids giving the bot a credential that could impersonate users.
+- The audit trail records who acted: API request rows carry the signed-in user's email, and user, role, server and backup actions name their actor.
+- Attachment downloads are served inline only for PDF and raster images; everything else is forced to download and all responses carry `X-Content-Type-Options: nosniff`. With cookie sign-in, an HTML or SVG attachment served inline would have run with the viewer's session. Regression test: `tests/test_attachment_download.py`.
+- State-changing requests carrying an `Origin` outside `API_CORS_ORIGINS` are refused, and CORS no longer falls back to `*` when that setting is empty (with credentials enabled that reflected any origin).
+- New attachment downloads are stored under `u<user id>/…`; files already on disk stay where they are.
+- Refreshed Google tokens are written atomically (`os.replace`, mode 0600), so a reader never sees a half-written file.
+- Restoring a backup signs everyone out, and restoring one taken before this release re-runs the ownership migration.
+
+### Fixed
+- Auto-push: **a failed Discord send no longer skips its item for good**. The send's rollback expired the link row, so the next read of its cursor raised `MissingGreenlet` and aborted the rest of the link's pass; the watermark also advanced past the item that was never delivered. The link is now refreshed after the rollback and the watermark only moves when every item in the pass was posted. Regression test: `tests/test_sync_post_failure.py`.
+
+### Removed
+- `ADMIN_API_TOKEN` / `VITE_ADMIN_API_TOKEN` (replaced by sign-in and roles) and `API_BASE_URL` (the bot no longer calls the API).
+- The template's mock sign-up, forgot-password and OTP pages. Google is the only way to sign in.
+
 ## [0.16.0] - 2026-09-02
 
 Web app bumped to 2.9.0.

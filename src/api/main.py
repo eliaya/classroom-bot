@@ -2,12 +2,13 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src import __version__
-from src.api.routes import audit, auth, backup, bot, bot_commands, bot_messages, courses, discord_meta, health, links, scheduler, search, sync, todos
+from src.api.deps import require_module
+from src.api.routes import audit, auth, backup, bot, bot_commands, bot_messages, courses, discord_meta, health, links, roles, scheduler, search, sync, todos, users
 from src.api.services.scheduler_service import SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
@@ -22,7 +23,7 @@ def _skip_audit(path: str, method: str) -> bool:
     if path.startswith("/api/audit") or path.startswith("/api/health"):
         return True
     if method == "GET" and path.startswith(
-        ("/api/sync/status", "/api/bot/status", "/api/scheduler", "/api/version", "/api/backup")
+        ("/api/sync/status", "/api/bot/status", "/api/scheduler", "/api/version", "/api/backup", "/api/auth/me")
     ):
         return True
     return False
@@ -35,26 +36,35 @@ def create_app() -> FastAPI:
     origins = [o.strip() for o in settings.API_CORS_ORIGINS.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins or ["*"],
+        # No "*" fallback: with allow_credentials it would reflect any origin.
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
+    def guard(module: str) -> list:
+        # Guarding the whole router means a route added later is protected by
+        # default: GET needs "<module>:view", anything else "<module>:use".
+        return [Depends(require_module(module))]
+
+    # health and auth set their own per-route access (public / signed-in only).
     app.include_router(health.router, prefix="/api")
-    app.include_router(courses.router, prefix="/api")
-    app.include_router(todos.router, prefix="/api")
-    app.include_router(sync.router, prefix="/api")
-    app.include_router(scheduler.router, prefix="/api")
-    app.include_router(bot.router, prefix="/api")
-    app.include_router(bot_commands.router, prefix="/api")
-    app.include_router(bot_messages.router, prefix="/api")
-    app.include_router(links.router, prefix="/api")
-    app.include_router(discord_meta.router, prefix="/api")
     app.include_router(auth.router, prefix="/api")
-    app.include_router(search.router, prefix="/api")
-    app.include_router(audit.router, prefix="/api")
-    app.include_router(backup.router, prefix="/api")
+    app.include_router(courses.router, prefix="/api", dependencies=guard("courses"))
+    app.include_router(todos.router, prefix="/api", dependencies=guard("todos"))
+    app.include_router(search.router, prefix="/api", dependencies=guard("search"))
+    app.include_router(sync.router, prefix="/api", dependencies=guard("sync"))
+    app.include_router(links.router, prefix="/api", dependencies=guard("links"))
+    app.include_router(discord_meta.router, prefix="/api", dependencies=guard("links"))
+    app.include_router(bot.router, prefix="/api", dependencies=guard("bot"))
+    app.include_router(bot_commands.router, prefix="/api", dependencies=guard("bot"))
+    app.include_router(bot_messages.router, prefix="/api", dependencies=guard("bot"))
+    app.include_router(scheduler.router, prefix="/api", dependencies=guard("scheduler"))
+    app.include_router(audit.router, prefix="/api", dependencies=guard("audit"))
+    app.include_router(backup.router, prefix="/api", dependencies=guard("backup"))
+    app.include_router(users.router, prefix="/api", dependencies=guard("users"))
+    app.include_router(roles.router, prefix="/api", dependencies=guard("users"))
 
     @app.middleware("http")
     async def audit_requests(request: Request, call_next):
@@ -73,6 +83,8 @@ def create_app() -> FastAPI:
                         session,
                         category="api",
                         action="api.request",
+                        # Set by get_principal; None for anonymous requests.
+                        actor=getattr(request.state, "actor", None),
                         target=f"{request.method} {path}",
                         status="ok" if response.status_code < 400 else "error",
                         duration_ms=duration_ms,

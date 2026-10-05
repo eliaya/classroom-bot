@@ -18,7 +18,8 @@ fi
 
 missing=()
 [[ -f credentials/client_secret.json ]] || missing+=("credentials/client_secret.json")
-[[ -f credentials/token.json ]] || missing+=("credentials/token.json")
+# Sign-in needs at least one admin; an existing database also needs an owner.
+grep -Eq '^ADMIN_EMAILS="?[^"[:space:]]' .env || missing+=("ADMIN_EMAILS in .env")
 
 echo ""
 echo "Tracked by Git (present after clone/pull):"
@@ -28,8 +29,7 @@ echo "  .env.bot.example"
 echo ""
 echo "You must provide locally (never committed):"
 echo "  .env"
-echo "  credentials/client_secret.json"
-echo "  credentials/token.json"
+echo "  credentials/client_secret.json  (a Web application OAuth client)"
 echo "  data/classroom_sync.db  (optional; omit for a fresh database)"
 echo ""
 
@@ -37,7 +37,7 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   echo "Still missing:"
   printf '  - %s\n' "${missing[@]}"
   echo ""
-  echo "Upload OAuth files to credentials/, then run:"
+  echo "Provide them, then run:"
   echo "  docker compose up -d --build"
   exit 1
 fi

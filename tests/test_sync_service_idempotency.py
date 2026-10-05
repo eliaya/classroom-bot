@@ -15,7 +15,7 @@ import pytest_asyncio
 from sqlmodel import SQLModel, select
 
 import src.models  # noqa: F401 — register tables
-from src.models import ClassroomCourse, GuildCourseLink, PostedAnnouncement
+from src.models import ClassroomCourse, DiscordGuildBinding, GuildCourseLink, PostedAnnouncement
 from src.repositories import classroom_cache as cache
 from src.sync_service import ClassroomSyncService
 
@@ -64,6 +64,7 @@ async def test_empty_cursor_does_not_repost_already_posted_item(session, monkeyp
         last_sync_announcement=None, last_sync_coursework=None,
     )
     session.add(link)
+    session.add(DiscordGuildBinding(guild_id=GUILD_ID, user_id=1))
     # The item is ALREADY posted.
     session.add(PostedAnnouncement(announcement_id="a1", course_id=COURSE_ID, guild_id=GUILD_ID))
     await session.commit()

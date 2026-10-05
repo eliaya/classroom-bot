@@ -18,6 +18,7 @@ venv/
 
 credentials/*.json
 credentials/*.json.*
+credentials/tokens/
 credentials/*.org
 data/*
 !data/README.md

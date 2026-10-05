@@ -6,11 +6,14 @@ import {
   DatabaseBackup,
   Languages,
   ScrollText,
+  ShieldCheck,
+  Users,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { buttonVariants } from '@/components/ui/button'
 import { Main } from '@/components/layout/main'
+import { canOpen, usePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { ClassroomHeader } from '../layout-header'
 
@@ -22,12 +25,15 @@ const navItems: NavItem[] = [
   { to: '/settings/scheduler', label: 'settings.nav.scheduler', icon: CalendarClock },
   { to: '/settings/audit', label: 'settings.nav.audit', icon: ScrollText },
   { to: '/settings/backup', label: 'settings.nav.backup', icon: DatabaseBackup },
+  { to: '/settings/users', label: 'settings.nav.users', icon: Users },
+  { to: '/settings/roles', label: 'settings.nav.roles', icon: ShieldCheck },
   { to: '/settings/setup', label: 'settings.nav.setup', icon: BookOpen },
 ]
 
 /** Settings shell: header + a left sub-sidebar that routes to each section. */
 export function SettingsLayout() {
   const { t } = useTranslation()
+  const permissions = usePermissions()
   return (
     <>
       <ClassroomHeader fixed title={t('settings.title')} description={t('settings.desc')} />
@@ -35,7 +41,7 @@ export function SettingsLayout() {
         <div className='flex flex-1 flex-col gap-6 lg:flex-row lg:gap-8'>
           <aside className='lg:w-56 lg:shrink-0'>
             <nav className='flex gap-1 overflow-x-auto lg:flex-col'>
-              {navItems.map(({ to, label, icon: Icon, exact }) => (
+              {navItems.filter(({ to }) => canOpen(permissions, to)).map(({ to, label, icon: Icon, exact }) => (
                 <Link
                   key={to}
                   to={to}

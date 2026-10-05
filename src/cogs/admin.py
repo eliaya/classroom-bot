@@ -5,8 +5,9 @@ import time
 import discord
 from discord import app_commands
 from discord.ext import commands
+from src.repositories import google_connections
+from src.repositories.guild_bindings import GuildNotBound, guild_session
 from src.utils.permissions import is_guild_admin
-from src.google_service import google_service
 
 logger = logging.getLogger("classroom_sync.cogs.admin")
 
@@ -29,13 +30,14 @@ class AdminCog(commands.Cog):
         minutes, seconds = divmod(remainder, 60)
         uptime_str = f"{hours}h {minutes}m {seconds}s"
 
-        # Check google service authorization condition
-        google_auth_ok = google_service.creds is not None and google_service.creds.valid
-        if not google_auth_ok:
-            # Attempt reloading
+        # Google authorization of the user this server is bound to.
+        try:
+            async with guild_session(interaction.guild_id) as session:
+                google_service = await google_connections.service_for(session)
             google_auth_ok = google_service.load_credentials()
-
-        auth_text = "✅ Authorized & Valid" if google_auth_ok else "❌ Missing / Unauthorized"
+            auth_text = "✅ Authorized & Valid" if google_auth_ok else "❌ Missing / Unauthorized"
+        except GuildNotBound:
+            auth_text = "⚠️ This server is not connected to a user yet"
 
         embed = discord.Embed(
             title="⚙️ Classroom Discord Sync Bot • System Status",

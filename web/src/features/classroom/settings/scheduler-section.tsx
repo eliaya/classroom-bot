@@ -15,11 +15,14 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { api, type SchedulerStatus } from '@/lib/api'
+import { useCan } from '@/lib/permissions'
 import { useSyncStatusStore } from '@/stores/sync-status-store'
 
 /** Background-sync scheduler: enable, intervals, and a manual run-now trigger. */
 export function SchedulerSection() {
   const { t } = useTranslation()
+  const canEdit = useCan('scheduler:use')
+  const canSync = useCan('sync:use')
   const [scheduler, setScheduler] = useState<SchedulerStatus | null>(null)
   const [intervalInput, setIntervalInput] = useState('')
   const [pollIntervalInput, setPollIntervalInput] = useState('')
@@ -138,11 +141,11 @@ export function SchedulerSection() {
           </div>
           <Button
             onClick={() => void handleSaveScheduler()}
-            disabled={savingScheduler || !schedulerDirty}
+            disabled={savingScheduler || !schedulerDirty || !canEdit}
           >
             {savingScheduler ? t('settings.saving') : t('settings.save')}
           </Button>
-          <Button variant='outline' onClick={() => void handleRunNow()} disabled={runningNow}>
+          <Button variant='outline' onClick={() => void handleRunNow()} disabled={runningNow || !canSync}>
             <RefreshCw className={runningNow ? 'animate-spin' : ''} />
             {t('settings.runNow')}
           </Button>

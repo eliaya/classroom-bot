@@ -6,9 +6,10 @@ import discord
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.database import async_session_factory
+from src.database import OWNER_KEY, async_session_factory
 from src.models import GuildCourseLink, PostedAnnouncement
 from src.repositories import classroom_cache as cache
+from src.repositories import guild_bindings
 from src.discord_attachments import build_item_files
 from src.cogs._messages import MessageStore
 from src.embed_builder import EmbedBuilder
@@ -60,6 +61,17 @@ class ClassroomSyncService:
         *,
         backfill: bool = False,
     ) -> None:
+        # A server posts the Classroom data of the user it is bound to. The
+        # session is reused across links, so the owner is set for each one.
+        owner_id = await guild_bindings.owner_of_guild(session, link.guild_id)
+        if owner_id is None:
+            logger.warning(
+                f"Guild '{link.guild_id}' is not bound to a user; "
+                f"skipping its link to course '{link.course_id}'."
+            )
+            return
+        session.info[OWNER_KEY] = owner_id
+
         logger.info(
             f"Checking updates for Course '{link.course_id}' -> Discord Channel '{link.channel_id}'"
             f"{' (backfill)' if backfill else ''}"
@@ -149,6 +161,8 @@ class ClassroomSyncService:
 
             new_posts.append(ann)
 
+        # A single failed send must not carry the watermark past its own item.
+        posted_all = True
         for new_ann in new_posts:
             try:
                 embed = await EmbedBuilder.build_announcement_embed(self.messages, course_name, new_ann)
@@ -178,9 +192,17 @@ class ClassroomSyncService:
                 logger.info(f"Posted new announcement '{new_ann['id']}' to Discord.")
             except Exception as discord_err:
                 await session.rollback()
+                # rollback expires every ORM object in this session, and reading an
+                # expired attribute from async code raises MissingGreenlet — which used
+                # to abort the rest of this link's pass and bury the real Discord error.
+                await session.refresh(link)
+                posted_all = False
                 logger.error(f"Failed to post announcement '{new_ann['id']}' to Discord: {discord_err}")
 
-        if max_seen_timestamp != link.last_sync_announcement:
+        # Nothing was written to posted_announcements for a failed item either, so
+        # advancing the watermark would skip it forever. Re-scanning next pass is
+        # cheap and safe — PostedAnnouncement dedups everything already delivered.
+        if posted_all and max_seen_timestamp != link.last_sync_announcement:
             link.last_sync_announcement = max_seen_timestamp
             session.add(link)
 
@@ -224,6 +246,8 @@ class ClassroomSyncService:
 
             new_items.append(cw)
 
+        # A single failed send must not carry the watermark past its own item.
+        posted_all = True
         for cw_item in new_items:
             try:
                 embed = await EmbedBuilder.build_coursework_embed(self.messages, course_name, cw_item)
@@ -247,8 +271,16 @@ class ClassroomSyncService:
                 logger.info(f"Posted new coursework '{cw_item['id']}' to Discord.")
             except Exception as discord_err:
                 await session.rollback()
+                # rollback expires every ORM object in this session, and reading an
+                # expired attribute from async code raises MissingGreenlet — which used
+                # to abort the rest of this link's pass and bury the real Discord error.
+                await session.refresh(link)
+                posted_all = False
                 logger.error(f"Failed to post coursework '{cw_item['id']}' to Discord: {discord_err}")
 
-        if max_seen_timestamp != link.last_sync_coursework:
+        # Nothing was written to posted_announcements for a failed item either, so
+        # advancing the watermark would skip it forever. Re-scanning next pass is
+        # cheap and safe — PostedAnnouncement dedups everything already delivered.
+        if posted_all and max_seen_timestamp != link.last_sync_coursework:
             link.last_sync_coursework = max_seen_timestamp
             session.add(link)

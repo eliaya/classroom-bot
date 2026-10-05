@@ -26,6 +26,22 @@ from src.models import (
 logger = logging.getLogger("classroom_sync.cache")
 
 
+def owner_of(session: AsyncSession) -> int:
+    """The user whose Classroom data this session may touch.
+
+    Set by ``database.owned_session``. A session without an owner raises here,
+    so an unscoped caller fails instead of reading across users.
+    """
+    return session.info["owner_user_id"]
+
+
+def owned(session: AsyncSession, model: Any, *columns: Any):
+    """``select`` over ``model`` (or just ``columns``) limited to the session
+    owner's rows. Every read of the cache goes through here; new rows get their
+    owner from the same session on flush (``database._stamp_owner``)."""
+    return select(*(columns or (model,))).where(model.owner_user_id == owner_of(session))
+
+
 def _parse_materials(item: Dict[str, Any]) -> Optional[str]:
     materials = item.get("materials")
     return dump_json(materials) if materials else None
@@ -195,7 +211,7 @@ async def soft_delete_missing(
     extra_filter: Any = None,
 ) -> int:
     """Mark cached rows that are no longer present upstream as removed (soft delete)."""
-    stmt = select(model).where(
+    stmt = owned(session, model).where(
         model.course_id == course_id,
         model.removed_at.is_(None),
     )
@@ -392,7 +408,9 @@ _TODO_FIELDS = ("title", "due_date", "status", "course_work_link")
 
 async def upsert_course(session: AsyncSession, data: Dict[str, Any], *, run_id: Optional[int] = None) -> None:
     row = _course_from_api(data)
-    existing = await session.get(ClassroomCourse, row.id)
+    existing = (await session.execute(
+        owned(session, ClassroomCourse).where(ClassroomCourse.id == row.id)
+    )).scalars().first()
     await _apply(
         session, existing, row, _COURSE_FIELDS,
         entity_type="course", entity_id=row.id, course_id=row.id, run_id=run_id,
@@ -409,7 +427,7 @@ async def upsert_announcements(
             skipped += 1
             continue
         row = _announcement_from_api(course_id, item)
-        stmt = select(ClassroomAnnouncement).where(
+        stmt = owned(session, ClassroomAnnouncement).where(
             ClassroomAnnouncement.id == row.id,
             ClassroomAnnouncement.course_id == course_id,
         )
@@ -431,7 +449,7 @@ async def upsert_coursework(
             skipped += 1
             continue
         row = _coursework_from_api(course_id, item)
-        stmt = select(ClassroomCoursework).where(
+        stmt = owned(session, ClassroomCoursework).where(
             ClassroomCoursework.id == row.id,
             ClassroomCoursework.course_id == course_id,
         )
@@ -453,7 +471,7 @@ async def upsert_topics(
             skipped += 1
             continue
         row = _topic_from_api(course_id, item)
-        stmt = select(ClassroomTopic).where(
+        stmt = owned(session, ClassroomTopic).where(
             ClassroomTopic.id == row.id,
             ClassroomTopic.course_id == course_id,
         )
@@ -475,7 +493,7 @@ async def upsert_materials(
             skipped += 1
             continue
         row = _material_from_api(course_id, item)
-        stmt = select(ClassroomMaterial).where(
+        stmt = owned(session, ClassroomMaterial).where(
             ClassroomMaterial.id == row.id,
             ClassroomMaterial.course_id == course_id,
         )
@@ -492,7 +510,7 @@ async def upsert_people(
 ) -> int:
     for item in items:
         row = _person_from_api(course_id, role, item)
-        stmt = select(ClassroomPerson).where(
+        stmt = owned(session, ClassroomPerson).where(
             ClassroomPerson.course_id == course_id,
             ClassroomPerson.user_id == row.user_id,
             ClassroomPerson.role == role,
@@ -510,7 +528,7 @@ async def upsert_todos(
 ) -> int:
     for item in items:
         row = _todo_from_api(course_id, item)
-        stmt = select(ClassroomTodo).where(
+        stmt = owned(session, ClassroomTodo).where(
             ClassroomTodo.user_id == row.user_id,
             ClassroomTodo.course_id == course_id,
             ClassroomTodo.item_id == row.item_id,
@@ -528,7 +546,9 @@ async def get_coursework_update_times(
 ) -> Dict[tuple[str, str], Optional[str]]:
     """Map of (course_id, courseWorkId) -> update_time, for enriching todos with
     their linked coursework's last-updated time."""
-    stmt = select(
+    stmt = owned(
+        session,
+        ClassroomCoursework,
         ClassroomCoursework.course_id,
         ClassroomCoursework.id,
         ClassroomCoursework.update_time,
@@ -539,9 +559,25 @@ async def get_coursework_update_times(
     return {(row[0], row[1]): row[2] for row in result.all()}
 
 
+async def owners_of_course(session: AsyncSession, course_id: str) -> List[int]:
+    """Ids of every user caching ``course_id``.
+
+    The one deliberate cross-owner read in this module: a Classroom push
+    notification names a course, not a user, so it is fanned out to each of
+    them. Returns ids only — never another user's rows.
+    """
+    result = await session.execute(
+        select(ClassroomCourse.owner_user_id).where(
+            ClassroomCourse.id == course_id,
+            ClassroomCourse.removed_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def list_cached_courses(session: AsyncSession) -> List[ClassroomCourse]:
     result = await session.execute(
-        select(ClassroomCourse)
+        owned(session, ClassroomCourse)
         .where(ClassroomCourse.removed_at.is_(None))
         .order_by(ClassroomCourse.name)
     )
@@ -549,7 +585,10 @@ async def list_cached_courses(session: AsyncSession) -> List[ClassroomCourse]:
 
 
 async def get_cached_course(session: AsyncSession, course_id: str) -> Optional[ClassroomCourse]:
-    return await session.get(ClassroomCourse, course_id)
+    result = await session.execute(
+        owned(session, ClassroomCourse).where(ClassroomCourse.id == course_id)
+    )
+    return result.scalars().first()
 
 
 async def list_cached_announcements(
@@ -560,7 +599,7 @@ async def list_cached_announcements(
     offset: int = 0,
 ) -> List[ClassroomAnnouncement]:
     stmt = (
-        select(ClassroomAnnouncement)
+        owned(session, ClassroomAnnouncement)
         .where(
             ClassroomAnnouncement.course_id == course_id,
             ClassroomAnnouncement.removed_at.is_(None),
@@ -581,7 +620,10 @@ async def announcement_signature(
     ``(active_count, max_update_time)``. The announcement poller compares this
     against the freshly-fetched list to skip writes when nothing changed."""
     res = await session.execute(
-        select(func.count(), func.max(ClassroomAnnouncement.update_time)).where(
+        owned(
+            session, ClassroomAnnouncement,
+            func.count(), func.max(ClassroomAnnouncement.update_time),
+        ).where(
             ClassroomAnnouncement.course_id == course_id,
             ClassroomAnnouncement.removed_at.is_(None),
         )
@@ -598,13 +640,13 @@ async def link_seed_timestamps(
     link's sync cursors so Discord only posts items updated *after* the link was
     created — not the whole course history. ISO-8601 strings sort correctly."""
     ann = await session.execute(
-        select(func.max(ClassroomAnnouncement.update_time)).where(
+        owned(session, ClassroomAnnouncement, func.max(ClassroomAnnouncement.update_time)).where(
             ClassroomAnnouncement.course_id == course_id,
             ClassroomAnnouncement.removed_at.is_(None),
         )
     )
     cw = await session.execute(
-        select(func.max(ClassroomCoursework.update_time)).where(
+        owned(session, ClassroomCoursework, func.max(ClassroomCoursework.update_time)).where(
             ClassroomCoursework.course_id == course_id,
             ClassroomCoursework.removed_at.is_(None),
         )
@@ -626,7 +668,7 @@ async def list_cached_coursework(
     Pass topic_id=None explicitly only has no special meaning here (use client-side for "uncategorized").
     """
     stmt = (
-        select(ClassroomCoursework)
+        owned(session, ClassroomCoursework)
         .where(
             ClassroomCoursework.course_id == course_id,
             ClassroomCoursework.removed_at.is_(None),
@@ -643,7 +685,7 @@ async def list_cached_coursework(
 
 async def list_cached_topics(session: AsyncSession, course_id: str) -> List[ClassroomTopic]:
     result = await session.execute(
-        select(ClassroomTopic)
+        owned(session, ClassroomTopic)
         .where(ClassroomTopic.course_id == course_id, ClassroomTopic.removed_at.is_(None))
         .order_by(ClassroomTopic.name)
     )
@@ -657,7 +699,7 @@ async def list_cached_materials(
     topic_id: Optional[str] = None,
 ) -> List[ClassroomMaterial]:
     """List cached course work materials. Supports optional topic_id filter (for Topic filter use)."""
-    stmt = select(ClassroomMaterial).where(
+    stmt = owned(session, ClassroomMaterial).where(
         ClassroomMaterial.course_id == course_id,
         ClassroomMaterial.removed_at.is_(None),
     )
@@ -682,7 +724,7 @@ async def upsert_attachment(
     session: AsyncSession, row: ClassroomAttachment, *, run_id: Optional[int] = None
 ) -> str:
     """UpdateOrNew one attachment, keyed by (course_id, item_type, item_id, ref_key)."""
-    stmt = select(ClassroomAttachment).where(
+    stmt = owned(session, ClassroomAttachment).where(
         ClassroomAttachment.course_id == row.course_id,
         ClassroomAttachment.item_type == row.item_type,
         ClassroomAttachment.item_id == row.item_id,
@@ -701,7 +743,10 @@ async def upsert_attachment(
 
 
 async def get_attachment(session: AsyncSession, db_id: int) -> Optional[ClassroomAttachment]:
-    return await session.get(ClassroomAttachment, db_id)
+    result = await session.execute(
+        owned(session, ClassroomAttachment).where(ClassroomAttachment.db_id == db_id)
+    )
+    return result.scalars().first()
 
 
 async def list_attachments(
@@ -711,7 +756,7 @@ async def list_attachments(
     *,
     include_removed: bool = False,
 ) -> List[ClassroomAttachment]:
-    stmt = select(ClassroomAttachment).where(ClassroomAttachment.course_id == course_id)
+    stmt = owned(session, ClassroomAttachment).where(ClassroomAttachment.course_id == course_id)
     if item_id is not None:
         stmt = stmt.where(ClassroomAttachment.item_id == item_id)
     if not include_removed:
@@ -723,7 +768,7 @@ async def list_attachments(
 
 async def list_cached_people(session: AsyncSession, course_id: str) -> List[ClassroomPerson]:
     result = await session.execute(
-        select(ClassroomPerson)
+        owned(session, ClassroomPerson)
         .where(ClassroomPerson.course_id == course_id, ClassroomPerson.removed_at.is_(None))
         .order_by(ClassroomPerson.role, ClassroomPerson.full_name)
     )
@@ -814,7 +859,7 @@ async def search_all(
     # ── Classworks: coursework + materials, matched by title/description OR by
     #    the name of one of their attachments ($AttachmentName) ───────────────
     att_rows = (await session.execute(
-        select(ClassroomAttachment)
+        owned(session, ClassroomAttachment)
         .where(
             ClassroomAttachment.removed_at.is_(None),
             func.lower(ClassroomAttachment.title).like(like),
@@ -835,7 +880,7 @@ async def search_all(
     if att_cw_ids:
         cw_conds.append(ClassroomCoursework.id.in_(att_cw_ids))
     cw_rows = (await session.execute(
-        select(ClassroomCoursework)
+        owned(session, ClassroomCoursework)
         .where(ClassroomCoursework.removed_at.is_(None), or_(*cw_conds))
         .order_by(ClassroomCoursework.update_time.desc())
         .limit(_SEARCH_CAP)
@@ -862,7 +907,7 @@ async def search_all(
     if att_mat_ids:
         mat_conds.append(ClassroomMaterial.id.in_(att_mat_ids))
     mat_rows = (await session.execute(
-        select(ClassroomMaterial)
+        owned(session, ClassroomMaterial)
         .where(ClassroomMaterial.removed_at.is_(None), or_(*mat_conds))
         .order_by(ClassroomMaterial.update_time.desc())
         .limit(_SEARCH_CAP)
@@ -885,7 +930,7 @@ async def search_all(
 
     # ── Stream: announcements (text) ─────────────────────────────────────────
     ann_rows = (await session.execute(
-        select(ClassroomAnnouncement)
+        owned(session, ClassroomAnnouncement)
         .where(
             ClassroomAnnouncement.removed_at.is_(None),
             func.lower(ClassroomAnnouncement.text).like(like),
@@ -917,12 +962,14 @@ async def list_cached_todos(
     # Order by the linked coursework's last-updated time (most recent first).
     # A todo maps to a courseWork via item_id (=courseWorkId) + course_id.
     stmt = (
-        select(ClassroomTodo)
+        owned(session, ClassroomTodo)
         .outerjoin(
             ClassroomCoursework,
             and_(
                 ClassroomCoursework.id == ClassroomTodo.item_id,
                 ClassroomCoursework.course_id == ClassroomTodo.course_id,
+                # Without this every todo repeats once per user caching that coursework.
+                ClassroomCoursework.owner_user_id == ClassroomTodo.owner_user_id,
             ),
         )
         .where(ClassroomTodo.user_id == user_id)
@@ -944,7 +991,7 @@ async def list_sync_changes(
     entity_type: Optional[str] = None,
     limit: int = 100,
 ) -> List[ClassroomSyncChange]:
-    stmt = select(ClassroomSyncChange)
+    stmt = owned(session, ClassroomSyncChange)
     if run_id is not None:
         stmt = stmt.where(ClassroomSyncChange.run_id == run_id)
     if entity_type is not None:
@@ -1088,7 +1135,7 @@ async def latest_sync_runs(
     """Return (runs, total) with optional server-side pagination, search and filtering.
     Backward compatible: if no page/search provided, behaves like before (recent N items).
     """
-    stmt = select(ClassroomSyncRun)
+    stmt = owned(session, ClassroomSyncRun)
     conditions = []
     if status:
         conditions.append(ClassroomSyncRun.status == status)
@@ -1107,7 +1154,7 @@ async def latest_sync_runs(
         stmt = stmt.where(*conditions)
 
     # total count
-    count_stmt = select(func.count()).select_from(ClassroomSyncRun)
+    count_stmt = owned(session, ClassroomSyncRun, func.count()).select_from(ClassroomSyncRun)
     if conditions:
         count_stmt = count_stmt.where(*conditions)
     total = (await session.execute(count_stmt)).scalar_one() or 0
@@ -1129,7 +1176,7 @@ async def clear_dead_sync_run(
     """Force-clear a stuck 'running' sync job (e.g. after container crash or hung process).
     Returns True if a running job was found and marked as error.
     """
-    stmt = select(ClassroomSyncRun).where(ClassroomSyncRun.id == run_id)
+    stmt = owned(session, ClassroomSyncRun).where(ClassroomSyncRun.id == run_id)
     result = await session.execute(stmt)
     run = result.scalar_one_or_none()
     if not run or run.status != "running":
@@ -1150,7 +1197,7 @@ async def delete_sync_run(session: AsyncSession, run_id: int) -> bool:
     Refuses to delete a job that is still 'running' — use clear_dead_sync_run to
     release a stuck running job first. Returns True if a row was deleted.
     """
-    stmt = select(ClassroomSyncRun).where(ClassroomSyncRun.id == run_id)
+    stmt = owned(session, ClassroomSyncRun).where(ClassroomSyncRun.id == run_id)
     result = await session.execute(stmt)
     run = result.scalar_one_or_none()
     if not run or run.status == "running":

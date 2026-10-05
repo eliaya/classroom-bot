@@ -11,7 +11,6 @@ from discord.ext import commands
 
 from src.config import settings, setup_logging
 from src.database import init_db, engine, async_session_factory
-from src.google_service import google_service
 from src.repositories import bot_status
 from src.sync_service import ClassroomSyncService
 
@@ -45,14 +44,7 @@ class ClassroomSyncBot(commands.Bot):
         # 1. Initialize SQLite Database schemas asynchronously
         await init_db()
 
-        # 2. Check and load Google credentials
-        google_service_ready = google_service.load_credentials()
-        if google_service_ready:
-            logger.info("Google Classroom API setup verified. Authorized successfully.")
-        else:
-            logger.warning("Google Classroom authorization token not found or invalid. Bot will remain idle.")
-
-        # 3. Load Bot Cogs (Manual instantiation bypasses filesystem dynamic loading issues)
+        # 2. Load Bot Cogs (Manual instantiation bypasses filesystem dynamic loading issues)
         from src.cogs.classroom import ClassroomCog
         from src.cogs.admin import AdminCog
         from src.cogs.custom_commands import CustomCommandsCog
@@ -62,13 +54,13 @@ class ClassroomSyncBot(commands.Bot):
         await self.add_cog(CustomCommandsCog(self))
         logger.info("Bot cogs loaded successfully.")
 
-        # 4. Configure Scheduler and register Polling job. The interval is
+        # 3. Configure Scheduler and register Polling job. The interval is
         # WebUI-editable (scheduler_settings.poll_interval_minutes); the bot
         # reconciles live changes on its heartbeat (separate process from the
         # API that writes it).
         interval = await self._poll_interval_minutes()
         self._schedule_poll(interval)
-        # 5. Periodic heartbeat so the API/dashboard can report bot status.
+        # 4. Periodic heartbeat so the API/dashboard can report bot status.
         self.scheduler.add_job(
             self._heartbeat,
             "interval",

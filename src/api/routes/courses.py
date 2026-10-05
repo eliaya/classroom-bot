@@ -7,12 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session
+from src.api.deps import get_owned_session
 from src.config import settings
 from src.models import ClassroomAttachment
 from src.repositories import classroom_cache as cache
 
 router = APIRouter(prefix="/courses", tags=["courses"])
+
+# Types a browser renders without running document script.
+_INLINE_SAFE = {"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"}
 
 
 def _attachment_public(a: ClassroomAttachment) -> dict:
@@ -34,7 +37,7 @@ def _attachment_public(a: ClassroomAttachment) -> dict:
 
 
 @router.get("")
-async def list_courses(session: AsyncSession = Depends(get_db_session)) -> dict:
+async def list_courses(session: AsyncSession = Depends(get_owned_session)) -> dict:
     courses = await cache.list_cached_courses(session)
     return {
         "items": [
@@ -55,7 +58,7 @@ async def list_courses(session: AsyncSession = Depends(get_db_session)) -> dict:
 
 
 @router.get("/{course_id}")
-async def get_course(course_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
+async def get_course(course_id: str, session: AsyncSession = Depends(get_owned_session)) -> dict:
     course = await cache.get_cached_course(session, course_id)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
@@ -76,7 +79,7 @@ async def get_stream(
     course_id: str,
     limit: int = 50,
     offset: int = 0,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
 ) -> dict:
     if not await cache.get_cached_course(session, course_id):
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
@@ -93,7 +96,7 @@ async def get_classwork(
         default=None,
         description="Optional topic ID to filter coursework and materials (for Topic filter). Omit for all.",
     ),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
 ) -> dict:
     if not await cache.get_cached_course(session, course_id):
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
@@ -154,7 +157,7 @@ async def get_classwork(
 async def get_attachments(
     course_id: str,
     item_id: Optional[str] = Query(default=None, description="Filter to one classwork item."),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
 ) -> dict:
     if not await cache.get_cached_course(session, course_id):
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
@@ -172,7 +175,7 @@ async def get_attachments(
 async def download_attachment(
     course_id: str,
     db_id: int,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
 ) -> FileResponse:
     attachment = await cache.get_attachment(session, db_id)
     if not attachment or attachment.course_id != course_id or attachment.removed_at is not None:
@@ -185,18 +188,23 @@ async def download_attachment(
         raise HTTPException(status_code=404, detail="Stored file is missing on disk.")
 
     filename = attachment.title or full_path.name
+    media_type = attachment.content_type or "application/octet-stream"
     # Inline disposition so PDFs/images render in the split-screen viewer's
     # <iframe>/<img>; the frontend's <a download> still forces a save when used.
+    # Everything else is forced to download: the file comes from whoever posted
+    # it in the course, and an HTML or SVG served inline would run in this
+    # origin with the viewer's session cookie.
     return FileResponse(
         path=str(full_path),
-        media_type=attachment.content_type or "application/octet-stream",
+        media_type=media_type,
         filename=filename,
-        content_disposition_type="inline",
+        content_disposition_type="inline" if media_type in _INLINE_SAFE else "attachment",
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 
 @router.get("/{course_id}/todos")
-async def get_todos(course_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
+async def get_todos(course_id: str, session: AsyncSession = Depends(get_owned_session)) -> dict:
     if not await cache.get_cached_course(session, course_id):
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
     todos = await cache.list_cached_todos(session, course_id)
@@ -217,7 +225,7 @@ async def get_todos(course_id: str, session: AsyncSession = Depends(get_db_sessi
 
 
 @router.get("/{course_id}/people")
-async def get_people(course_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
+async def get_people(course_id: str, session: AsyncSession = Depends(get_owned_session)) -> dict:
     if not await cache.get_cached_course(session, course_id):
         raise HTTPException(status_code=404, detail="Course not found in cache. Run sync first.")
     people = await cache.list_cached_people(session, course_id)

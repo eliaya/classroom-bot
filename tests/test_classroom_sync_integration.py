@@ -58,9 +58,8 @@ async def session():
 
 
 @pytest.fixture
-def mock_google(monkeypatch):
-    from src.google_service import google_service as gs
-
+def mock_google(monkeypatch, google_service):
+    gs = google_service
     monkeypatch.setattr(gs, "load_credentials", lambda: True)
     monkeypatch.setattr(gs, "get_course", AsyncMock(return_value={"id": COURSE_ID, "name": "数学"}))
     monkeypatch.setattr(gs, "fetch_announcements", AsyncMock(return_value=[]))
@@ -114,7 +113,7 @@ async def test_resync_updates_and_removes(session, mock_google, monkeypatch):
     # First sync establishes the baseline.
     await classroom_sync_service.sync_course(session, COURSE_ID)
 
-    from src.google_service import google_service as gs
+    gs = mock_google
 
     # Upstream changes: rename a topic, drop the last topic, change a coursework title.
     new_topics = [dict(TOPICS[0], name="31-課題（改）")] + TOPICS[1:5]  # tp6 removed
@@ -150,7 +149,7 @@ async def test_sync_all_survives_one_failing_course(session, mock_google, monkey
     session.rollback() expired the `run` instance, which lazily reloaded run.id
     in a sync context and raised 'greenlet_spawn has not been called', killing
     the entire sync and masking the real per-course error."""
-    from src.google_service import google_service as gs
+    gs = mock_google
 
     monkeypatch.setattr(
         gs, "list_courses",
@@ -185,7 +184,7 @@ async def test_sync_all_survives_one_failing_course(session, mock_google, monkey
 async def test_coursework_without_id_is_skipped_not_fatal(session, mock_google, monkeypatch):
     """Regression: a single API item missing 'id' must not abort the whole course
     with KeyError('id'). It is skipped (and logged) while valid items still sync."""
-    from src.google_service import google_service as gs
+    gs = mock_google
 
     bad_then_good = [{"title": "no-id ghost"}, dict(COURSEWORK[0])]
 

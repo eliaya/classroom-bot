@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session
+from src.api.deps import get_owned_session
 from src.repositories import classroom_cache as cache
 
 logger = logging.getLogger("classroom_sync.search")
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 async def search_all(
     q: str = Query(default="", description="Full-text query across cached classroom content"),
     limit: int = Query(default=5, ge=1, le=50, description="Max items per category"),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
 ) -> dict[str, Any]:
     """Whole-app full-text search over cached classroom content, grouped into
     Course / Classworks / Stream categories. Each category is capped at ``limit``

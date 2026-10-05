@@ -1,3 +1,6 @@
+import { useAuthStore } from '@/stores/auth-store'
+import { hardNavigate } from '@/lib/navigate'
+
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 /** Absolute URL for an attachment download path returned by the API
@@ -6,22 +9,84 @@ export function fileUrl(path: string): string {
   return `${API_BASE}${path}`
 }
 
+/** A non-2xx API response. `status` lets callers tell 401 from 403. */
+export class ApiError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+// Auth is the session cookie the API sets on sign-in; the browser sends it on
+// these same-origin requests by itself, so there is no token to attach.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = import.meta.env.VITE_ADMIN_API_TOKEN
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init?.headers as Record<string, string> | undefined),
-  }
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || res.statusText)
+    // Session gone mid-use: back to sign-in, returning here afterwards. The
+    // /auth/ calls are excluded so the route guard can handle "not signed in".
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      useAuthStore.getState().auth.reset()
+      const here = window.location.pathname + window.location.search
+      hardNavigate(`/sign-in?redirect=${encodeURIComponent(here)}`)
+    }
+    throw new ApiError(res.status, text || res.statusText)
   }
   return res.json() as Promise<T>
+}
+
+/** The signed-in user, as returned by GET /auth/me. An empty `permissions`
+ *  list means the account is awaiting approval. */
+export type Me = {
+  id: number
+  email: string
+  name: string | null
+  picture_url: string | null
+  role: string | null
+  permissions: string[]
+}
+
+export type AdminUser = {
+  id: number
+  email: string
+  name: string | null
+  picture_url: string | null
+  role_id: number | null
+  is_active: boolean
+  /** Listed in ADMIN_EMAILS: the admin role is re-applied on every sign-in. */
+  is_env_admin: boolean
+  created_at: string | null
+  last_login_at: string | null
+}
+
+export type Role = {
+  id: number
+  name: string
+  description: string | null
+  permissions: string[]
+  is_system: boolean
+}
+
+/** A Discord server the bot is in. `mine` = connected to you, `unbound` =
+ *  free to claim, `taken` = someone else's (only user administrators see these). */
+export type DiscordGuild = {
+  guild_id: string
+  guild_name: string | null
+  state: 'mine' | 'unbound' | 'taken'
+}
+
+export type RoleInput = {
+  name: string
+  description?: string | null
+  permissions: string[]
 }
 
 export type Course = {
@@ -114,8 +179,6 @@ export type BackupSettings = {
   next_run_time?: string | null
   retention_days: number
   max_retention_days: number
-  /** false = download and restore are refused until ADMIN_API_TOKEN is set. */
-  admin_token_configured: boolean
 }
 
 export type BotStatus = {
@@ -322,12 +385,34 @@ export const api = {
         expired?: boolean | null
         error?: string | null
         fix_hint?: string
+        /** Email of the connected Google Classroom account, when known. */
+        account?: string | null
       }
     }>('/status'),
   version: () => request<{ version: string }>('/version'),
   // Server time (Asia/Tokyo); weekday 1=Mon … 7=Sun (matches course `week`).
   serverTime: () =>
     request<{ now: string; weekday: number; weekday_name: string }>('/time'),
+  me: () => request<Me>('/auth/me'),
+  loginStart: (origin: string, next: string) =>
+    request<{ authorization_url: string }>(
+      `/auth/login/start?origin=${encodeURIComponent(origin)}&next=${encodeURIComponent(next)}`
+    ),
+  logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
+  listUsers: () => request<{ items: AdminUser[]; total: number }>('/users'),
+  updateUser: (id: number, body: { role_id?: number | null; is_active?: boolean }) =>
+    request<AdminUser>(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  listRoles: () =>
+    request<{ items: Role[]; total: number; modules: Record<string, string[]> }>('/roles'),
+  createRole: (body: RoleInput) =>
+    request<Role>('/roles', { method: 'POST', body: JSON.stringify(body) }),
+  updateRole: (id: number, body: Partial<RoleInput>) =>
+    request<Role>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRole: (id: number) =>
+    request<{ id: number; deleted: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
   googleAuthStart: (origin: string) =>
     request<{ authorization_url: string; redirect_uri: string; state: string }>(
       `/auth/google/start?origin=${encodeURIComponent(origin)}`
@@ -409,6 +494,16 @@ export const api = {
     request<{ items: Link[]; total: number }>(
       guildId != null ? `/links?guild_id=${guildId}` : '/links'
     ),
+  listGuilds: () =>
+    request<{ items: DiscordGuild[]; total: number }>('/discord/guilds'),
+  bindGuild: (guildId: string) =>
+    request<{ guild_id: string; state: string }>(`/discord/guilds/${guildId}/bind`, {
+      method: 'POST',
+    }),
+  releaseGuild: (guildId: string) =>
+    request<{ guild_id: string; state: string }>(`/discord/guilds/${guildId}/bind`, {
+      method: 'DELETE',
+    }),
   listDiscordChannels: () =>
     request<{ items: DiscordChannel[]; total: number }>('/discord/channels'),
   listDiscordRoles: () =>
@@ -503,22 +598,9 @@ export const api = {
     }),
   getRestore: (id: string) => request<RestoreJob>(`/backup/restores/${id}`),
 
-  /** Download an archive. A plain <a href> cannot carry the admin header, so
-   *  fetch it and hand the browser a blob.
-   *  ponytail: buffers the whole archive in memory — fine at 33 MB (database
-   *  scope) and workable at ~350 MB (full); swap for a signed one-time URL if
-   *  archives outgrow that. `curl -H "Authorization: Bearer …"` always works. */
-  downloadBackup: async (id: string, filename: string) => {
-    const token = import.meta.env.VITE_ADMIN_API_TOKEN
-    const res = await fetch(`${API_BASE}/backup/${id}/download`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-    if (!res.ok) throw new Error((await res.text()) || res.statusText)
-    const url = URL.createObjectURL(await res.blob())
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(url)
+  /** Download an archive. The session cookie rides along on a plain
+   *  navigation, and the response is an attachment, so the page stays put. */
+  downloadBackup: (id: string) => {
+    hardNavigate(fileUrl(`/backup/${id}/download`))
   },
 }

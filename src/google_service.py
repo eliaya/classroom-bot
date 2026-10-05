@@ -43,12 +43,36 @@ SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE, PUSH_SCOPE]
 CLASSROOM_MAX_PAGE_SIZE = 30
 
 
-class GoogleClassroomService:
-    """Handles interaction with the clean, production-ready Google Classroom API."""
+# Shown wherever a user has no usable Google Classroom token.
+NOT_CONNECTED = "No Google Classroom account is connected. Connect one in Settings."
 
-    def __init__(self) -> None:
+
+class GoogleClassroomService:
+    """Handles interaction with the clean, production-ready Google Classroom API.
+
+    One instance per connected Google account: ``token_path`` is that account's
+    OAuth token file, or None for a user who has not connected one. Get an
+    instance from ``repositories.google_connections.service_for``.
+    """
+
+    def __init__(self, token_path: Optional[str]) -> None:
+        self.token_path = token_path
         self.creds: Optional[Credentials] = None
         self.last_credential_error: Optional[str] = None
+
+    def _token_exists(self) -> bool:
+        return bool(self.token_path) and os.path.exists(self.token_path)
+
+    def _save(self, creds: Credentials) -> None:
+        """Write a refreshed token back atomically. The API and bot processes
+        both refresh the same file; a reader must never see a half-written one."""
+        tmp = f"{self.token_path}.{os.getpid()}.tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as token:
+            token.write(creds.to_json())
+        # ponytail: last writer wins, with no lock. Safe while Google does not
+        # rotate refresh tokens on refresh; add a file lock if that ever changes.
+        os.replace(tmp, self.token_path)
 
     def _missing_scopes(self, granted: Optional[List[str]]) -> List[str]:
         granted_set = set(granted or [])
@@ -63,10 +87,9 @@ class GoogleClassroomService:
         creds = self.creds
         if not creds:
             try:
-                token_path = settings.GOOGLE_TOKEN_FILE
-                if not os.path.exists(token_path):
+                if not self._token_exists():
                     return False
-                creds = Credentials.from_authorized_user_file(token_path)
+                creds = Credentials.from_authorized_user_file(self.token_path)
             except Exception:
                 return False
         return DRIVE_SCOPE in (creds.scopes or [])
@@ -79,28 +102,25 @@ class GoogleClassroomService:
         creds = self.creds
         if not creds:
             try:
-                token_path = settings.GOOGLE_TOKEN_FILE
-                if not os.path.exists(token_path):
+                if not self._token_exists():
                     return False
-                creds = Credentials.from_authorized_user_file(token_path)
+                creds = Credentials.from_authorized_user_file(self.token_path)
             except Exception:
                 return False
         return PUSH_SCOPE in (creds.scopes or [])
 
     def credential_status(self) -> dict[str, Any]:
         """Return non-secret diagnostics for admin UI and /api/status."""
-        token_path = settings.GOOGLE_TOKEN_FILE
+        token_path = self.token_path
         secret_path = settings.GOOGLE_CLIENT_SECRET_FILE
         status: dict[str, Any] = {
-            "token_file": token_path,
-            "client_secret_file": secret_path,
-            "token_exists": os.path.exists(token_path),
+            "token_exists": self._token_exists(),
             "client_secret_exists": os.path.exists(secret_path),
             "valid": False,
             "missing_scopes": [],
             "expired": None,
             "error": self.last_credential_error,
-            "fix_hint": "python src/scripts/setup_google_auth.py",
+            "fix_hint": "Connect your Google Classroom account in Settings.",
         }
 
         if not status["client_secret_exists"]:
@@ -108,7 +128,7 @@ class GoogleClassroomService:
             return status
 
         if not status["token_exists"]:
-            status["error"] = f"token.json not found at {token_path}"
+            status["error"] = NOT_CONNECTED
             return status
 
         try:
@@ -126,8 +146,7 @@ class GoogleClassroomService:
             if creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
-                    with open(token_path, "w") as token:
-                        token.write(creds.to_json())
+                    self._save(creds)
                     status["expired"] = False
                 except Exception as refresh_error:
                     status["error"] = f"OAuth token refresh failed: {refresh_error}"
@@ -149,7 +168,7 @@ class GoogleClassroomService:
         """
         self.last_credential_error = None
         try:
-            token_path = settings.GOOGLE_TOKEN_FILE
+            token_path = self.token_path
             secret_path = settings.GOOGLE_CLIENT_SECRET_FILE
 
             if not os.path.exists(secret_path):
@@ -160,11 +179,8 @@ class GoogleClassroomService:
                 logger.warning(self.last_credential_error)
                 return False
 
-            if not os.path.exists(token_path):
-                self.last_credential_error = (
-                    f"Google token not found at {token_path}. "
-                    "Run 'python src/scripts/setup_google_auth.py' on the host."
-                )
+            if not self._token_exists():
+                self.last_credential_error = NOT_CONNECTED
                 logger.warning(self.last_credential_error)
                 return False
 
@@ -186,8 +202,7 @@ class GoogleClassroomService:
                 logger.info("Credentials expired. Attempting token refresh...")
                 try:
                     self.creds.refresh(Request())
-                    with open(token_path, "w") as token:
-                        token.write(self.creds.to_json())
+                    self._save(self.creds)
                     logger.info("Credentials refreshed and saved.")
                     return True
                 except Exception as refresh_error:
@@ -224,6 +239,18 @@ class GoogleClassroomService:
             if not self.load_credentials():
                 raise ConnectionError("Google Drive API connection failed: Missing or invalid credentials.")
         return build("drive", "v3", credentials=self.creds)
+
+    async def my_email(self) -> Optional[str]:
+        """Email address of the connected Google account, for display. Best
+        effort: None if the profile cannot be read."""
+        def _sync_get() -> Dict[str, Any]:
+            return self._get_api_service().userProfiles().get(userId="me").execute()
+
+        try:
+            return (await asyncio.to_thread(_sync_get)).get("emailAddress")
+        except Exception:  # noqa: BLE001 — cosmetic; never fail a connect over it
+            logger.warning("Could not read the connected account's profile", exc_info=True)
+            return None
 
     async def get_drive_file_metadata(self, file_id: str) -> Optional[Dict[str, Any]]:
         """Fetch lightweight Drive file metadata (id, name, mimeType, size)."""
@@ -525,7 +552,3 @@ class GoogleClassroomService:
         except Exception as e:
             logger.error(f"Failed to create announcement in course '{course_id}': {e}")
             raise e
-
-
-# Singleton instance
-google_service = GoogleClassroomService()

@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/table'
 import { Main } from '@/components/layout/main'
 import { api, type SyncRun } from '@/lib/api'
+import { useCan } from '@/lib/permissions'
 import { useSyncStatusStore } from '@/stores/sync-status-store'
 import { ClassroomHeader } from './layout-header'
 import { RunProgressBar, RunStatusBadge } from './components/run-indicators'
@@ -38,6 +39,7 @@ function getDisplayPercent(run: SyncRun): number | null {
 
 export function SyncPage() {
   const { t } = useTranslation()
+  const canSync = useCan('sync:use')
   const [runs, setRuns] = useState<SyncRun[]>([])
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -188,7 +190,7 @@ export function SyncPage() {
               <p className='text-[10px] text-muted-foreground/70'>{t('sync.built', { time: BUILD_TIME })}</p>
             )}
           </div>
-          <Button onClick={() => void handleSync()} disabled={isLiveSyncing}>
+          <Button onClick={() => void handleSync()} disabled={isLiveSyncing || !canSync}>
             <RefreshCw className={isLiveSyncing ? 'animate-spin' : ''} />
             {isLiveSyncing ? t('sync.syncing') : t('sync.syncNow')}
           </Button>
@@ -411,6 +413,7 @@ export function SyncPage() {
                           variant='ghost'
                           size='icon'
                           className='text-destructive h-6 w-6'
+                          disabled={!canSync}
                           onClick={() => void handleClearDead(run.id)}
                           aria-label={t('sync.clearStuckAria')}
                           title={
@@ -428,6 +431,7 @@ export function SyncPage() {
                           variant='ghost'
                           size='icon'
                           className='text-destructive h-6 w-6'
+                          disabled={!canSync}
                           onClick={() => void handleDeleteRun(run.id)}
                           aria-label={t('sync.deleteAria')}
                           title={t('sync.deleteTitle')}

@@ -18,7 +18,7 @@ import pytest_asyncio
 from sqlmodel import SQLModel, select
 
 import src.models  # noqa: F401 — register tables
-from src.models import ClassroomCourse, GuildCourseLink, PostedAnnouncement
+from src.models import ClassroomCourse, DiscordGuildBinding, GuildCourseLink, PostedAnnouncement
 from src.repositories import classroom_cache as cache
 from src.sync_service import ClassroomSyncService
 
@@ -74,6 +74,7 @@ async def test_posted_item_survives_a_pass_that_aborts(session, monkeypatch):
             channel_id=CHANNEL_A if cid == COURSE_A else CHANNEL_B,
             last_sync_announcement=None, last_sync_coursework=None, is_active=True,
         ))
+    session.add(DiscordGuildBinding(guild_id=GUILD_ID, user_id=1))
     await session.commit()
 
     import src.database as db

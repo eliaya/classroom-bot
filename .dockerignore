@@ -20,3 +20,4 @@ __pycache__/
 data/*
 !data/README.md
 credentials/*.json
+credentials/tokens/

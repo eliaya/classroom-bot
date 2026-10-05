@@ -19,9 +19,9 @@ from typing import Optional
 
 from src.api.services.classroom_sync import classroom_sync_service
 from src.config import settings
-from src.google_service import google_service
 from src.repositories import audit_log
 from src.repositories import classroom_cache as cache
+from src.repositories import google_connections
 
 logger = logging.getLogger("classroom_sync.announcement_poller")
 
@@ -51,44 +51,60 @@ class AnnouncementPoller:
 
     async def _loop(self) -> None:
         interval = max(15, settings.CLASSROOM_ANNOUNCEMENT_POLL_SECONDS)
-        from src.database import async_session_factory
 
         while self._running:
             try:
                 await asyncio.sleep(interval)
                 if not self._running:
                     break
-                if not google_service.load_credentials():
-                    continue  # quietly skip until credentials are available
-
-                changed_courses = 0
-                async with async_session_factory() as session:
-                    courses = await cache.list_cached_courses(session)
-                    for course in courses:
-                        try:
-                            result = await classroom_sync_service.sync_announcements_only(
-                                session, course.id
-                            )
-                            if result.get("changed"):
-                                changed_courses += 1
-                        except Exception:  # noqa: BLE001 — per-course best effort
-                            logger.exception(
-                                "Announcement poll failed for course %s", course.id
-                            )
-                            await session.rollback()
-
-                    # Audit only when something actually changed, to avoid flooding.
-                    if changed_courses:
-                        await audit_log.record(
-                            session, category="api", action="sync.announcements",
-                            actor="poller", status="ok",
-                            detail={"courses_changed": changed_courses},
-                        )
+                await self.poll_once()
             except asyncio.CancelledError:
                 break
             except Exception:  # noqa: BLE001 — keep the loop alive
                 logger.exception("Announcement poll loop error; backing off")
                 await asyncio.sleep(min(interval, 30))
+
+    async def poll_once(self) -> None:
+        """One pass over every active user with a connected Google account."""
+        from src.database import async_session_factory
+
+        async with async_session_factory() as session:
+            user_ids = await google_connections.connected_user_ids(session)
+        for user_id in user_ids:
+            try:
+                await self._poll_user(user_id)
+            except Exception:  # noqa: BLE001 — one user must not stop the others
+                logger.exception("Announcement poll failed for user %s", user_id)
+
+    async def _poll_user(self, user_id: int) -> None:
+        from src.database import owned_session
+
+        changed_courses = 0
+        async with owned_session(user_id) as session:
+            google_service = await google_connections.service_for(session)
+            if not google_service.load_credentials():
+                return  # quietly skip until credentials are available
+            courses = await cache.list_cached_courses(session)
+            for course in courses:
+                try:
+                    result = await classroom_sync_service.sync_announcements_only(
+                        session, course.id
+                    )
+                    if result.get("changed"):
+                        changed_courses += 1
+                except Exception:  # noqa: BLE001 — per-course best effort
+                    logger.exception(
+                        "Announcement poll failed for course %s", course.id
+                    )
+                    await session.rollback()
+
+            # Audit only when something actually changed, to avoid flooding.
+            if changed_courses:
+                await audit_log.record(
+                    session, category="api", action="sync.announcements",
+                    actor="poller", target=f"user:{user_id}", status="ok",
+                    detail={"courses_changed": changed_courses},
+                )
 
 
 announcement_poller = AnnouncementPoller()

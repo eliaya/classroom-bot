@@ -6,13 +6,13 @@ import mimetypes
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst, settings
-from src.google_service import google_service
+from src.google_service import GoogleClassroomService
 from src.models import ClassroomAttachment, dump_json
 from src.repositories import classroom_cache as cache
+from src.repositories import google_connections
 
 logger = logging.getLogger("classroom_sync.attachments")
 
@@ -80,6 +80,7 @@ class AttachmentSyncService:
             + [("announcement", a.id, a.materials_json) for a in announcements]
         )
 
+        google_service = await google_connections.service_for(session)
         drive_ok = google_service.has_drive_scope()
         storage_root = Path(settings.ATTACHMENT_STORAGE_DIR)
         stats = {"total": 0, "fetched": 0, "skipped": 0, "failed": 0, "links": 0}
@@ -93,7 +94,8 @@ class AttachmentSyncService:
                 stats["total"] += 1
                 seen_ref_keys.add(d["ref_key"])
                 row = await self._process_one(
-                    session, course_id, item_type, item_id, d, drive_ok, storage_root, stats
+                    session, google_service, course_id, item_type, item_id, d,
+                    drive_ok, storage_root, stats,
                 )
                 await cache.upsert_attachment(session, row)
             # Commit per item so partial progress is durable and the session stays small.
@@ -112,7 +114,7 @@ class AttachmentSyncService:
     async def _existing(
         self, session: AsyncSession, course_id: str, item_type: str, item_id: str, ref_key: str
     ) -> Optional[ClassroomAttachment]:
-        stmt = select(ClassroomAttachment).where(
+        stmt = cache.owned(session, ClassroomAttachment).where(
             ClassroomAttachment.course_id == course_id,
             ClassroomAttachment.item_type == item_type,
             ClassroomAttachment.item_id == item_id,
@@ -123,6 +125,7 @@ class AttachmentSyncService:
     async def _process_one(
         self,
         session: AsyncSession,
+        google_service: GoogleClassroomService,
         course_id: str,
         item_type: str,
         item_id: str,
@@ -166,7 +169,9 @@ class AttachmentSyncService:
             return row
 
         try:
-            await self._fetch_drive(session, row, course_id, item_id, file_id, storage_root, stats)
+            await self._fetch_drive(
+                session, google_service, row, course_id, item_id, file_id, storage_root, stats
+            )
         except Exception as e:  # noqa: BLE001 — never let one attachment break the sync
             row.fetch_status = "failed"
             row.error_message = str(e)[:500]
@@ -178,6 +183,7 @@ class AttachmentSyncService:
     async def _fetch_drive(
         self,
         session: AsyncSession,
+        google_service: GoogleClassroomService,
         row: ClassroomAttachment,
         course_id: str,
         item_id: str,
@@ -245,7 +251,11 @@ class AttachmentSyncService:
             stats["skipped"] += 1
             return
 
-        rel = Path(course_id) / item_id / f"{file_id}.{ext}"
+        # One directory per owner ("u<id>": legacy top-level directories are bare
+        # course ids, so the prefix cannot collide with them).
+        # ponytail: two users in one course each store their own copy; share
+        # blobs by content hash if disk use ever matters.
+        rel = Path(f"u{cache.owner_of(session)}") / course_id / item_id / f"{file_id}.{ext}"
         full = storage_root / rel
         await asyncio.to_thread(full.parent.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(full.write_bytes, data)

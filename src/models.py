@@ -82,11 +82,21 @@ class PostedAnnouncement(SQLModel, table=True):
 
 
 # --- Google Classroom cache tables ---
+#
+# Every row belongs to the app user whose Google account it was synced with
+# (``owner_user_id``). Two users enrolled in the same course each hold their own
+# copy: Classroom returns different content to different members (drafts,
+# individually assigned work, roster visibility), so a shared copy would leak.
 
 class ClassroomCourse(SQLModel, table=True):
     __tablename__ = "classroom_courses"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "id", name="uq_course_owner"),
+    )
 
-    id: str = Field(primary_key=True)
+    db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
+    id: str = Field(index=True)  # Google course id
     name: str
     section: Optional[str] = None
     # Weekday extracted from the leading Japanese text of ``section``
@@ -104,10 +114,11 @@ class ClassroomCourse(SQLModel, table=True):
 class ClassroomAnnouncement(SQLModel, table=True):
     __tablename__ = "classroom_announcements"
     __table_args__ = (
-        UniqueConstraint("id", "course_id", name="uq_announcement_course"),
+        UniqueConstraint("owner_user_id", "id", "course_id", name="uq_announcement_course"),
     )
 
     db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     id: str = Field(index=True)
     course_id: str = Field(index=True)
     text: Optional[str] = None
@@ -126,10 +137,11 @@ class ClassroomAnnouncement(SQLModel, table=True):
 class ClassroomCoursework(SQLModel, table=True):
     __tablename__ = "classroom_coursework"
     __table_args__ = (
-        UniqueConstraint("id", "course_id", name="uq_coursework_course"),
+        UniqueConstraint("owner_user_id", "id", "course_id", name="uq_coursework_course"),
     )
 
     db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     id: str = Field(index=True)
     course_id: str = Field(index=True)
     title: Optional[str] = None
@@ -162,10 +174,11 @@ class ClassroomCoursework(SQLModel, table=True):
 class ClassroomTopic(SQLModel, table=True):
     __tablename__ = "classroom_topics"
     __table_args__ = (
-        UniqueConstraint("id", "course_id", name="uq_topic_course"),
+        UniqueConstraint("owner_user_id", "id", "course_id", name="uq_topic_course"),
     )
 
     db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     id: str = Field(index=True)
     course_id: str = Field(index=True)
     name: Optional[str] = None
@@ -179,10 +192,11 @@ class ClassroomTopic(SQLModel, table=True):
 class ClassroomMaterial(SQLModel, table=True):
     __tablename__ = "classroom_materials"
     __table_args__ = (
-        UniqueConstraint("id", "course_id", name="uq_material_course"),
+        UniqueConstraint("owner_user_id", "id", "course_id", name="uq_material_course"),
     )
 
     db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     id: str = Field(index=True)
     course_id: str = Field(index=True)
     topic_id: Optional[str] = Field(default=None, index=True)
@@ -209,10 +223,11 @@ class ClassroomAttachment(SQLModel, table=True):
     to disk; link/form/youtube items are stored as metadata only."""
     __tablename__ = "classroom_attachments"
     __table_args__ = (
-        UniqueConstraint("course_id", "item_type", "item_id", "ref_key", name="uq_attachment_ref"),
+        UniqueConstraint("owner_user_id", "course_id", "item_type", "item_id", "ref_key", name="uq_attachment_ref"),
     )
 
     db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     course_id: str = Field(index=True)
     item_type: str = Field(index=True)  # coursework | material
     item_id: str = Field(index=True)
@@ -239,10 +254,11 @@ class ClassroomAttachment(SQLModel, table=True):
 class ClassroomPerson(SQLModel, table=True):
     __tablename__ = "classroom_people"
     __table_args__ = (
-        UniqueConstraint("course_id", "user_id", "role", name="uq_person_course_role"),
+        UniqueConstraint("owner_user_id", "course_id", "user_id", "role", name="uq_person_course_role"),
     )
 
     db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     course_id: str = Field(index=True)
     user_id: str = Field(index=True)
     role: str = Field(index=True)  # teacher | student
@@ -260,10 +276,12 @@ class ClassroomTodo(SQLModel, table=True):
     the user's own studentSubmissions (Classroom has no dedicated to-do API)."""
     __tablename__ = "classroom_todos"
     __table_args__ = (
-        UniqueConstraint("user_id", "course_id", "item_id", name="uq_todo_user_course_item"),
+        UniqueConstraint("owner_user_id", "user_id", "course_id", "item_id", name="uq_todo_user_course_item"),
     )
 
     db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
+    # Whose submissions these are within the owner's Google account; always "me".
     user_id: str = Field(index=True)
     item_id: str = Field(index=True)  # courseWorkId
     course_id: str = Field(index=True)
@@ -282,6 +300,7 @@ class ClassroomSyncChange(SQLModel, table=True):
     __tablename__ = "classroom_sync_changes"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: Optional[int] = Field(default=None, index=True)
     run_id: Optional[int] = Field(default=None, index=True)
     entity_type: str = Field(index=True)  # course | announcement | coursework | topic | material | person | todo
     entity_id: str = Field(index=True)
@@ -297,6 +316,7 @@ class ClassroomSyncRun(SQLModel, table=True):
     __tablename__ = "classroom_sync_runs"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: Optional[int] = Field(default=None, index=True)
     course_id: Optional[str] = Field(default=None, index=True)
     resource: str = Field(index=True)  # all | course | announcements | ...
     status: str = Field(default="running")  # running | success | error
@@ -482,6 +502,94 @@ class AuditLog(SQLModel, table=True):
     status: str = Field(default="ok")  # ok | error
     duration_ms: Optional[int] = None
     detail: Optional[str] = None       # JSON string with extra context
+
+
+# --- Users, roles and sessions (Google SSO + RBAC) ---
+
+class Role(SQLModel, table=True):
+    """A named permission set. ``permissions`` is a JSON array of keys from
+    ``src/permissions.py``; ``["*"]`` means everything (seeded admin role only)."""
+    __tablename__ = "roles"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_role_name"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    description: Optional[str] = None
+    permissions: str = Field(default="[]")
+    is_system: bool = Field(default=False)  # seeded: cannot be renamed or deleted
+    created_at: datetime = Field(default_factory=now_jst)
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
+class User(SQLModel, table=True):
+    """A person who signs in with Google. ``role_id`` None = awaiting approval.
+
+    Rows are deactivated, never deleted: SQLite reuses the top rowid, so a new
+    user could inherit a deleted user's data.
+    """
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("google_sub", name="uq_user_google_sub"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    # ID-token ``sub``: the stable identity. None only on a row pre-seeded by
+    # email (ADMIN_EMAILS) that has not signed in yet.
+    google_sub: Optional[str] = Field(default=None, index=True)
+    email: str = Field(index=True)  # lower-cased
+    name: Optional[str] = None
+    picture_url: Optional[str] = None
+    role_id: Optional[int] = Field(default=None, index=True)
+    is_active: bool = Field(default=True)  # False = sign-in refused, sessions revoked
+    created_at: datetime = Field(default_factory=now_jst)
+    last_login_at: Optional[datetime] = None
+
+
+class UserSession(SQLModel, table=True):
+    """One browser session. Only the SHA-256 of the cookie value is stored."""
+    __tablename__ = "user_sessions"
+
+    token_hash: str = Field(primary_key=True)
+    user_id: int = Field(index=True)
+    created_at: datetime = Field(default_factory=now_jst)
+    expires_at: datetime = Field(index=True)
+
+
+class GoogleConnection(SQLModel, table=True):
+    """A user's connected Google Classroom account.
+
+    The OAuth token itself stays a file: credentials are deliberately kept out
+    of the database (and so out of backup archives). ``token_file`` is its path
+    relative to the credentials directory, under a random name rather than the
+    user id, because a restored backup can hand an id to a different person.
+    """
+    __tablename__ = "google_connections"
+
+    user_id: int = Field(primary_key=True)
+    token_file: str
+    google_email: Optional[str] = None
+    connected_at: datetime = Field(default_factory=now_jst)
+
+
+class DiscordGuildBinding(SQLModel, table=True):
+    """Which app user a Discord server belongs to. Everything the bot does in
+    that server (slash commands, links, auto-push, posting to Classroom) uses
+    this user's data and Google account; an unbound server gets nothing."""
+    __tablename__ = "discord_guild_bindings"
+
+    guild_id: int = Field(primary_key=True)
+    user_id: int = Field(index=True)
+    created_at: datetime = Field(default_factory=now_jst)
+
+
+# Tables scoped by ``owner_user_id`` (see database.owned_session).
+OWNED_MODELS = (
+    ClassroomCourse, ClassroomAnnouncement, ClassroomCoursework, ClassroomTopic,
+    ClassroomMaterial, ClassroomAttachment, ClassroomPerson, ClassroomTodo,
+    ClassroomSyncChange, ClassroomSyncRun,
+)
 
 
 def dump_json(data: Any) -> str:

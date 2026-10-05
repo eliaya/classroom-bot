@@ -37,9 +37,9 @@ async def _default_runner() -> None:
 
     Imported lazily to avoid a circular import (routes import services).
     """
-    from src.api.routes.sync import _run_full_sync
+    from src.api.routes.sync import run_scheduled_sync
 
-    await _run_full_sync()
+    await run_scheduled_sync()
 
 
 async def _purge_audit_logs(retention_days: int) -> None:
