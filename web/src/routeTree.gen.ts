@@ -16,7 +16,7 @@ import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors403RouteImport } from './routes/(errors)/403'
 import { Route as errors401RouteImport } from './routes/(errors)/401'
-import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
+import { Route as authLoginRouteImport } from './routes/(auth)/login'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedTodosIndexRouteImport } from './routes/_authenticated/todos/index'
 import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authenticated/sync/index'
@@ -33,6 +33,7 @@ import { Route as AuthenticatedSettingsLanguageRouteImport } from './routes/_aut
 import { Route as AuthenticatedSettingsBackupRouteImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAuditRouteImport } from './routes/_authenticated/settings/audit'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as authAdminLoginRouteImport } from './routes/(auth)/admin/login'
 import { Route as AuthenticatedCoursesCourseIdRouteRouteImport } from './routes/_authenticated/courses/$courseId/route'
 import { Route as AuthenticatedCoursesCourseIdIndexRouteImport } from './routes/_authenticated/courses/$courseId/index'
 import { Route as AuthenticatedCoursesCourseIdStreamRouteImport } from './routes/_authenticated/courses/$courseId/stream'
@@ -73,9 +74,9 @@ const errors401Route = errors401RouteImport.update({
   path: '/401',
   getParentRoute: () => rootRouteImport,
 } as any)
-const authSignInRoute = authSignInRouteImport.update({
-  id: '/(auth)/sign-in',
-  path: '/sign-in',
+const authLoginRoute = authLoginRouteImport.update({
+  id: '/(auth)/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedSettingsRouteRoute =
@@ -170,6 +171,11 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const authAdminLoginRoute = authAdminLoginRouteImport.update({
+  id: '/(auth)/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedCoursesCourseIdRouteRoute =
   AuthenticatedCoursesCourseIdRouteRouteImport.update({
     id: '/courses/$courseId',
@@ -204,13 +210,14 @@ const AuthenticatedCoursesCourseIdClassworkRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
-  '/sign-in': typeof authSignInRoute
+  '/login': typeof authLoginRoute
   '/401': typeof errors401Route
   '/403': typeof errors403Route
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
+  '/admin/login': typeof authAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
@@ -232,13 +239,14 @@ export interface FileRoutesByFullPath {
   '/courses/$courseId/': typeof AuthenticatedCoursesCourseIdIndexRoute
 }
 export interface FileRoutesByTo {
-  '/sign-in': typeof authSignInRoute
+  '/login': typeof authLoginRoute
   '/401': typeof errors401Route
   '/403': typeof errors403Route
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
+  '/admin/login': typeof authAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
@@ -263,7 +271,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
-  '/(auth)/sign-in': typeof authSignInRoute
+  '/(auth)/login': typeof authLoginRoute
   '/(errors)/401': typeof errors401Route
   '/(errors)/403': typeof errors403Route
   '/(errors)/404': typeof errors404Route
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
+  '/(auth)/admin/login': typeof authAdminLoginRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
@@ -296,13 +305,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/settings'
-    | '/sign-in'
+    | '/login'
     | '/401'
     | '/403'
     | '/404'
     | '/500'
     | '/503'
     | '/courses/$courseId'
+    | '/admin/login'
     | '/errors/$error'
     | '/settings/audit'
     | '/settings/backup'
@@ -324,13 +334,14 @@ export interface FileRouteTypes {
     | '/courses/$courseId/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/sign-in'
+    | '/login'
     | '/401'
     | '/403'
     | '/404'
     | '/500'
     | '/503'
     | '/'
+    | '/admin/login'
     | '/errors/$error'
     | '/settings/audit'
     | '/settings/backup'
@@ -354,7 +365,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/_authenticated/settings'
-    | '/(auth)/sign-in'
+    | '/(auth)/login'
     | '/(errors)/401'
     | '/(errors)/403'
     | '/(errors)/404'
@@ -362,6 +373,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/'
     | '/_authenticated/courses/$courseId'
+    | '/(auth)/admin/login'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/audit'
     | '/_authenticated/settings/backup'
@@ -385,12 +397,13 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  authSignInRoute: typeof authSignInRoute
+  authLoginRoute: typeof authLoginRoute
   errors401Route: typeof errors401Route
   errors403Route: typeof errors403Route
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  authAdminLoginRoute: typeof authAdminLoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -444,11 +457,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof errors401RouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(auth)/sign-in': {
-      id: '/(auth)/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof authSignInRouteImport
+    '/(auth)/login': {
+      id: '/(auth)/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof authLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/settings': {
@@ -562,6 +575,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/errors/$error'
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/(auth)/admin/login': {
+      id: '/(auth)/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof authAdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/courses/$courseId': {
       id: '/_authenticated/courses/$courseId'
@@ -685,12 +705,13 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  authSignInRoute: authSignInRoute,
+  authLoginRoute: authLoginRoute,
   errors401Route: errors401Route,
   errors403Route: errors403Route,
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  authAdminLoginRoute: authAdminLoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

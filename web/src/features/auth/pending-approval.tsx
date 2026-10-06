@@ -17,7 +17,7 @@ export function PendingApproval({ email }: { email: string }) {
 
   const signOut = async () => {
     await api.logout().catch(() => undefined)
-    hardNavigate('/sign-in')
+    hardNavigate('/login')
   }
 
   return (

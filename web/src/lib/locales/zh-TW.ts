@@ -614,6 +614,7 @@ const zhTW: Resources = {
     error: '錯誤',
     signInDesc: '請使用 Google 帳戶登入。',
     continueWithGoogle: '使用 Google 繼續',
+    adminSignIn: '管理員登入',
     signInFailed: '登入失敗：{{reason}}',
     signInErrors: {
       account_disabled: '此帳戶已被停用',
@@ -621,6 +622,7 @@ const zhTW: Resources = {
       invalid_or_expired_state: '登入已逾時，請再試一次',
       sign_in_required: '請先登入',
       access_denied: 'Google 拒絕了存取',
+      invalid_credentials: '電子郵件或密碼不正確',
     },
     pendingTitle: '等待審核',
     pendingDesc: '你已以 {{email}} 登入，但管理員尚未授予你存取權限。請聯絡管理員為你指派角色，然後再次檢查。',

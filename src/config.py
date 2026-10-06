@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Comma-separated Google account emails that are always admins. Re-applied
     # on every sign-in.
     ADMIN_EMAILS: str = ""
+    # Lets the ADMIN_EMAILS accounts sign in with email + this password instead
+    # of Google. Empty turns that sign-in off.
+    ADMIN_PASSWORD: str = ""
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     CLASSROOM_SYNC_INTERVAL_MINUTES: int = 30

@@ -628,6 +628,7 @@ export const en = {
     error: 'Error',
     signInDesc: 'Sign in with your Google account to continue.',
     continueWithGoogle: 'Continue with Google',
+    adminSignIn: 'Administrator sign-in',
     signInFailed: 'Sign-in failed: {{reason}}',
     signInErrors: {
       account_disabled: 'this account has been deactivated',
@@ -635,6 +636,7 @@ export const en = {
       invalid_or_expired_state: 'the sign-in attempt expired, please try again',
       sign_in_required: 'please sign in first',
       access_denied: 'access was denied at Google',
+      invalid_credentials: 'the email or password is incorrect',
     },
     pendingTitle: 'Waiting for approval',
     pendingDesc: 'You are signed in as {{email}}, but an administrator has not given you access yet. Ask them to assign you a role, then check again.',

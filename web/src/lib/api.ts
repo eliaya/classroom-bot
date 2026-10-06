@@ -36,7 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (res.status === 401 && !path.startsWith('/auth/')) {
       useAuthStore.getState().auth.reset()
       const here = window.location.pathname + window.location.search
-      hardNavigate(`/sign-in?redirect=${encodeURIComponent(here)}`)
+      hardNavigate(`/login?redirect=${encodeURIComponent(here)}`)
     }
     throw new ApiError(res.status, text || res.statusText)
   }
@@ -398,6 +398,12 @@ export const api = {
     request<{ authorization_url: string }>(
       `/auth/login/start?origin=${encodeURIComponent(origin)}&next=${encodeURIComponent(next)}`
     ),
+  /** Admin sign-in without Google. `next` comes back checked by the API. */
+  loginPassword: (email: string, password: string, next: string) =>
+    request<{ next: string }>('/auth/login/password', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, next }),
+    }),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   listUsers: () => request<{ items: AdminUser[]; total: number }>('/users'),
   updateUser: (id: number, body: { role_id?: number | null; is_active?: boolean }) =>

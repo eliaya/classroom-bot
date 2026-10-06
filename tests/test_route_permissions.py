@@ -19,6 +19,7 @@ HEADERS = {"Origin": ORIGIN}
 PUBLIC = {
     ("get", "/api/health"),
     ("get", "/api/auth/login/start"),
+    ("post", "/api/auth/login/password"),
     ("get", "/api/auth/google/callback"),
 }
 

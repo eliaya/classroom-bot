@@ -43,7 +43,7 @@ describe('SignOutDialog', () => {
 
     await vi.waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({
-        to: '/sign-in',
+        to: '/login',
         search: { redirect: MOCK_HREF },
         replace: true,
       })
