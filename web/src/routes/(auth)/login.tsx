@@ -9,7 +9,7 @@ const searchSchema = z.object({
   reason: z.string().optional(),
 })
 
-export const Route = createFileRoute('/(auth)/sign-in')({
+export const Route = createFileRoute('/(auth)/login')({
   component: SignIn,
   validateSearch: searchSchema,
 })

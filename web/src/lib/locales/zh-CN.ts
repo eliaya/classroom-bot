@@ -614,6 +614,7 @@ const zhCN: Resources = {
     error: '错误',
     signInDesc: '请使用 Google 账户登录。',
     continueWithGoogle: '使用 Google 继续',
+    adminSignIn: '管理员登录',
     signInFailed: '登录失败：{{reason}}',
     signInErrors: {
       account_disabled: '此账户已被停用',
@@ -621,6 +622,7 @@ const zhCN: Resources = {
       invalid_or_expired_state: '登录已过期，请重试',
       sign_in_required: '请先登录',
       access_denied: 'Google 拒绝了访问',
+      invalid_credentials: '电子邮件或密码不正确',
     },
     pendingTitle: '等待审核',
     pendingDesc: '你已以 {{email}} 登录，但管理员尚未授予你访问权限。请联系管理员为你分配角色，然后再次检查。',

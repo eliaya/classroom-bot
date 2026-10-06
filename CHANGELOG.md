@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-06
+
+Web app bumped to 2.11.0.
+
+**Upgrade notes.** The sign-in page is now `/login`; `/sign-in` no longer exists. To use the administrator sign-in, set `ADMIN_PASSWORD` in `.env` and restart.
+
+### Added
+- **Administrator sign-in with email and password.** Setting `ADMIN_PASSWORD` in `.env` lets the `ADMIN_EMAILS` addresses sign in on their own page, `/admin/login`, without Google (`POST /api/auth/login/password`); `/login` stays Google-only. It reaches the same account that address gets through Google, so it also owns the pre-0.17.0 data. One password is shared by all administrators, and wrong guesses are answered one at a time, a second apart. Empty (the default) turns it off; everyone else still signs in with Google. Regression tests: `tests/test_auth_routes.py`, `admin-auth-form.test.tsx`.
+
+### Changed
+- **The sign-in page moved from `/sign-in` to `/login`.** Sign-out, an expired session, the route guard and the API's failed-sign-in redirect all point there. The old path is not redirected.
+
+### Fixed
+- **`scripts/dev.sh` names the real cause when `ADMIN_EMAILS` is missing.** It now stops before building if `.env` has no `ADMIN_EMAILS`. Before, the stack was built, the API exited at startup on a pre-0.17.0 database, and the script's "common fixes" pointed elsewhere.
+
 ## [0.17.0] - 2026-10-05
 
 Web app bumped to 2.10.0.

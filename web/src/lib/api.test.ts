@@ -50,7 +50,7 @@ describe('api requests', () => {
     expect(error.status).toBe(401)
     expect(useAuthStore.getState().auth.user).toBeNull()
     expect(hardNavigate).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/sign-in\?redirect=/)
+      expect.stringMatching(/^\/login\?redirect=/)
     )
   })
 

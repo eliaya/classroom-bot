@@ -616,6 +616,7 @@ const ja: Resources = {
     error: 'エラー',
     signInDesc: 'Google アカウントでログインしてください。',
     continueWithGoogle: 'Google で続行',
+    adminSignIn: '管理者ログイン',
     signInFailed: 'ログインに失敗しました：{{reason}}',
     signInErrors: {
       account_disabled: 'このアカウントは無効化されています',
@@ -623,6 +624,7 @@ const ja: Resources = {
       invalid_or_expired_state: 'ログインの有効期限が切れました。もう一度お試しください',
       sign_in_required: '先にログインしてください',
       access_denied: 'Google でアクセスが拒否されました',
+      invalid_credentials: 'メールアドレスまたはパスワードが正しくありません',
     },
     pendingTitle: '承認待ち',
     pendingDesc: '{{email}} としてログインしていますが、管理者からまだアクセス権が付与されていません。ロールの割り当てを依頼してから、再度確認してください。',

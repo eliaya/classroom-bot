@@ -13,7 +13,7 @@ import { UserAuthForm } from './components/user-auth-form'
 
 export function SignIn() {
   // `auth` / `reason` are set by the API when a Google sign-in attempt fails.
-  const { redirect, auth, reason } = useSearch({ from: '/(auth)/sign-in' })
+  const { redirect, auth, reason } = useSearch({ from: '/(auth)/login' })
   const { t } = useTranslation()
 
   return (

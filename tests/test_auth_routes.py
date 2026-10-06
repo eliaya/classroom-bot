@@ -190,6 +190,62 @@ async def test_login_as_configured_admin_gets_every_permission(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_admin_signs_in_with_email_and_password(monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_EMAILS", "boss@example.com")
+    monkeypatch.setattr(settings, "ADMIN_PASSWORD", "correct horse battery")
+    await database.init_db()
+    async with _client() as client:
+        res = await client.post("/api/auth/login/password", json={
+            "email": " Boss@Example.com ", "password": "correct horse battery",
+            "next": "//evil.example",
+        })
+        assert res.status_code == 200
+        assert res.json() == {"next": "/"}  # only same-site paths
+        cookie = res.headers["set-cookie"].lower()
+        assert "httponly" in cookie and "samesite=lax" in cookie and "path=/api" in cookie
+        me = (await client.get("/api/auth/me")).json()
+    assert me["email"] == "boss@example.com"
+    assert me["role"] == "admin" and me["permissions"] == ["*"]
+
+
+@pytest.mark.asyncio
+async def test_password_and_google_sign_in_reach_the_same_admin_account(monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_EMAILS", "new@example.com")
+    monkeypatch.setattr(settings, "ADMIN_PASSWORD", "correct horse battery")
+    await database.init_db()
+    async with _client() as client:
+        await client.post("/api/auth/login/password", json={
+            "email": "new@example.com", "password": "correct horse battery",
+        })
+        by_password = (await client.get("/api/auth/me")).json()["id"]
+        await _login(client)
+        by_google = (await client.get("/api/auth/me")).json()["id"]
+    assert by_password == by_google
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("configured,email,password", [
+    ("s3cret-pass", "boss@example.com", "wrong"),        # wrong password
+    ("s3cret-pass", "other@example.com", "s3cret-pass"),  # not an admin address
+    ("", "boss@example.com", ""),                         # sign-in turned off
+])
+async def test_password_sign_in_is_refused(monkeypatch, configured, email, password):
+    from src.api.routes import auth
+
+    monkeypatch.setattr(auth, "WRONG_PASSWORD_DELAY_SECONDS", 0)
+    monkeypatch.setattr(settings, "ADMIN_EMAILS", "boss@example.com")
+    monkeypatch.setattr(settings, "ADMIN_PASSWORD", configured)
+    await database.init_db()
+    async with _client() as client:
+        res = await client.post("/api/auth/login/password", json={"email": email, "password": password})
+        assert res.status_code == 401
+        assert "set-cookie" not in res.headers
+    async with database.async_session_factory() as session:
+        assert (await session.execute(select(UserSession))).first() is None
+        assert (await session.execute(select(User))).first() is None
+
+
+@pytest.mark.asyncio
 async def test_callback_with_unknown_state_redirects_with_error():
     async with _client() as client:
         res = await client.get(CALLBACK, params={"state": "unknown", "code": "abc"}, follow_redirects=False)
@@ -223,7 +279,7 @@ async def test_login_rejects_unverified_email():
     await database.init_db()
     async with _client() as client:
         res, _, _ = await _login(client, claims={**CLAIMS, "email_verified": False})
-        assert res.headers["location"].startswith(f"{ORIGIN}/sign-in?auth=error")
+        assert res.headers["location"].startswith(f"{ORIGIN}/login?auth=error")
         assert "email_not_verified" in res.headers["location"]
         assert (await client.get("/api/auth/me")).status_code == 401
     async with database.async_session_factory() as session:

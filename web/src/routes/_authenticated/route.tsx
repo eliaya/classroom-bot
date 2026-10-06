@@ -17,7 +17,7 @@ export const Route = createFileRoute('/_authenticated')({
         user = await api.me()
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          throw redirect({ to: '/sign-in', search: { redirect: location.href } })
+          throw redirect({ to: '/login', search: { redirect: location.href } })
         }
         throw error
       }

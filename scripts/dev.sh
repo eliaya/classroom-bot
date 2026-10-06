@@ -58,6 +58,15 @@ else
   exit 1
 fi
 
+# ADMIN_EMAILS is required: it names the WebUI admins, and the API exits at
+# startup without it when the database predates v0.17.0.
+if [ -f .env ] && ! grep -Eq '^ADMIN_EMAILS="?[^"[:space:]]' .env; then
+  echo -e "${RED}Error: ADMIN_EMAILS is not set in .env.${NC}"
+  echo -e "  Add your Google sign-in address, e.g.  ADMIN_EMAILS=you@example.com"
+  echo -e "  The first address becomes the owner of any existing data."
+  exit 1
+fi
+
 BUILD_ARG="--build"
 [ "${1:-}" = "--no-build" ] && BUILD_ARG="--no-build"
 

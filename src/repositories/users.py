@@ -70,6 +70,27 @@ async def upsert_from_google(
     return user
 
 
+async def upsert_admin(session: AsyncSession, email: str) -> User:
+    """Find or create the ADMIN_EMAILS account behind a password sign-in.
+
+    Matches by email alone, so it is the same account that address gets when it
+    signs in with Google, and the one that owns the pre-upgrade data.
+    """
+    user = (await session.execute(
+        select(User).where(User.email == email).order_by(User.id)
+    )).scalars().first()
+    if user is None:
+        user = User(email=email)
+    admin = await get_role_by_name(session, ADMIN_ROLE)
+    user.role_id = admin.id if admin else user.role_id
+    user.is_active = True
+    user.last_login_at = now_jst()
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
 async def list_users(session: AsyncSession) -> List[User]:
     result = await session.execute(select(User).order_by(User.email))
     return list(result.scalars().all())

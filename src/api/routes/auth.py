@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.deps import (
@@ -65,9 +66,21 @@ def _safe_next(next_path: str | None) -> str:
     return "/"
 
 
+def _set_session_cookie(response: Response, raw_session: str, origin: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        raw_session,
+        max_age=int(users.SESSION_TTL.total_seconds()),
+        httponly=True,
+        samesite="lax",
+        secure=_is_secure(origin),
+        path=_COOKIE_PATH,
+    )
+
+
 def _return_url(origin: str, purpose: str, **params: str) -> str:
     """Where to send the browser when a handshake fails (or a connect succeeds)."""
-    page = "/settings" if purpose == "connect" else "/sign-in"
+    page = "/settings" if purpose == "connect" else "/login"
     query = "&".join(f"{k}={quote(v)}" for k, v in params.items())
     return f"{origin}{page}?{query}"
 
@@ -170,6 +183,47 @@ async def login_start(
         response, origin=origin, purpose="login", scopes=LOGIN_SCOPES, next_path=next,
         prompt="select_account",
     )
+
+
+class PasswordLogin(BaseModel):
+    email: str
+    password: str
+    next: str = "/"
+
+
+# ponytail: one password shared by every ADMIN_EMAILS account, and wrong guesses
+# are only slowed (one at a time, a second each, process-wide). Per-admin hashed
+# passwords and per-client lockout if admins must not share one, or if guessing
+# traffic ever makes the real admin wait.
+WRONG_PASSWORD_DELAY_SECONDS = 1.0
+_password_lock = asyncio.Lock()
+
+
+@router.post("/login/password")
+async def login_password(
+    body: PasswordLogin,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Sign in an ADMIN_EMAILS account with ADMIN_PASSWORD instead of Google."""
+    email = body.email.strip().lower()
+    async with _password_lock:
+        ok = (
+            bool(settings.ADMIN_PASSWORD)
+            and email in users.admin_emails()
+            and hmac.compare_digest(body.password.encode(), settings.ADMIN_PASSWORD.encode())
+        )
+        if not ok:
+            await asyncio.sleep(WRONG_PASSWORD_DELAY_SECONDS)
+    if not ok:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
+    user = await users.upsert_admin(session, email)
+    request.state.actor = user.email  # picked up by the audit middleware
+    raw_session = await users.create_session(session, user.id)
+    _set_session_cookie(response, raw_session, request.headers.get("origin", ""))
+    return {"next": _safe_next(body.next)}
 
 
 @router.get("/google/start")
@@ -294,15 +348,7 @@ async def callback(
             raw_session = await users.create_session(session, user.id)
             await _audit_login(action, "ok", origin, actor, None)
             res = _redirect(f"{origin}{pending['next']}")
-            res.set_cookie(
-                SESSION_COOKIE,
-                raw_session,
-                max_age=int(users.SESSION_TTL.total_seconds()),
-                httponly=True,
-                samesite="lax",
-                secure=_is_secure(origin),
-                path=_COOKIE_PATH,
-            )
+            _set_session_cookie(res, raw_session, origin)
             return res
 
         connection = await google_connections.connect(
