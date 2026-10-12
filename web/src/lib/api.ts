@@ -181,6 +181,16 @@ export type BackupSettings = {
   max_retention_days: number
 }
 
+export type OpenCloudSettings = {
+  enabled: boolean
+  webdav_url: string
+  username: string
+  folder: string
+  has_token: boolean
+  /** Hosts the administrator allows; empty means the feature is off. */
+  allowed_hosts: string[]
+}
+
 export type BotStatus = {
   status: 'connected' | 'disconnected' | 'disabled' | 'unknown' | 'error'
   last_heartbeat?: string | null
@@ -594,6 +604,15 @@ export const api = {
     retention_days?: number
   }) =>
     request<BackupSettings>('/backup/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  getOpenCloudSettings: () => request<OpenCloudSettings>('/sync/opencloud'),
+  // app_token is write-only: an empty string keeps the stored one.
+  updateOpenCloudSettings: (
+    body: Partial<Omit<OpenCloudSettings, 'has_token' | 'allowed_hosts'>> & { app_token?: string }
+  ) =>
+    request<OpenCloudSettings>('/sync/opencloud', {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),

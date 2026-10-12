@@ -33,6 +33,8 @@ MATRIX = [
     ("get", "/api/sync/status", "sync:view"),
     ("post", "/api/sync/runs/1/clear", "sync:use"),
     ("delete", "/api/sync/runs/1", "sync:use"),
+    ("get", "/api/sync/opencloud", "sync:view"),
+    ("patch", "/api/sync/opencloud", "sync:use"),
     ("get", "/api/links", "links:view"),
     ("delete", "/api/links/1", "links:use"),
     ("get", "/api/discord/channels", "links:view"),

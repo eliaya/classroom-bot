@@ -245,6 +245,8 @@ class ClassroomAttachment(SQLModel, table=True):
     fetch_status: str = Field(default="pending", index=True)  # pending|fetched|failed|skipped
     error_message: Optional[str] = None
     fetched_at: Optional[datetime] = None
+    # Path inside the OpenCloud space once the current content is uploaded there.
+    opencloud_path: Optional[str] = None
     raw_json: Optional[str] = None
     synced_at: datetime = Field(default_factory=now_jst)
     updated_at: Optional[datetime] = Field(default=None, index=True)
@@ -375,6 +377,24 @@ class BackupSetting(SQLModel, table=True):
     hour: int = Field(default=3)            # daily run time, JST
     minute: int = Field(default=0)
     retention_days: int = Field(default=7)
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
+class OpenCloudSetting(SQLModel, table=True):
+    """One row per user: where that user's downloaded Drive attachments are copied to.
+
+    ``webdav_url`` is the space's WebDAV URL from the OpenCloud info panel
+    (``https://host/remote.php/dav/spaces/<space-id>/``); ``app_token`` is an
+    OpenCloud app token used as the basic-auth password.
+    """
+    __tablename__ = "opencloud_user_settings"
+
+    owner_user_id: int = Field(primary_key=True)
+    enabled: bool = Field(default=False)
+    webdav_url: str = Field(default="")
+    username: str = Field(default="")
+    app_token: str = Field(default="")
+    folder: str = Field(default="Classroom")  # top folder inside the space
     updated_at: datetime = Field(default_factory=now_jst)
 
 

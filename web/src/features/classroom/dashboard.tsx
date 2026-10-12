@@ -31,6 +31,7 @@ import { Main } from '@/components/layout/main'
 import { api, type BotStatus, type SyncRun } from '@/lib/api'
 import { GreenCheckIcon } from '@/components/green-check-icon'
 import { ClassroomHeader } from './layout-header'
+import { OpenCloudSection } from './opencloud-section'
 
 const BOT_STATUS_STYLES: Record<string, string> = {
   connected: 'text-green-success',
@@ -253,6 +254,8 @@ export function ClassroomDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {can(permissions, 'sync:view') && <OpenCloudSection />}
       </Main>
     </>
   )

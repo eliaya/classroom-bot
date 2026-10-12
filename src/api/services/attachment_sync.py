@@ -3,14 +3,18 @@ import asyncio
 import json
 import logging
 import mimetypes
+import re
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
+import httpx
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.api.services import opencloud
 from src.config import now_jst, settings
 from src.google_service import GoogleClassroomService
-from src.models import ClassroomAttachment, dump_json
+from src.models import ClassroomAttachment, OpenCloudSetting, dump_json
+from src.repositories import app_settings
 from src.repositories import classroom_cache as cache
 from src.repositories import google_connections
 
@@ -43,6 +47,12 @@ def _ext_for(mime: Optional[str], name: Optional[str]) -> str:
             return ext
     guessed = mimetypes.guess_extension(mime or "") or ""
     return guessed.lstrip(".") or "bin"
+
+
+def _safe_name(name: str) -> str:
+    """One path segment that is safe to use as a remote file/folder name."""
+    name = re.sub(r"[\\/\x00-\x1f]", "_", name).strip()
+    return "_" if name in ("", ".", "..") else name
 
 
 class AttachmentSyncService:
@@ -108,8 +118,64 @@ class AttachmentSyncService:
         )
         await session.commit()
 
+        # Copy to OpenCloud last and guarded: a remote outage must never fail the sync.
+        try:
+            oc = await app_settings.get_opencloud_setting(session)
+            if oc.enabled:
+                stats["opencloud"] = await self._upload_to_opencloud(session, oc, course_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("OpenCloud upload failed for course %s", course_id)
+
         logger.info("Attachment sync for course %s: %s", course_id, stats)
         return stats
+
+    async def _upload_to_opencloud(
+        self, session: AsyncSession, oc: OpenCloudSetting, course_id: str
+    ) -> int:
+        """Upload every fetched file not yet in OpenCloud to
+        ``<folder>/<course name>/<file name>``; returns how many were sent.
+        Failures are left unmarked so the next sync retries them."""
+        rows = [
+            r for r in await cache.list_attachments(session, course_id)
+            if r.fetch_status == "fetched" and r.local_path
+        ]
+        course = await cache.get_cached_course(session, course_id)
+        folder = [_safe_name(p) for p in oc.folder.split("/") if p.strip()]
+        folder.append(_safe_name((course.name if course else None) or course_id))
+        # Remote path -> Drive file already stored there. The same Drive file on
+        # two items shares one remote copy; different files never overwrite.
+        taken = {r.opencloud_path: r.drive_file_id for r in rows if r.opencloud_path}
+        storage_root = Path(settings.ATTACHMENT_STORAGE_DIR)
+        made: set[str] = set()
+        uploaded = 0
+        async with opencloud.client(oc) as client:
+            for r in rows:
+                full = storage_root / r.local_path
+                if r.opencloud_path or not full.exists():
+                    continue
+                name = (r.title or full.stem).strip()
+                if not name.lower().endswith(full.suffix.lower()):
+                    name += full.suffix
+                path = "/".join([*folder, _safe_name(name)])
+                if taken.get(path, r.drive_file_id) != r.drive_file_id:
+                    path = "/".join([*folder, _safe_name(f"{r.drive_file_id}-{name}")])
+                try:
+                    if path not in taken:
+                        data = await asyncio.to_thread(full.read_bytes)
+                        await opencloud.put(client, path, data, made)
+                        uploaded += 1
+                except httpx.TransportError as e:
+                    # Server unreachable: stop instead of timing out once per file.
+                    logger.warning("OpenCloud unreachable, will retry next sync: %s", e)
+                    break
+                except Exception as e:  # noqa: BLE001 — one bad file must not block the rest
+                    logger.warning("OpenCloud upload failed (%s): %s", path, e)
+                    continue
+                taken[path] = r.drive_file_id
+                r.opencloud_path = path
+                session.add(r)
+        await session.commit()
+        return uploaded
 
     async def _existing(
         self, session: AsyncSession, course_id: str, item_type: str, item_id: str, ref_key: str
@@ -241,6 +307,9 @@ class AttachmentSyncService:
             )
             ext = _ext_for(mime, name)
             content_type, exported = mime, False
+
+        if existing:
+            existing.opencloud_path = None  # content re-downloaded: upload it again
 
         if len(data) > settings.ATTACHMENT_MAX_BYTES:
             row.content_type = content_type
