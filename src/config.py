@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     ATTACHMENT_STORAGE_DIR: str = "/app/data/attachments"
     ATTACHMENT_MAX_BYTES: int = 52_428_800  # 50 MB; larger files are skipped
     ATTACHMENT_DOWNLOAD_RETRIES: int = 2
+    # Comma-separated OpenCloud hostnames users may upload attachments to. Each
+    # user enters their own WebDAV URL, so the server only ever connects to the
+    # hosts named here. Empty (the default) turns the feature off.
+    OPENCLOUD_ALLOWED_HOSTS: str = ""
 
     # Backup / restore. Archives land under the shared app_data volume so they
     # survive a container rebuild; nothing is ever uploaded off-box.

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-12
+
+Web app bumped to 2.12.0.
+
+**Upgrade notes.** The OpenCloud upload stays off until `OPENCLOUD_ALLOWED_HOSTS` in `.env` names your OpenCloud host; restart afterwards.
+
+### Added
+- **Copy Drive attachments to OpenCloud.** The dashboard has an OpenCloud card where each user enters their own destination (WebDAV URL of a space, username, app token, folder). When enabled, each sync uploads the attachments that user downloaded from Google Drive to `<folder>/<course name>/<file name>` in their space, once per file and again when the Drive content changes; files fetched before it was switched on are sent on the next sync. The server only connects to hosts named in the new `OPENCLOUD_ALLOWED_HOSTS` (comma-separated hostnames in `.env`); it is empty by default, which keeps the feature off. Saving tests the connection first, the token is never returned by the API, and an unreachable server never fails the sync (`GET`/`PATCH /api/sync/opencloud`, guarded by `sync:view`/`sync:use`). Regression tests: `tests/test_opencloud_upload.py`.
+
 ## [0.18.0] - 2026-10-06
 
 Web app bumped to 2.11.0.

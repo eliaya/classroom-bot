@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst, settings
-from src.models import AuditRetentionSetting, BackupSetting, SchedulerSetting
+from src.database import OWNER_KEY
+from src.models import (
+    AuditRetentionSetting, BackupSetting, ClassroomAttachment, OpenCloudSetting, SchedulerSetting,
+)
 
 _SINGLETON_ID = 1
 
@@ -130,6 +134,37 @@ async def update_backup_setting(
         row.minute = max(0, min(minute, 59))
     if retention_days is not None:
         row.retention_days = max(1, min(retention_days, MAX_BACKUP_RETENTION_DAYS))
+    row.updated_at = now_jst()
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+async def get_opencloud_setting(session: AsyncSession) -> OpenCloudSetting:
+    """Return the session owner's OpenCloud setting (off and empty until configured)."""
+    owner = session.info[OWNER_KEY]
+    row = await session.get(OpenCloudSetting, owner)
+    if row is None:
+        row = OpenCloudSetting(owner_user_id=owner)
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+    return row
+
+
+async def update_opencloud_setting(session: AsyncSession, **fields) -> OpenCloudSetting:
+    row = await get_opencloud_setting(session)
+    moved = any(k in fields and fields[k] != getattr(row, k) for k in ("webdav_url", "folder"))
+    for key, value in fields.items():
+        setattr(row, key, value)
+    if moved:
+        # New destination: forget what was uploaded so the next sync re-sends it.
+        await session.execute(
+            update(ClassroomAttachment)
+            .where(ClassroomAttachment.owner_user_id == row.owner_user_id)
+            .values(opencloud_path=None)
+        )
     row.updated_at = now_jst()
     session.add(row)
     await session.commit()

@@ -230,6 +230,7 @@ async def init_db() -> None:
                 "bot_messages": [("description", "TEXT")],
                 # Bot poll interval (cache->Discord), editable in the WebUI.
                 "scheduler_settings": [("poll_interval_minutes", "INTEGER")],
+                "classroom_attachments": [("opencloud_path", "TEXT")],
             }
             for table_name, columns in _added_columns.items():
                 # Skip tables that don't exist yet (create_all already made new ones complete).

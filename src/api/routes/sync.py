@@ -2,13 +2,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.deps import Principal, get_owned_session, get_principal
+from src.api.services import opencloud
 from src.api.services.classroom_sync import classroom_sync_service
-from src.repositories import audit_log
+from src.models import OpenCloudSetting
+from src.repositories import app_settings, audit_log
 from src.repositories import classroom_cache as cache
 from src.repositories import google_connections
 
@@ -208,3 +212,51 @@ async def delete_sync_run(
             detail="Run not found or is still 'running' (clear it first)",
         )
     return {"status": "deleted", "run_id": run_id}
+
+
+class OpenCloudUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    webdav_url: Optional[str] = Field(default=None, max_length=500, pattern=r"^(https?://\S+)?$")
+    username: Optional[str] = Field(default=None, max_length=200)
+    # Write-only. Empty/omitted keeps the stored token.
+    app_token: Optional[str] = Field(default=None, max_length=500)
+    folder: Optional[str] = Field(default=None, max_length=200)
+
+
+def _opencloud_dict(row: OpenCloudSetting) -> dict:
+    # The token never leaves the server.
+    return {
+        "enabled": row.enabled,
+        "webdav_url": row.webdav_url,
+        "username": row.username,
+        "folder": row.folder,
+        "has_token": bool(row.app_token),
+        # What the admin allows (OPENCLOUD_ALLOWED_HOSTS); empty = switched off.
+        "allowed_hosts": opencloud.allowed_hosts(),
+    }
+
+
+@router.get("/opencloud")
+async def get_opencloud_settings(session: AsyncSession = Depends(get_owned_session)) -> dict:
+    return _opencloud_dict(await app_settings.get_opencloud_setting(session))
+
+
+@router.patch("/opencloud")
+async def update_opencloud_settings(
+    body: OpenCloudUpdate, session: AsyncSession = Depends(get_owned_session)
+) -> dict:
+    changes = body.model_dump(exclude_none=True)
+    if not changes.get("app_token"):
+        changes.pop("app_token", None)
+    row = await app_settings.get_opencloud_setting(session)
+    candidate = OpenCloudSetting(**{**row.model_dump(), **changes})
+    if candidate.enabled:
+        # Refuse to switch on a destination that doesn't work, rather than
+        # letting every later sync fail quietly in the log.
+        if not (candidate.webdav_url and candidate.username and candidate.app_token):
+            raise HTTPException(status_code=400, detail="WebDAV URL, username and app token are required.")
+        try:
+            await opencloud.check(candidate)
+        except Exception as e:  # noqa: BLE001 — surfaced to the user as-is
+            raise HTTPException(status_code=400, detail=f"OpenCloud connection failed: {e}"[:300])
+    return _opencloud_dict(await app_settings.update_opencloud_setting(session, **changes))
