@@ -23,7 +23,7 @@ class ClassroomSyncService:
     def __init__(self, bot: discord.Client) -> None:
         self.bot = bot
         self._sync_lock = asyncio.Lock()
-        self.messages = MessageStore()
+        self.messages = MessageStore(getattr(bot, "owner_user_id", None))
 
     async def sync_all_links(self, *, backfill: bool = False) -> None:
         if self._sync_lock.locked():
@@ -34,6 +34,12 @@ class ClassroomSyncService:
             logger.info("Starting scheduled background sync pass across courses...")
             async with async_session_factory() as session:
                 statement = select(GuildCourseLink).where(GuildCourseLink.is_active == True)
+                # Each user runs their own bot: this one posts to its owner's servers only.
+                owner = getattr(self.bot, "owner_user_id", None)
+                if owner is not None:
+                    statement = statement.where(
+                        GuildCourseLink.guild_id.in_(await guild_bindings.guilds_of(session, owner))
+                    )
                 result = await session.execute(statement)
                 links = result.scalars().all()
 

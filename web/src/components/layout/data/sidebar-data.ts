@@ -1,11 +1,11 @@
 import {
+  CalendarDays,
   GraduationCap,
   LayoutDashboard,
   RefreshCw,
   ScrollText,
   Settings,
   Command,
-  ClipboardList,
   Bot,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -34,9 +34,9 @@ export const sidebarData: SidebarData = {
           icon: GraduationCap,
         },
         {
-          title: 'nav.todo',
-          url: '/todos',
-          icon: ClipboardList,
+          title: 'nav.calendar',
+          url: '/calendar',
+          icon: CalendarDays,
         },
         {
           title: 'nav.sync',

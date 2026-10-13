@@ -74,7 +74,7 @@ async def _require_my_guild(session: AsyncSession, principal: Principal, guild_i
     if guild_id not in await guild_bindings.guilds_of(session, principal.user_id):
         raise HTTPException(
             status_code=403,
-            detail="This Discord server is not connected to your account. Claim it first.",
+            detail="This Discord server is not connected to your account. Invite your bot to it first.",
         )
 
 

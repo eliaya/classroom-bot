@@ -1,28 +1,27 @@
-"""Persistence for the Discord bot heartbeat (singleton row).
+"""Persistence for the Discord bots' heartbeats (one row per owner).
 
-The bot process writes a heartbeat; the API reads it to report live status.
+Each user's bot writes its heartbeat; the API reads it to report live status.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst
 from src.models import BotHeartbeat
 
-_SINGLETON_ID = 1
-
-
 async def record_heartbeat(
     session: AsyncSession,
+    owner_user_id: int,
     status: str,
     detail: Optional[str] = None,
 ) -> BotHeartbeat:
-    row = await session.get(BotHeartbeat, _SINGLETON_ID)
+    row = await session.get(BotHeartbeat, owner_user_id)
     if row is None:
-        row = BotHeartbeat(id=_SINGLETON_ID, status=status, detail=detail)
+        row = BotHeartbeat(id=owner_user_id, status=status, detail=detail)
     else:
         row.status = status
         row.detail = detail
@@ -33,5 +32,17 @@ async def record_heartbeat(
     return row
 
 
-async def get_heartbeat(session: AsyncSession) -> Optional[BotHeartbeat]:
-    return await session.get(BotHeartbeat, _SINGLETON_ID)
+async def get_heartbeat(session: AsyncSession, owner_user_id: int) -> Optional[BotHeartbeat]:
+    return await session.get(BotHeartbeat, owner_user_id)
+
+
+async def list_heartbeats(session: AsyncSession) -> List[BotHeartbeat]:
+    return list((await session.execute(select(BotHeartbeat))).scalars().all())
+
+
+async def clear_heartbeat(session: AsyncSession, owner_user_id: int) -> None:
+    """Forget a bot that no longer runs (its token was removed)."""
+    row = await session.get(BotHeartbeat, owner_user_id)
+    if row is not None:
+        await session.delete(row)
+        await session.commit()

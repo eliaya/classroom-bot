@@ -20,6 +20,7 @@ from src.models import (
     GuildCourseLink,
     PostedAnnouncement,
 )
+from src.repositories import guild_bindings
 from src.sync_service import ClassroomSyncService
 
 ORIGIN = "http://localhost:5173"
@@ -59,7 +60,7 @@ def _states(res) -> dict:
 async def test_claiming_a_server_and_who_can_see_it(sign_in):
     async with _client() as a, _client() as b, _client() as admin:
         a_id = await sign_in(a, permissions=LINKS, email="a@example.com")
-        await sign_in(b, permissions=LINKS, email="b@example.com")
+        b_id = await sign_in(b, permissions=LINKS, email="b@example.com")
         await sign_in(admin, permissions=["*"], email="admin@example.com")
         await _inventory()
         await _course(a_id, "A's Algebra")
@@ -71,9 +72,12 @@ async def test_claiming_a_server_and_who_can_see_it(sign_in):
         link = {"guild_id": ALPHA, "course_id": "c1", "channel_id": 1}
         assert (await a.post("/api/links", json=link)).status_code == 403
 
-        assert (await a.post(f"/api/discord/guilds/{ALPHA}/bind")).json()["state"] == "mine"
-        assert (await a.post(f"/api/discord/guilds/{ALPHA}/bind")).status_code == 200  # idempotent
-        assert (await b.post(f"/api/discord/guilds/{ALPHA}/bind")).status_code == 409   # first come, first served
+        # Nobody can claim a server by hand: the bot that is in it binds it.
+        assert (await a.post(f"/api/discord/guilds/{ALPHA}/bind")).status_code == 405
+        async with database.async_session_factory() as s:
+            assert await guild_bindings.bind(s, ALPHA, a_id) is True
+            assert await guild_bindings.bind(s, ALPHA, a_id) is True      # idempotent
+            assert await guild_bindings.bind(s, ALPHA, b_id) is False     # first come, first served
 
         assert _states(await a.get("/api/discord/guilds")) == {"Alpha": "mine", "Beta": "unbound"}
         assert _states(await b.get("/api/discord/guilds")) == {"Beta": "unbound"}        # A's server is not shown
@@ -99,7 +103,8 @@ async def test_claiming_a_server_and_who_can_see_it(sign_in):
         # A user administrator can release someone else's server; then B may claim it.
         assert (await admin.delete(f"/api/discord/guilds/{ALPHA}/bind")).json()["state"] == "unbound"
         assert (await a.get("/api/links")).json()["items"] == []
-        assert (await b.post(f"/api/discord/guilds/{ALPHA}/bind")).status_code == 200
+        async with database.async_session_factory() as s:
+            assert await guild_bindings.bind(s, ALPHA, b_id) is True
         # The link is still there, now under B's server.
         assert [l["id"] for l in (await b.get("/api/links")).json()["items"]] == [link_id]
 

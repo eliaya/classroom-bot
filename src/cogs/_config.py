@@ -23,7 +23,9 @@ CACHE_TTL_SECONDS = 30
 
 
 class CommandConfigStore:
-    def __init__(self) -> None:
+    def __init__(self, owner_user_id: Optional[int] = None) -> None:
+        # Whose commands to read; without an owner the callers' defaults apply.
+        self._owner = owner_user_id
         self._limits: Dict[str, Optional[int]] = {}
         self._at: float = 0.0
 
@@ -37,7 +39,9 @@ class CommandConfigStore:
     async def _refresh(self, now: float) -> None:
         try:
             async with database.async_session_factory() as session:
-                rows = (await session.execute(select(BotCommand))).scalars().all()
+                rows = (await session.execute(
+                    select(BotCommand).where(BotCommand.owner_user_id == self._owner)
+                )).scalars().all()
             self._limits = {r.name: r.default_limit for r in rows}
             self._at = now
         except Exception:  # noqa: BLE001 — never break a response on a DB hiccup

@@ -1,18 +1,20 @@
 """Fetched Drive attachments are copied to OpenCloud over WebDAV."""
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
 import src.models  # noqa: F401 — register tables
 import src.config as config_module
 from src.api.services import opencloud
 from src.api.services.attachment_sync import attachment_sync_service
+from src.models import AuditLog
 from src.repositories import app_settings
 from src.repositories import classroom_cache as cache
 
@@ -76,6 +78,17 @@ async def _enable(session, **extra):
         session, enabled=True, webdav_url=BASE + "/", username="u", app_token="t", **extra)
 
 
+async def _audits() -> list:
+    """(status, detail) of every opencloud.upload audit row, oldest first."""
+    import src.database as db
+
+    async with db.async_session_factory() as s:
+        rows = (await s.exec(
+            select(AuditLog).where(AuditLog.action == "opencloud.upload").order_by(AuditLog.id)
+        )).all()
+        return [(r.status, r.target, json.loads(r.detail)) for r in rows]
+
+
 @pytest.mark.asyncio
 async def test_disabled_uploads_nothing(session, remote):
     stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
@@ -101,6 +114,8 @@ async def test_uploads_once_and_backfills(session, remote):
     remote.calls.clear()
     stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
     assert stats["opencloud"] == 0 and remote.calls == []
+    # One audit row for the upload; the idle run adds none.
+    assert await _audits() == [("ok", COURSE_ID, {"uploaded": 3, "failed": 0, "error": None})]
 
     # Pointing at another folder re-sends everything there.
     await _enable(session, folder="Else/Where")
@@ -115,9 +130,13 @@ async def test_unreachable_server_does_not_fail_sync(session, remote):
     remote.down = True
     stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
     assert stats["fetched"] == 3 and stats["opencloud"] == 0
+    [(status, _, detail)] = await _audits()
+    assert status == "error" and detail["uploaded"] == 0 and detail["failed"] == 1
+    assert detail["error"].startswith("OpenCloud unreachable")
     remote.down = False
     stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
     assert stats["opencloud"] == 3
+    assert (await _audits())[-1] == ("ok", COURSE_ID, {"uploaded": 3, "failed": 0, "error": None})
 
 
 @pytest.mark.asyncio
@@ -127,6 +146,8 @@ async def test_host_outside_allowlist_is_never_contacted(session, remote, monkey
     monkeypatch.setattr(config_module.settings, "OPENCLOUD_ALLOWED_HOSTS", "")
     stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
     assert stats["fetched"] == 3 and "opencloud" not in stats and remote.calls == []
+    [(status, _, detail)] = await _audits()
+    assert status == "error" and "OPENCLOUD_ALLOWED_HOSTS" in detail["error"]
 
 
 @pytest.mark.asyncio
@@ -148,7 +169,7 @@ async def test_settings_route_hides_token_and_checks_connection(remote, sign_in)
 
         remote.down = False
         saved = (await client.patch("/api/sync/opencloud", json=body)).json()
-        assert saved == {"enabled": True, "webdav_url": BASE, "username": "u",
+        assert saved == {"enabled": True, "provider": "opencloud", "webdav_url": BASE, "username": "u",
                          "folder": "Classroom", "has_token": True,
                          "allowed_hosts": ["cloud.example.com", "other.example"]}
         # An empty token keeps the stored one.
@@ -160,3 +181,87 @@ async def test_settings_route_hides_token_and_checks_connection(remote, sign_in)
         await sign_in(client, email="other@example.com")
         other = (await client.get("/api/sync/opencloud")).json()
         assert other["enabled"] is False and other["webdav_url"] == "" and other["has_token"] is False
+
+
+def _local_files(tmp_path) -> list:
+    return sorted(p.name for p in (tmp_path / "att").rglob("*") if p.is_file())
+
+
+@pytest.mark.asyncio
+async def test_external_storage_keeps_no_local_copy(session, remote, google_service, tmp_path):
+    run = await cache.start_sync_run(session, resource="all")
+    await _enable(session)
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID, run.id)
+
+    # The files are in the external storage only; the rows keep their metadata.
+    assert len(remote.files) == 3 and _local_files(tmp_path) == []
+    rows = await cache.list_attachments(session, COURSE_ID)
+    assert all(r.local_path is None and r.opencloud_path and r.file_size == 4 for r in rows)
+    # The run remembers how many were moved, for the user's notification.
+    await session.refresh(run)
+    assert run.external_attachments == 3
+
+    # Unchanged files are not downloaded from Drive again just because no local copy exists.
+    google_service.download_drive_file.reset_mock()
+    remote.calls.clear()
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID, run.id)
+    assert google_service.download_drive_file.await_count == 0 and remote.calls == []
+    await session.refresh(run)
+    assert run.external_attachments == 3
+
+    # Switched off: the files come back to the server on the next sync.
+    await app_settings.update_opencloud_setting(session, enabled=False)
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert len(_local_files(tmp_path)) == 3
+
+
+@pytest.mark.asyncio
+async def test_failed_upload_keeps_the_local_copy(session, remote, tmp_path):
+    await _enable(session)
+    remote.down = True
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert len(_local_files(tmp_path)) == 3
+    remote.down = False
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert len(remote.files) == 3 and _local_files(tmp_path) == []
+
+
+@pytest.mark.asyncio
+async def test_google_drive_as_external_storage(session, remote, google_service, monkeypatch, tmp_path):
+    uploaded: dict = {}
+
+    async def upload(path, data, folders):
+        uploaded[path] = data
+
+    monkeypatch.setattr(google_service, "upload_to_drive", upload, raising=False)
+    monkeypatch.setattr(google_service, "has_drive_write_scope", lambda: False, raising=False)
+    await app_settings.update_opencloud_setting(session, enabled=True, provider="gdrive")
+
+    # Without the write permission nothing is uploaded and the local copies stay.
+    stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert "opencloud" not in stats and uploaded == {} and len(_local_files(tmp_path)) == 3
+
+    monkeypatch.setattr(google_service, "has_drive_write_scope", lambda: True, raising=False)
+    stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert stats["opencloud"] == 3 and remote.calls == []  # WebDAV is not involved
+    assert uploaded["Classroom/course-1/Report.pdf"] == b"f1  " and _local_files(tmp_path) == []
+
+
+@pytest.mark.asyncio
+async def test_settings_route_checks_the_chosen_provider(remote, sign_in, google_service, monkeypatch):
+    import src.database as db
+    from src.api.main import app
+
+    await db.init_db()
+    monkeypatch.setattr(google_service, "has_drive_write_scope", lambda: False, raising=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await sign_in(client)
+        assert (await client.get("/api/sync/opencloud")).json()["provider"] == "opencloud"
+        body = {"enabled": True, "provider": "gdrive", "folder": "Classroom"}
+        refused = await client.patch("/api/sync/opencloud", json=body)
+        assert refused.status_code == 400 and "Connect Google again" in refused.json()["detail"]
+        monkeypatch.setattr(google_service, "has_drive_write_scope", lambda: True, raising=False)
+        saved = (await client.patch("/api/sync/opencloud", json=body)).json()
+        assert saved["enabled"] is True and saved["provider"] == "gdrive"
+        assert remote.calls == []  # no WebDAV check for Google Drive
+        assert (await client.patch("/api/sync/opencloud", json={"provider": "ftp"})).status_code == 422

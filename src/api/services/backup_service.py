@@ -297,15 +297,16 @@ def _extract(archive: Path, destination: Path) -> Path:
 
 
 async def _wait_for_bot_pause() -> bool:
-    """Wait for the bot process to acknowledge maintenance mode."""
+    """Wait for every user's bot to acknowledge maintenance mode."""
     from src.database import async_session_factory
     from src.repositories import bot_status
 
     waited = 0
     while waited < BOT_PAUSE_TIMEOUT_SECONDS:
         async with async_session_factory() as session:
-            row = await bot_status.get_heartbeat(session)
-        if row is None or row.status == "paused":
+            rows = await bot_status.list_heartbeats(session)
+        # A bot that failed to start ("error") is not running, so cannot write.
+        if all(row.status in ("paused", "error") for row in rows):
             return True
         await asyncio.sleep(BOT_PAUSE_POLL_SECONDS)
         waited += BOT_PAUSE_POLL_SECONDS

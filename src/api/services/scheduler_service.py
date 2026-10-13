@@ -26,6 +26,8 @@ from src.config import TOKYO_TZ, settings
 logger = logging.getLogger("classroom_sync.scheduler")
 
 JOB_ID = "classroom_cache_sync"
+# How often the API process checks whose own sync schedule is due.
+SYNC_TICK_MINUTES = 1
 AUDIT_PURGE_JOB_ID = "audit_log_purge"
 # How often the auto-rotation job runs (the retention window itself is in days).
 AUDIT_PURGE_INTERVAL_HOURS = 6

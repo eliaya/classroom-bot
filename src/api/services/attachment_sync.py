@@ -4,23 +4,48 @@ import json
 import logging
 import mimetypes
 import re
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 import httpx
+from sqlalchemy import func, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.services import opencloud
 from src.config import now_jst, settings
 from src.google_service import GoogleClassroomService
-from src.models import ClassroomAttachment, OpenCloudSetting, dump_json
-from src.repositories import app_settings
+from src.models import ClassroomAttachment, ClassroomSyncRun, OpenCloudSetting, User, dump_json
+from src.repositories import app_settings, audit_log
 from src.repositories import classroom_cache as cache
 from src.repositories import google_connections
 
 logger = logging.getLogger("classroom_sync.attachments")
 
 T = TypeVar("T")
+
+
+async def _audit_opencloud(
+    session: AsyncSession, course_id: str, result: Dict[str, Any], start: float
+) -> None:
+    """One ``opencloud.upload`` audit row per course; none when nothing was
+    due, so an idle sync does not fill the trail."""
+    if not (result["uploaded"] or result["failed"] or result["error"]):
+        return
+    from src.database import OWNER_KEY, async_session_factory
+
+    # Own session: the sync session may be unusable after a failure.
+    async with async_session_factory() as s:
+        owner = session.info.get(OWNER_KEY)
+        user = await s.get(User, owner) if owner else None
+        await audit_log.record(
+            s, category="api", action="opencloud.upload",
+            actor=user.email if user else None, target=course_id,
+            status="error" if result["error"] else "ok",
+            duration_ms=int((time.perf_counter() - start) * 1000),
+            detail=result,
+        )
 
 # Google-native MIME -> (export MIME, file extension). Docs/Slides -> PDF,
 # Sheets -> XLSX (matches the requested PDF / Excel handling).
@@ -78,8 +103,11 @@ class AttachmentSyncService:
         assert last_exc is not None
         raise last_exc
 
-    async def sync_course_attachments(self, session: AsyncSession, course_id: str) -> dict:
-        """Fetch and cache attachment content for every classwork item in a course."""
+    async def sync_course_attachments(
+        self, session: AsyncSession, course_id: str, run_id: Optional[int] = None
+    ) -> dict:
+        """Fetch and cache attachment content for every classwork item in a course.
+        ``run_id`` is the sync run to credit with files moved to external storage."""
         coursework = await cache.list_cached_coursework(session, course_id)
         materials = await cache.list_cached_materials(session, course_id)
         announcements = await cache.list_cached_announcements(session, course_id)
@@ -122,7 +150,27 @@ class AttachmentSyncService:
         try:
             oc = await app_settings.get_opencloud_setting(session)
             if oc.enabled:
-                stats["opencloud"] = await self._upload_to_opencloud(session, oc, course_id)
+                start = time.perf_counter()
+                result: Dict[str, Any] = {"uploaded": 0, "failed": 0, "error": None}
+                try:
+                    await self._upload_to_opencloud(session, oc, course_id, result)
+                    stats["opencloud"] = result["uploaded"]
+                    if run_id is not None and result["uploaded"]:
+                        # Shown to the user as a notification when the run ends.
+                        await session.execute(
+                            update(ClassroomSyncRun)
+                            .where(ClassroomSyncRun.id == run_id)
+                            .values(external_attachments=(
+                                func.coalesce(ClassroomSyncRun.external_attachments, 0)
+                                + result["uploaded"]
+                            ))
+                        )
+                        await session.commit()
+                except Exception as e:
+                    result["error"] = result["error"] or str(e)[:300]
+                    raise
+                finally:
+                    await _audit_opencloud(session, course_id, result, start)
         except Exception:  # noqa: BLE001
             logger.exception("OpenCloud upload failed for course %s", course_id)
 
@@ -130,11 +178,16 @@ class AttachmentSyncService:
         return stats
 
     async def _upload_to_opencloud(
-        self, session: AsyncSession, oc: OpenCloudSetting, course_id: str
-    ) -> int:
-        """Upload every fetched file not yet in OpenCloud to
-        ``<folder>/<course name>/<file name>``; returns how many were sent.
-        Failures are left unmarked so the next sync retries them."""
+        self, session: AsyncSession, oc: OpenCloudSetting, course_id: str, result: Dict[str, Any]
+    ) -> None:
+        """Move every fetched file to OpenCloud, at
+        ``<folder>/<course name>/<file name>``, counting into ``result``
+        (uploaded / failed / first error) as it goes so a crash keeps the tally.
+
+        With external storage on, the server keeps the text and each
+        attachment's metadata only: the local copy is deleted once the file is
+        in OpenCloud. A failed upload keeps its local copy and is left unmarked,
+        so the next sync retries it."""
         rows = [
             r for r in await cache.list_attachments(session, course_id)
             if r.fetch_status == "fetched" and r.local_path
@@ -146,36 +199,65 @@ class AttachmentSyncService:
         # two items shares one remote copy; different files never overwrite.
         taken = {r.opencloud_path: r.drive_file_id for r in rows if r.opencloud_path}
         storage_root = Path(settings.ATTACHMENT_STORAGE_DIR)
-        made: set[str] = set()
-        uploaded = 0
-        async with opencloud.client(oc) as client:
+        async with self._destination(session, oc) as put:
             for r in rows:
                 full = storage_root / r.local_path
-                if r.opencloud_path or not full.exists():
-                    continue
-                name = (r.title or full.stem).strip()
-                if not name.lower().endswith(full.suffix.lower()):
-                    name += full.suffix
-                path = "/".join([*folder, _safe_name(name)])
-                if taken.get(path, r.drive_file_id) != r.drive_file_id:
-                    path = "/".join([*folder, _safe_name(f"{r.drive_file_id}-{name}")])
-                try:
-                    if path not in taken:
-                        data = await asyncio.to_thread(full.read_bytes)
-                        await opencloud.put(client, path, data, made)
-                        uploaded += 1
-                except httpx.TransportError as e:
-                    # Server unreachable: stop instead of timing out once per file.
-                    logger.warning("OpenCloud unreachable, will retry next sync: %s", e)
-                    break
-                except Exception as e:  # noqa: BLE001 — one bad file must not block the rest
-                    logger.warning("OpenCloud upload failed (%s): %s", path, e)
-                    continue
-                taken[path] = r.drive_file_id
-                r.opencloud_path = path
+                if not r.opencloud_path:
+                    if not full.exists():
+                        continue
+                    name = (r.title or full.stem).strip()
+                    if not name.lower().endswith(full.suffix.lower()):
+                        name += full.suffix
+                    path = "/".join([*folder, _safe_name(name)])
+                    if taken.get(path, r.drive_file_id) != r.drive_file_id:
+                        path = "/".join([*folder, _safe_name(f"{r.drive_file_id}-{name}")])
+                    try:
+                        if path not in taken:
+                            data = await asyncio.to_thread(full.read_bytes)
+                            await put(path, data)
+                            result["uploaded"] += 1
+                    except httpx.TransportError as e:
+                        # Server unreachable: stop instead of timing out once per file.
+                        logger.warning("OpenCloud unreachable, will retry next sync: %s", e)
+                        result["failed"] += 1
+                        result["error"] = result["error"] or f"OpenCloud unreachable: {e}"[:300]
+                        break
+                    except Exception as e:  # noqa: BLE001 — one bad file must not block the rest
+                        logger.warning("OpenCloud upload failed (%s): %s", path, e)
+                        result["failed"] += 1
+                        result["error"] = result["error"] or f"{path}: {e}"[:300]
+                        continue
+                    taken[path] = r.drive_file_id
+                    r.opencloud_path = path
+                # In OpenCloud now (or since an earlier sync): drop the local copy.
+                await asyncio.to_thread(full.unlink, missing_ok=True)
+                r.local_path = None
                 session.add(r)
         await session.commit()
-        return uploaded
+
+    @asynccontextmanager
+    async def _destination(
+        self, session: AsyncSession, oc: OpenCloudSetting
+    ) -> AsyncIterator[Callable[[str, bytes], Awaitable[None]]]:
+        """``put(path, data)`` for the user's external storage provider."""
+        if oc.provider == "gdrive":
+            service = await google_connections.service_for(session)
+            if not service.has_drive_write_scope():
+                raise ValueError("Google Drive storage is not permitted; connect Google again.")
+            folders: Dict[str, str] = {}
+
+            async def put(path: str, data: bytes) -> None:
+                await service.upload_to_drive(path, data, folders)
+
+            yield put
+        else:  # opencloud / nextcloud: WebDAV
+            made: set[str] = set()
+            async with opencloud.client(oc) as client:
+
+                async def put(path: str, data: bytes) -> None:
+                    await opencloud.put(client, path, data, made)
+
+                yield put
 
     async def _existing(
         self, session: AsyncSession, course_id: str, item_type: str, item_id: str, ref_key: str
@@ -267,12 +349,15 @@ class AttachmentSyncService:
         existing = await self._existing(session, course_id, row.item_type, item_id, row.ref_key)
         is_google_native = mime in _GOOGLE_EXPORT
 
-        # Idempotency: skip re-fetch when already fetched and the file is on disk.
+        # Idempotency: skip re-fetch when already fetched and the file is on disk,
+        # or was moved to external storage (then there is no local copy).
         # For binary files we additionally require the Drive size to be unchanged;
         # Google-native exports have no size, so existence is the only signal.
-        if existing and existing.fetch_status == "fetched" and existing.local_path:
-            full = storage_root / existing.local_path
-            if full.exists() and (
+        if existing and existing.fetch_status == "fetched":
+            stored = bool(existing.opencloud_path) or bool(
+                existing.local_path and (storage_root / existing.local_path).exists()
+            )
+            if stored and (
                 is_google_native or (meta_size is not None and meta_size == existing.file_size)
             ):
                 row.content_type = existing.content_type

@@ -1,4 +1,4 @@
-"""CRUD API for user-defined Discord custom commands (``BotCommand``).
+"""CRUD API for the commands of the caller's own Discord bot (``BotCommand``).
 
 The WebUI ``/bot-commands`` page consumes these endpoints; the bot process
 reads the same table to execute the commands. See ``src/cogs/custom_commands.py``.
@@ -13,9 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session
+from src.api.deps import get_owned_session
+from src.database import seed_bot_defaults
 from src.models import BotCommand
 from src.repositories import bot_commands as repo
+from src.repositories.classroom_cache import owner_of
 
 router = APIRouter(prefix="/bot/commands", tags=["bot-commands"])
 
@@ -72,14 +74,15 @@ def _serialize(cmd: BotCommand) -> dict:
 
 
 @router.get("")
-async def list_commands(session: AsyncSession = Depends(get_db_session)) -> dict:
+async def list_commands(session: AsyncSession = Depends(get_owned_session)) -> dict:
+    await seed_bot_defaults(owner_of(session))
     items = await repo.list_commands(session)
     return {"items": [_serialize(c) for c in items], "total": len(items)}
 
 
 @router.post("", status_code=201)
 async def create_command(
-    body: BotCommandCreate, session: AsyncSession = Depends(get_db_session)
+    body: BotCommandCreate, session: AsyncSession = Depends(get_owned_session)
 ) -> dict:
     _validate_slash_name(body.name.lower(), "name")
     if body.group_name:
@@ -101,7 +104,7 @@ async def create_command(
 
 
 @router.get("/{cmd_id}")
-async def get_command(cmd_id: int, session: AsyncSession = Depends(get_db_session)) -> dict:
+async def get_command(cmd_id: int, session: AsyncSession = Depends(get_owned_session)) -> dict:
     cmd = await repo.get_command(session, cmd_id)
     if cmd is None:
         raise HTTPException(status_code=404, detail="Command not found")
@@ -112,7 +115,7 @@ async def get_command(cmd_id: int, session: AsyncSession = Depends(get_db_sessio
 async def update_command(
     cmd_id: int,
     body: BotCommandUpdate,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_owned_session),
 ) -> dict:
     cmd = await repo.get_command(session, cmd_id)
     if cmd is None:
@@ -136,7 +139,7 @@ async def update_command(
 
 @router.delete("/{cmd_id}")
 async def delete_command(
-    cmd_id: int, session: AsyncSession = Depends(get_db_session)
+    cmd_id: int, session: AsyncSession = Depends(get_owned_session)
 ) -> dict:
     cmd = await repo.get_command(session, cmd_id)
     if cmd is None:

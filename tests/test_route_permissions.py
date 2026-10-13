@@ -27,6 +27,7 @@ PUBLIC = {
 MATRIX = [
     ("get", "/api/courses", "courses:view"),
     ("get", "/api/courses/1/people", "courses:view"),
+    ("get", "/api/courses/people", "courses:view"),
     ("get", f"/api/auth/google/start?origin={ORIGIN}", "courses:view"),
     ("get", "/api/todos", "todos:view"),
     ("get", "/api/search?q=x", "search:view"),
@@ -42,7 +43,7 @@ MATRIX = [
     ("get", "/api/bot/commands", "bot:view"),
     ("delete", "/api/bot/commands/999", "bot:use"),  # had no auth at all before
     ("delete", "/api/bot/messages/nope.key", "bot:use"),
-    ("get", "/api/scheduler", "scheduler:view"),
+    ("get", "/api/scheduler", "sync:view"),
     ("get", "/api/audit", "audit:view"),
     ("patch", "/api/audit/retention", "audit:use"),
     ("get", "/api/backup", "backup:view"),

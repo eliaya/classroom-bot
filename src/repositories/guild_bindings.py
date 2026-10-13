@@ -4,10 +4,9 @@ Everything the bot does in a server — slash commands, channel links, auto-push
 posting to Classroom — runs as the user the server is bound to. A server bound
 to nobody gets nothing.
 
-ponytail: a user binds a server to themselves on their own say-so (first come,
-first served); nothing checks that they administer it on Discord. Only grant
-``links:use`` to people you trust with every server the bot is in; verify via
-Discord OAuth if that ever stops being true.
+Each user runs their own bot, and that bot binds the servers it is in to its
+owner (``main._sync_discord_inventory``). A server two users' bots are both in
+belongs to whichever bound it first.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from src.models import DiscordGuildBinding
 
 NOT_BOUND = (
     "This server is not connected to a Classroom Bot user yet. "
-    "Someone with access must claim it in the web dashboard (Discord bot → Channel links)."
+    "It is connected automatically, within a minute, once its owner's bot is running."
 )
 
 

@@ -18,7 +18,7 @@ async def _setup_tables():
 async def test_render_falls_back_to_default_when_db_empty():
     await _setup_tables()
     # With no DB row, MessageStore falls back to the in-code default.
-    out = await MessageStore().render("coursework.empty", course_name="Math")
+    out = await MessageStore(1).render("coursework.empty", course_name="Math")
     assert out == default_template("coursework.empty").format(course_name="Math")
 
 
@@ -27,7 +27,7 @@ async def test_db_value_is_used():
     await _setup_tables()
     async with database_module.async_session_factory() as session:
         await repo.set_message(session, "list.empty", "Nothing linked here yet.")
-    out = await MessageStore().render("list.empty")
+    out = await MessageStore(1).render("list.empty")
     assert out == "Nothing linked here yet."
 
 
@@ -47,7 +47,7 @@ async def test_render_missing_placeholder_does_not_raise():
     await _setup_tables()
     async with database_module.async_session_factory() as session:
         await repo.set_message(session, "list.empty", "Hi {course_name}")
-    out = await MessageStore().render("list.empty")  # no course_name passed
+    out = await MessageStore(1).render("list.empty")  # no course_name passed
     assert out == "Hi {course_name}"  # raw template returned, no exception
 
 
@@ -55,7 +55,7 @@ async def test_render_missing_placeholder_does_not_raise():
 async def test_render_unknown_key_returns_key_literally():
     await _setup_tables()
     # Unknown key (not in DB, not a default) must not crash — returns the key.
-    assert await MessageStore().render("does.not.exist") == "does.not.exist"
+    assert await MessageStore(1).render("does.not.exist") == "does.not.exist"
 
 
 def test_every_default_formats_with_its_documented_placeholders():

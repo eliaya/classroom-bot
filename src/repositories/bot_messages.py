@@ -3,26 +3,29 @@
 The ``bot_messages`` table is the source of truth (seeded from
 ``src/message_templates.py`` on init). The WebUI does full CRUD via the API;
 the bot reads rows (with a short cache) when rendering.
+
+Every function works on the templates of the session's owner
+(``database.owned_session``); new rows are stamped with that owner on flush.
 """
 
 from __future__ import annotations
 
 from typing import List, Optional
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst
 from src.models import BotMessage
+from src.repositories.classroom_cache import owned
 
 
 async def list_messages(session: AsyncSession) -> List[BotMessage]:
-    result = await session.execute(select(BotMessage))
+    result = await session.execute(owned(session, BotMessage))
     return list(result.scalars().all())
 
 
 async def get_by_key(session: AsyncSession, key: str) -> Optional[BotMessage]:
-    result = await session.execute(select(BotMessage).where(BotMessage.key == key))
+    result = await session.execute(owned(session, BotMessage).where(BotMessage.key == key))
     return result.scalars().first()
 
 

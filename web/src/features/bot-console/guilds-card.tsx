@@ -13,10 +13,9 @@ import {
 } from '@/components/ui/card'
 
 /**
- * The Discord servers the bot is in, and which of them are connected to you.
- * A server must be connected before its channels can be linked: the bot then
- * acts there with your Classroom data. `onChange` fires after a server is
- * connected or disconnected so the caller can reload what depends on it.
+ * The Discord servers your bot is in. The bot connects them to you by itself
+ * and acts there with your Classroom data. `onChange` fires after a server is
+ * disconnected so the caller can reload what depends on it.
  */
 export function GuildsCard({ onChange }: { onChange: () => void }) {
   const { t } = useTranslation()
@@ -66,12 +65,9 @@ export function GuildsCard({ onChange }: { onChange: () => void }) {
                 {t(`links.serverState.${g.state}`)}
               </Badge>
             </div>
-            {g.state === 'unbound' ? (
-              <Button size='sm' disabled={!canEdit} onClick={() => void run(() => api.bindGuild(g.guild_id))}>
-                {t('links.claim')}
-              </Button>
-            ) : (
-              // Yours, or (for a user administrator) someone else's.
+            {/* Yours, or (for a user administrator) someone else's. An unbound
+                server is connected by the bot that is in it, not by hand. */}
+            {g.state !== 'unbound' && (
               <Button
                 size='sm'
                 variant='outline'

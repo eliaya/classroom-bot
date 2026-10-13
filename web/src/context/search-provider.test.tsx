@@ -66,7 +66,8 @@ describe('SearchProvider and CommandMenu', () => {
       name: null,
       picture_url: null,
       role: 'admin',
-      permissions: ['*'],
+      // The wildcard alone does not open a user's own pages (courses etc.).
+      permissions: ['*', 'courses:view', 'search:view'],
     })
   })
 

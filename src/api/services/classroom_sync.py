@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -21,6 +21,10 @@ from src.repositories import classroom_cache as cache
 from src.repositories import google_connections
 
 logger = logging.getLogger("classroom_sync.api.sync")
+
+# The slice of the user's Google Calendar a full sync saves, around today (days).
+CALENDAR_PAST_DAYS = 180
+CALENDAR_FUTURE_DAYS = 365
 
 
 def _todo_due_iso(cw: Dict[str, Any]) -> Optional[str]:
@@ -140,6 +144,7 @@ class ClassroomSyncService:
                 percent=98,
                 message="Finalizing and committing cache..."
             )
+            await self._sync_calendar(session, google_service, run)
 
             partial_error = "; ".join(errors) if errors else None
             if errors and len(errors) == total_courses:
@@ -160,6 +165,26 @@ class ClassroomSyncService:
             logger.exception("Full classroom sync failed")
             await cache.finish_sync_run(session, run, status="error", items_count=total, error_message=str(exc))
             raise
+
+    async def _sync_calendar(self, session: AsyncSession, google_service: GoogleClassroomService, run) -> None:
+        """Save the user's Google Calendar events around today. An extra: it is
+        skipped until the user allows calendar access, and a failure (API not
+        enabled, quota) never fails the Classroom sync."""
+        if not google_service.has_calendar_scope():
+            return
+        try:
+            now = datetime.now(timezone.utc)
+            events = await google_service.list_calendar_events(
+                (now - timedelta(days=CALENDAR_PAST_DAYS)).isoformat(),
+                (now + timedelta(days=CALENDAR_FUTURE_DAYS)).isoformat(),
+            )
+            saved = await cache.replace_calendar_events(session, events)
+            logger.info("Saved %d Google Calendar event(s)", saved)
+        except Exception:  # noqa: BLE001
+            logger.exception("Google Calendar sync failed")
+            await session.rollback()
+            # rollback() expires every ORM instance; the caller still finishes the run.
+            await session.refresh(run)
 
     async def sync_course(self, session: AsyncSession, course_id: str) -> dict:
         run = await cache.start_sync_run(session, resource="course", course_id=course_id)
@@ -347,7 +372,7 @@ class ClassroomSyncService:
         # commit/soft-delete error leaves the session usable for the next course.
         if settings.ATTACHMENT_SYNC_ENABLED:
             try:
-                await attachment_sync_service.sync_course_attachments(session, course_id)
+                await attachment_sync_service.sync_course_attachments(session, course_id, run_id)
             except Exception:
                 logger.exception(
                     "Attachment sync failed for course %s", course_id, extra={"job_id": run_id}

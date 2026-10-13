@@ -10,8 +10,8 @@ import discord
 from discord.ext import commands
 
 from src.config import settings, setup_logging
-from src.database import init_db, engine, async_session_factory
-from src.repositories import bot_status
+from src.database import init_db, engine, async_session_factory, seed_bot_defaults
+from src.repositories import bot_settings, bot_status, guild_bindings
 from src.sync_service import ClassroomSyncService
 
 # Setup logger configuration
@@ -19,9 +19,11 @@ logger = setup_logging()
 
 
 class ClassroomSyncBot(commands.Bot):
-    """Production-grade Discord Bot representing the central interface managing Google Classroom connections."""
+    """One user's Discord bot: it serves that user's Classroom data, commands
+    and message templates in the servers it is in."""
 
-    def __init__(self) -> None:
+    def __init__(self, owner_user_id: int) -> None:
+        self.owner_user_id = owner_user_id
         # Default intents cover slash commands; message_content is required so the
         # custom-command cog can read "!name" prefix messages (must also be enabled
         # in the Discord Developer Portal).
@@ -41,8 +43,8 @@ class ClassroomSyncBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         """Hook called by discord.py once internal websocket state is ready, before login."""
-        # 1. Initialize SQLite Database schemas asynchronously
-        await init_db()
+        # 1. Make sure the owner has the default commands and message templates
+        await seed_bot_defaults(self.owner_user_id)
 
         # 2. Load Bot Cogs (Manual instantiation bypasses filesystem dynamic loading issues)
         from src.cogs.classroom import ClassroomCog
@@ -73,12 +75,12 @@ class ClassroomSyncBot(commands.Bot):
         logger.info(f"Background Sync Daemon scheduled to check for classroom updates every {interval} minutes.")
 
     async def _poll_interval_minutes(self) -> int:
-        """Read the WebUI-editable poll interval from the DB (env default fallback)."""
+        """Read the owner's WebUI-editable poll interval from the DB (env default fallback)."""
         try:
-            from src.repositories.app_settings import get_scheduler_setting
+            from src.repositories.app_settings import get_user_scheduler_setting
 
             async with async_session_factory() as session:
-                row = await get_scheduler_setting(session)
+                row = await get_user_scheduler_setting(session, self.owner_user_id)
             return row.poll_interval_minutes
         except Exception:  # noqa: BLE001 — never block startup on a settings read
             logger.warning("Failed to read poll interval; using env default", exc_info=True)
@@ -133,7 +135,7 @@ class ClassroomSyncBot(commands.Bot):
         """Best-effort write of the bot status to the shared DB."""
         try:
             async with async_session_factory() as session:
-                await bot_status.record_heartbeat(session, status, detail)
+                await bot_status.record_heartbeat(session, self.owner_user_id, status, detail)
         except Exception:
             logger.exception("Failed to write bot heartbeat")
 
@@ -183,35 +185,43 @@ class ClassroomSyncBot(commands.Bot):
             await self._sync_discord_inventory()
 
     async def _sync_discord_inventory(self) -> None:
-        """Snapshot the bot's guilds + text channels + roles into the DB for the WebUI."""
+        """Snapshot this bot's guilds + text channels + roles into the DB for the WebUI."""
         try:
-            rows = [
-                {
-                    "guild_id": guild.id,
-                    "guild_name": guild.name,
-                    "channel_id": channel.id,
-                    "channel_name": channel.name,
-                }
-                for guild in self.guilds
-                for channel in guild.text_channels
-            ]
-            # Mentionable roles only: skip @everyone (the default role) and managed
-            # (bot/integration) roles, which aren't useful as a notify target.
-            role_rows = [
-                {
-                    "guild_id": guild.id,
-                    "guild_name": guild.name,
-                    "role_id": role.id,
-                    "role_name": role.name,
-                }
-                for guild in self.guilds
-                for role in guild.roles
-                if not role.is_default() and not role.managed
-            ]
-            from src.repositories import discord_inventory
+            from src.repositories import discord_inventory, guild_bindings
             async with async_session_factory() as session:
-                await discord_inventory.replace_inventory(session, rows)
-                await discord_inventory.replace_roles_inventory(session, role_rows)
+                # A server belongs to the user whose bot is in it. One already
+                # held by another user's bot stays theirs and is left alone.
+                mine = [
+                    guild for guild in self.guilds
+                    if await guild_bindings.bind(session, guild.id, self.owner_user_id)
+                ]
+                rows = [
+                    {
+                        "guild_id": guild.id,
+                        "guild_name": guild.name,
+                        "channel_id": channel.id,
+                        "channel_name": channel.name,
+                    }
+                    for guild in mine
+                    for channel in guild.text_channels
+                ]
+                # Mentionable roles only: skip @everyone (the default role) and managed
+                # (bot/integration) roles, which aren't useful as a notify target.
+                role_rows = [
+                    {
+                        "guild_id": guild.id,
+                        "guild_name": guild.name,
+                        "role_id": role.id,
+                        "role_name": role.name,
+                    }
+                    for guild in mine
+                    for role in guild.roles
+                    if not role.is_default() and not role.managed
+                ]
+                # Servers the bot has left drop out of the inventory too.
+                scope = await guild_bindings.guilds_of(session, self.owner_user_id)
+                await discord_inventory.replace_inventory(session, scope, rows)
+                await discord_inventory.replace_roles_inventory(session, scope, role_rows)
         except Exception:  # noqa: BLE001 — inventory sync must never break the bot
             logger.warning("Failed to sync Discord guild/channel inventory", exc_info=True)
 
@@ -255,18 +265,99 @@ class ClassroomSyncBot(commands.Bot):
             self.scheduler.shutdown(wait=False)
             logger.info("Background synchronization scheduler suspended.")
 
-        # Close standard database engine pools
-        await engine.dispose()
-        logger.info("Disposed SQLModel database connection pools.")
-
         # Close client session
         await super().close()
         logger.info("Discord Bot connection closed gracefully. Bye!")
 
 
+# How often the bot process re-reads who has a bot token (seconds).
+RECONCILE_SECONDS = 30
+
+
+async def _adopt_env_token() -> None:
+    """Upgrade path from one shared bot: ``DISCORD_BOT_TOKEN`` becomes the bot
+    of the user its servers belong to, so it keeps running. Does nothing once
+    anyone has a bot of their own."""
+    token = settings.DISCORD_BOT_TOKEN
+    if not token or token == "your_discord_bot_token_here":
+        return
+    async with async_session_factory() as session:
+        if await bot_settings.tokens(session):
+            return
+        owners = set((await guild_bindings.all_bindings(session)).values())
+        if len(owners) != 1:
+            return
+        owner = owners.pop()
+        await bot_settings.set_token(session, owner, token, None)
+    logger.warning(
+        "DISCORD_BOT_TOKEN is now the bot of user %s (Discord bot page); "
+        "the variable is no longer read once a user has a bot.", owner,
+    )
+
+
+async def _reconcile(running: dict, failed: dict) -> None:
+    """Start, stop or restart bots so one runs for every user with a token.
+
+    ``running`` is ``{owner: (token, bot, task)}``; ``failed`` remembers the
+    token Discord refused per owner, so it is not retried until it changes.
+    """
+    async with async_session_factory() as session:
+        wanted = await bot_settings.tokens(session)
+        for row in await bot_status.list_heartbeats(session):
+            if row.id not in wanted:  # token removed: that bot no longer exists
+                await bot_status.clear_heartbeat(session, row.id)
+
+    for owner, (token, bot, task) in list(running.items()):
+        if task.done():
+            del running[owner]
+            error = None if task.cancelled() else task.exception()
+            if error is not None:
+                # Bad token, or the message-content intent is off in the Developer Portal.
+                failed[owner] = token
+                logger.error("Bot of user %s stopped: %s", owner, error)
+                await bot.close()  # release its HTTP session and scheduler
+                if wanted.get(owner) == token:
+                    await bot._write_heartbeat("error", str(error)[:300])
+        elif wanted.get(owner) != token:
+            del running[owner]
+            await bot.close()
+
+    for owner, token in wanted.items():
+        if owner in running or failed.get(owner) == token:
+            continue
+        failed.pop(owner, None)
+        bot = ClassroomSyncBot(owner)
+        running[owner] = (token, bot, asyncio.create_task(bot.start(token)))
+        logger.info("Starting the bot of user %s", owner)
+
+
+async def run_bots() -> None:
+    """Run one Discord connection per user who has a bot token, following
+    WebUI changes without a restart."""
+    from src import maintenance
+
+    await init_db()
+    await _adopt_env_token()
+    running: dict = {}
+    failed: dict = {}
+    try:
+        while True:
+            # A restore is swapping the SQLite file: leave the database alone.
+            if not maintenance.is_active():
+                try:
+                    await _reconcile(running, failed)
+                except Exception:  # noqa: BLE001 — a DB hiccup must not stop the bots
+                    logger.exception("Could not reconcile bots; will retry")
+            await asyncio.sleep(RECONCILE_SECONDS)
+    finally:
+        for _, bot, _ in running.values():
+            await bot.close()
+        await engine.dispose()
+        logger.info("Disposed SQLModel database connection pools.")
+
+
 def start_bot() -> None:
-    """Boots the main bot instance safely."""
-    # Pre-flight environment verify checks
+    """Boots the bot process safely."""
     if not settings.BOT_ENABLED:
         logger.warning("BOT_ENABLED=false. Discord bot runtime is disabled; container will stay idle for local development.")
         try:
@@ -276,13 +367,8 @@ def start_bot() -> None:
             logger.info("Disabled bot runtime interrupted.")
         return
 
-    if not settings.DISCORD_BOT_TOKEN or settings.DISCORD_BOT_TOKEN == "your_discord_bot_token_here":
-        logger.critical("DISCORD_BOT_TOKEN environment variable is not defined or is set to placeholder! Aborting start.")
-        sys.exit(1)
-
-    bot = ClassroomSyncBot()
     try:
-        bot.run(settings.DISCORD_BOT_TOKEN)
+        asyncio.run(run_bots())
     except KeyboardInterrupt:
         logger.info("Terminated via keyboard interrupt.")
     except Exception as start_err:

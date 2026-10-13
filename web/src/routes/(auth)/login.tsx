@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { createFileRoute } from '@tanstack/react-router'
+import { BASE } from '@/lib/area'
 import { SignIn } from '@/features/auth/sign-in'
+import { AdminSignIn } from '@/features/auth/sign-in/admin-sign-in'
 
 const searchSchema = z.object({
   redirect: z.string().optional(),
@@ -10,6 +12,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/(auth)/login')({
-  component: SignIn,
+  // Under /admin this is the administrators' password form (/admin/login).
+  component: BASE ? AdminSignIn : SignIn,
   validateSearch: searchSchema,
 })

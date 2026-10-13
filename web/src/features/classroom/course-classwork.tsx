@@ -229,9 +229,9 @@ export function CourseClassworkPage({
                 variant={isActive ? 'default' : 'outline'}
                 size='sm'
                 onClick={() => setSelectedTopicId(opt.value)}
-                className='h-8'
+                className='h-8 max-w-full'
               >
-                {opt.label}
+                <span className='truncate'>{opt.label}</span>
                 {typeof opt.count === 'number' && (
                   <span className='ml-1.5 rounded bg-background/60 px-1 text-[10px] tabular-nums'>
                     {opt.count}
@@ -303,7 +303,9 @@ export function CourseClassworkPage({
                       data-state={isSelected ? 'selected' : undefined}
                       className='cursor-pointer'
                     >
-                      <TableCell className='font-medium'>{String(row.title || '—')}</TableCell>
+                      <TableCell className='max-w-56 truncate font-medium sm:max-w-md' title={String(row.title || '')}>
+                        {String(row.title || '—')}
+                      </TableCell>
                       <TableCell>
                         <span
                           className={
@@ -442,7 +444,7 @@ function ClassworkDetail({
 
       <div className='flex-1 space-y-4 overflow-auto p-3'>
         {description ? (
-          <div className='text-sm whitespace-pre-wrap'>{description}</div>
+          <div className='text-sm wrap-anywhere whitespace-pre-wrap'>{description}</div>
         ) : (
           <p className='text-muted-foreground text-sm italic'>{t('classwork.noDescription')}</p>
         )}

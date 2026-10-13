@@ -120,24 +120,7 @@ async def _migrate_ownership(conn) -> None:
                 )
 
     for name in legacy:
-        table = SQLModel.metadata.tables[name]
-        old = f"{name}__legacy"
-        await conn.execute(text(f"ALTER TABLE {name} RENAME TO {old}"))
-        # Index names are global in SQLite and stay attached to the renamed table.
-        indexes = await conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=:t AND sql IS NOT NULL"),
-            {"t": old},
-        )
-        for (index_name,) in indexes.fetchall():
-            await conn.execute(text(f'DROP INDEX "{index_name}"'))
-        await conn.run_sync(lambda sync_conn, table=table: table.create(sync_conn))
-        old_columns = {row[1] for row in (await conn.execute(text(f"PRAGMA table_info({old})"))).fetchall()}
-        shared = ", ".join(c.name for c in table.columns if c.name in old_columns)
-        await conn.execute(
-            text(f"INSERT INTO {name} ({OWNER_KEY}, {shared}) SELECT :owner, {shared} FROM {old}"),
-            {"owner": owner_id},
-        )
-        await conn.execute(text(f"DROP TABLE {old}"))
+        await _rebuild_with_owner(conn, name, owner_id)
 
     if owner_id is None:
         return
@@ -170,6 +153,51 @@ async def _migrate_ownership(conn) -> None:
     )
 
 
+async def _rebuild_with_owner(conn, name: str, owner_id: Optional[int]) -> None:
+    """Recreate table ``name`` from its model and copy the old rows in as ``owner_id``'s."""
+    table = SQLModel.metadata.tables[name]
+    old = f"{name}__legacy"
+    await conn.execute(text(f"ALTER TABLE {name} RENAME TO {old}"))
+    # Index names are global in SQLite and stay attached to the renamed table.
+    indexes = await conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=:t AND sql IS NOT NULL"),
+        {"t": old},
+    )
+    for (index_name,) in indexes.fetchall():
+        await conn.execute(text(f'DROP INDEX "{index_name}"'))
+    await conn.run_sync(lambda sync_conn, table=table: table.create(sync_conn))
+    old_columns = {row[1] for row in (await conn.execute(text(f"PRAGMA table_info({old})"))).fetchall()}
+    shared = ", ".join(c.name for c in table.columns if c.name in old_columns)
+    await conn.execute(
+        text(f"INSERT INTO {name} ({OWNER_KEY}, {shared}) SELECT :owner, {shared} FROM {old}"),
+        {"owner": owner_id},
+    )
+    await conn.execute(text(f"DROP TABLE {old}"))
+
+
+async def _migrate_bot_ownership(conn) -> None:
+    """One-time upgrade from one shared bot to one bot per user.
+
+    The shared bot's commands and message templates go to the user its servers
+    belong to (else the first user), who keeps the bot after adding its token.
+    With no user at all the rows are only seeds, and are dropped.
+    """
+    legacy = [t for t in ("bot_commands", "bot_messages") if not await _has_column(conn, t, OWNER_KEY)]
+    if not legacy:
+        return
+    owner_id = (await conn.execute(
+        text("SELECT user_id FROM discord_guild_bindings ORDER BY created_at LIMIT 1")
+    )).scalar()
+    if owner_id is None:
+        owner_id = (await conn.execute(text("SELECT MIN(id) FROM users"))).scalar()
+    for name in legacy:
+        if owner_id is None:
+            await conn.execute(text(f"DELETE FROM {name}"))
+        await _rebuild_with_owner(conn, name, owner_id)
+    # The single heartbeat row belonged to no one; each bot writes its own.
+    await conn.execute(text("DELETE FROM bot_heartbeat"))
+
+
 async def init_db() -> None:
     """Initializes the SQLite database, creating all tables if they do not exist."""
     try:
@@ -193,6 +221,7 @@ async def init_db() -> None:
             _added_columns: dict[str, list[tuple[str, str]]] = {
                 "classroom_sync_runs": [
                     ("message", "TEXT"), ("percent", "INTEGER"), (OWNER_KEY, "INTEGER"),
+                    ("external_attachments", "INTEGER"),
                 ],
                 # Whose sync wrote the change (poller rows have no run to derive it from).
                 "classroom_sync_changes": [(OWNER_KEY, "INTEGER")],
@@ -231,6 +260,8 @@ async def init_db() -> None:
                 # Bot poll interval (cache->Discord), editable in the WebUI.
                 "scheduler_settings": [("poll_interval_minutes", "INTEGER")],
                 "classroom_attachments": [("opencloud_path", "TEXT")],
+                "opencloud_user_settings": [("provider", "TEXT DEFAULT 'opencloud' NOT NULL")],
+                "google_calendar_events": [("description", "TEXT"), ("location", "TEXT")],
             }
             for table_name, columns in _added_columns.items():
                 # Skip tables that don't exist yet (create_all already made new ones complete).
@@ -270,14 +301,14 @@ async def init_db() -> None:
                 ))
             # Runs last: the rebuild copies columns the steps above may have just added.
             await _migrate_ownership(conn)
+            await _migrate_bot_ownership(conn)
             for table in ("classroom_sync_runs", "classroom_sync_changes"):
                 await conn.execute(text(
                     f"CREATE INDEX IF NOT EXISTS ix_{table}_{OWNER_KEY} ON {table} ({OWNER_KEY})"
                 ))
 
         # Seed DB-as-source defaults (idempotent: only inserts what's missing).
-        await _seed_bot_messages()
-        await _seed_builtin_commands()
+        # Bot commands and messages are per user: see seed_bot_defaults().
         await _seed_roles()
         logger.info("Database initialized successfully.")
     except Exception as e:
@@ -285,7 +316,15 @@ async def init_db() -> None:
         raise e
 
 
-async def _seed_bot_messages() -> None:
+async def seed_bot_defaults(owner_user_id: int) -> None:
+    """Give ``owner_user_id``'s bot any default message template and built-in
+    command it is missing. Called when their bot starts and when they open the
+    bot pages, so it must stay cheap and idempotent."""
+    await _seed_bot_messages(owner_user_id)
+    await _seed_builtin_commands(owner_user_id)
+
+
+async def _seed_bot_messages(owner_user_id: int) -> None:
     """Insert any missing default message templates so the DB is the source of truth.
 
     Never overwrites existing rows, so WebUI edits survive restarts.
@@ -294,8 +333,10 @@ async def _seed_bot_messages() -> None:
     from src.message_templates import DEFAULT_MESSAGES
     from src.models import BotMessage
 
-    async with async_session_factory() as session:
-        existing = {r.key for r in (await session.execute(select(BotMessage))).scalars().all()}
+    async with owned_session(owner_user_id) as session:
+        existing = {r.key for r in (await session.execute(
+            select(BotMessage).where(BotMessage.owner_user_id == owner_user_id)
+        )).scalars().all()}
         added = False
         for key, (template, description) in DEFAULT_MESSAGES.items():
             if key not in existing:
@@ -305,7 +346,7 @@ async def _seed_bot_messages() -> None:
             await session.commit()
 
 
-async def _seed_builtin_commands() -> None:
+async def _seed_builtin_commands(owner_user_id: int) -> None:
     """Seed the code-defined /classroom slash commands into the unified registry.
 
     Each row binds to its code callback via ``handler_key`` (the command name).
@@ -325,9 +366,11 @@ async def _seed_builtin_commands() -> None:
         return
 
     group = ClassroomCog.classroom
-    async with async_session_factory() as session:
+    async with owned_session(owner_user_id) as session:
         rows = (await session.execute(
-            select(BotCommand).where(BotCommand.kind == "builtin")
+            select(BotCommand).where(
+                BotCommand.kind == "builtin", BotCommand.owner_user_id == owner_user_id
+            )
         )).scalars().all()
         existing = {r.handler_key for r in rows}
         added = False

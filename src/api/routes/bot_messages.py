@@ -1,8 +1,8 @@
-"""Full CRUD API for WebUI-editable bot response templates (``BotMessage``).
+"""Full CRUD API for the response templates of the caller's own bot (``BotMessage``).
 
-The ``bot_messages`` table is the source of truth (seeded from
-``src/message_templates.py`` on init). Admins can add, edit or delete any
-message key here; the bot reads the same table when rendering. Deleting a key
+The ``bot_messages`` table is the source of truth (seeded per user from
+``src/message_templates.py``). A user can add, edit or delete any of their
+message keys here; their bot reads the same rows when rendering. Deleting a key
 that the code still references falls back to the in-code default.
 """
 
@@ -15,9 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import get_db_session
+from src.api.deps import get_owned_session
+from src.database import seed_bot_defaults
 from src.message_templates import DEFAULT_MESSAGES
 from src.repositories import bot_messages as repo
+from src.repositories.classroom_cache import owner_of
 
 router = APIRouter(prefix="/bot/messages", tags=["bot-messages"])
 
@@ -47,7 +49,8 @@ def _serialize(m) -> dict:
 
 
 @router.get("")
-async def list_messages(session: AsyncSession = Depends(get_db_session)) -> dict:
+async def list_messages(session: AsyncSession = Depends(get_owned_session)) -> dict:
+    await seed_bot_defaults(owner_of(session))
     items = [_serialize(m) for m in await repo.list_messages(session)]
     items.sort(key=lambda i: i["key"])
     return {"items": items, "total": len(items)}
@@ -55,7 +58,7 @@ async def list_messages(session: AsyncSession = Depends(get_db_session)) -> dict
 
 @router.post("", status_code=201)
 async def create_message(
-    body: MessageCreate, session: AsyncSession = Depends(get_db_session)
+    body: MessageCreate, session: AsyncSession = Depends(get_owned_session)
 ) -> dict:
     if not KEY_RE.match(body.key):
         raise HTTPException(
@@ -70,7 +73,7 @@ async def create_message(
 
 @router.put("/{key}")
 async def set_message(
-    key: str, body: MessageUpdate, session: AsyncSession = Depends(get_db_session)
+    key: str, body: MessageUpdate, session: AsyncSession = Depends(get_owned_session)
 ) -> dict:
     saved = await repo.set_message(session, key, body.template, body.description)
     return _serialize(saved)
@@ -78,7 +81,7 @@ async def set_message(
 
 @router.delete("/{key}")
 async def delete_message(
-    key: str, session: AsyncSession = Depends(get_db_session)
+    key: str, session: AsyncSession = Depends(get_owned_session)
 ) -> dict:
     await repo.delete_message(session, key)
     # A code-referenced key falls back to its in-code default after deletion.

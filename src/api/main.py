@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from src import __version__
 from src.api.deps import require_module
 from src.api.routes import audit, auth, backup, bot, bot_commands, bot_messages, courses, discord_meta, health, links, roles, scheduler, search, sync, todos, users
-from src.api.services.scheduler_service import SchedulerService
+from src.api.services.scheduler_service import SYNC_TICK_MINUTES, SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
 from src import maintenance
@@ -60,7 +60,8 @@ def create_app() -> FastAPI:
     app.include_router(bot.router, prefix="/api", dependencies=guard("bot"))
     app.include_router(bot_commands.router, prefix="/api", dependencies=guard("bot"))
     app.include_router(bot_messages.router, prefix="/api", dependencies=guard("bot"))
-    app.include_router(scheduler.router, prefix="/api", dependencies=guard("scheduler"))
+    # A user's own sync schedule: part of "sync", not a permission of its own.
+    app.include_router(scheduler.router, prefix="/api", dependencies=guard("sync"))
     app.include_router(audit.router, prefix="/api", dependencies=guard("audit"))
     app.include_router(backup.router, prefix="/api", dependencies=guard("backup"))
     app.include_router(users.router, prefix="/api", dependencies=guard("users"))
@@ -140,7 +141,8 @@ def create_app() -> FastAPI:
                     "Recovered %d interrupted backup(s) and %d restore(s)",
                     stuck_backups, stuck_restores,
                 )
-            await scheduler_service.apply_persisted_setting(session)
+            # Schedules are per user: one tick checks whose sync is due.
+            scheduler_service.apply(interval_minutes=SYNC_TICK_MINUTES, enabled=True)
             await scheduler_service.apply_persisted_audit_retention(session)
             await scheduler_service.apply_persisted_backup(session)
             from src.repositories import audit_log

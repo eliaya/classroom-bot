@@ -11,6 +11,7 @@ from src.api.deps import get_owned_session
 from src.config import settings
 from src.models import ClassroomAttachment
 from src.repositories import classroom_cache as cache
+from src.repositories import google_connections
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -54,6 +55,50 @@ async def list_courses(session: AsyncSession = Depends(get_owned_session)) -> di
             for c in courses
         ],
         "total": len(courses),
+    }
+
+
+# Declared before "/{course_id}" so "posts" is not read as a course id.
+@router.get("/posts")
+async def list_posts(
+    start: str = Query(description="ISO-8601 UTC, inclusive"),
+    end: str = Query(description="ISO-8601 UTC, exclusive"),
+    session: AsyncSession = Depends(get_owned_session),
+) -> dict:
+    """Announcements, coursework and materials of all courses updated in a time range (dashboard calendar)."""
+    items = await cache.list_posts_between(session, start, end)
+    return {"items": items, "count": len(items)}
+
+
+# Declared before "/{course_id}" as well.
+@router.get("/people")
+async def list_people(session: AsyncSession = Depends(get_owned_session)) -> dict:
+    """The teachers and students of all courses (courses table)."""
+    people = await cache.list_cached_people(session)
+    return {
+        "items": [
+            {"course_id": p.course_id, "user_id": p.user_id, "role": p.role,
+             "full_name": p.full_name, "photo_url": p.photo_url}
+            for p in people
+        ],
+    }
+
+
+# Declared before "/{course_id}" as well.
+@router.get("/calendar-events")
+async def list_calendar_events(
+    start: str = Query(description="ISO-8601 UTC, inclusive"),
+    end: str = Query(description="ISO-8601 UTC, exclusive"),
+    session: AsyncSession = Depends(get_owned_session),
+) -> dict:
+    """The caller's Google Calendar events in a time range (calendar pages), as
+    saved by their last full sync. ``granted`` is false until the user has
+    allowed calendar access by connecting Google again; events appear after
+    the next sync."""
+    google_service = await google_connections.service_for(session)
+    return {
+        "granted": google_service.has_calendar_scope(),
+        "items": await cache.list_calendar_events(session, start, end),
     }
 
 
