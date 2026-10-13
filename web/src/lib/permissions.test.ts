@@ -9,6 +9,17 @@ describe('can', () => {
     expect(can([], 'sync:view')).toBe(false)
     expect(can(['*'], 'backup:use')).toBe(true)
   })
+
+  it('keeps the wildcard out of the pages users have for their own data', () => {
+    for (const key of ['courses:view', 'todos:view', 'sync:use', 'links:use', 'bot:view']) {
+      expect(can(['*'], key)).toBe(false)
+      expect(can(['*', key], key)).toBe(true)
+    }
+    for (const path of ['/courses/1/stream', '/calendar', '/sync', '/bot', '/settings/opencloud']) {
+      expect(canOpen(['*'], path)).toBe(false)
+    }
+    expect(canOpen(['*'], '/settings/users')).toBe(true)
+  })
 })
 
 describe('requiredPermissions', () => {
@@ -23,6 +34,11 @@ describe('requiredPermissions', () => {
     expect(requiredPermissions('/')).toBeNull()
     expect(requiredPermissions('/settings')).toBeNull()
     expect(requiredPermissions('/settings/language')).toBeNull()
+  })
+
+  it('keeps the setup guide for administrators', () => {
+    expect(canOpen(['*'], '/settings/setup')).toBe(true)
+    expect(canOpen(['courses:view', 'sync:use'], '/settings/setup')).toBe(false)
   })
 
   it('matches whole path segments only', () => {
@@ -62,7 +78,9 @@ describe('visibleNav', () => {
     expect(nav[0].items.map((i) => i.title)).toEqual(['dashboard', 'courses'])
   })
 
-  it('keeps everything for the wildcard', () => {
-    expect(visibleNav(groups, ['*'])).toEqual(groups)
+  it('leaves the wildcard the pages that are not a user\'s own', () => {
+    const nav = visibleNav(groups, ['*'])
+    expect(nav).toHaveLength(1)
+    expect(nav[0].items.map((i) => i.title)).toEqual(['dashboard', 'audit'])
   })
 })

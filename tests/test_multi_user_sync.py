@@ -123,3 +123,46 @@ async def test_announcement_poll_visits_each_users_own_courses(google):
         assert sorted(a.id for a in await cache.list_cached_announcements(session, "c1")) == ["a1", "a2"]
     async with database.owned_session(2) as session:
         assert [a.id for a in await cache.list_cached_announcements(session, "c2")] == ["a1"]
+
+
+@pytest.mark.asyncio
+async def test_each_user_syncs_on_their_own_schedule(google, sign_in, monkeypatch):
+    import src.database as db
+    from datetime import timedelta
+    from src.config import now_jst
+    from src.models import ClassroomSyncRun
+    from src.repositories import app_settings
+
+    await _users()
+    synced: list = []
+
+    async def fake_sync(user_id: int) -> None:
+        synced.append(user_id)
+
+    monkeypatch.setattr(sync_routes, "_run_full_sync", fake_sync)
+    async with db.async_session_factory() as s:
+        s.add_all([User(id=4, email="off@example.com"), GoogleConnection(user_id=4, token_file="tokens/4.json")])
+        # 1: synced 10 minutes ago, every 30 minutes -> not due.
+        # 2: same last sync, every 5 minutes -> due.
+        # 4: switched their schedule off.
+        await app_settings.update_user_scheduler_setting(s, 1, interval_minutes=30, enabled=True)
+        await app_settings.update_user_scheduler_setting(s, 2, interval_minutes=5, enabled=True)
+        await app_settings.update_user_scheduler_setting(s, 4, interval_minutes=5, enabled=False)
+        for user_id in (1, 2, 4):
+            s.add(ClassroomSyncRun(owner_user_id=user_id, resource="all", status="success",
+                                   started_at=now_jst() - timedelta(minutes=10)))
+        await s.commit()
+
+    await sync_routes.run_scheduled_sync()
+    assert synced == [2]
+
+    # Each user sees and changes only their own schedule.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        me = await sign_in(client, permissions=["sync:view", "sync:use"], email="new@example.com")
+        mine = (await client.get("/api/scheduler")).json()
+        assert mine["job_scheduled"] is True and mine["next_run_time"]  # never synced: due now
+        saved = (await client.patch("/api/scheduler", json={"enabled": False, "poll_interval_minutes": 3})).json()
+        assert saved["enabled"] is False and saved["next_run_time"] is None
+    async with db.async_session_factory() as s:
+        assert (await app_settings.get_user_scheduler_setting(s, me)).poll_interval_minutes == 3
+        assert (await app_settings.get_user_scheduler_setting(s, 2)).enabled is True

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 import src.database as database
 from src.message_templates import DEFAULT_MESSAGES, default_template
@@ -22,7 +22,9 @@ CACHE_TTL_SECONDS = 30
 
 
 class MessageStore:
-    def __init__(self) -> None:
+    def __init__(self, owner_user_id: Optional[int] = None) -> None:
+        # Whose templates to read; without an owner only the defaults apply.
+        self._owner = owner_user_id
         self._messages: Dict[str, str] = {}
         self._at: float = 0.0
 
@@ -51,8 +53,10 @@ class MessageStore:
 
     async def _refresh(self, now: float) -> None:
         try:
-            async with database.async_session_factory() as session:
-                rows = await repo.list_messages(session)
+            rows = []
+            if self._owner is not None:
+                async with database.owned_session(self._owner) as session:
+                    rows = await repo.list_messages(session)
             self._messages = {r.key: r.template for r in rows}
             self._at = now
         except Exception:  # noqa: BLE001 — never break a response on a DB hiccup

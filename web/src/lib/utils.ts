@@ -46,6 +46,13 @@ export function fullTimestamp(
   }).format(date)
 }
 
+/** Short weekday name for a course's `week` (1 = Mon … 7 = Sun); null for "other". */
+export function weekdayLabel(week: number | null | undefined, language: string): string | null {
+  if (!week || week > 7) return null
+  // 2024-01-01 is a Monday.
+  return new Date(2024, 0, week).toLocaleDateString(language, { weekday: 'short' })
+}
+
 export function sleep(ms: number = 1000) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }

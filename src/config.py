@@ -16,6 +16,8 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    # Legacy: each user now adds their own bot token in the web app. Read once,
+    # on upgrade, to keep the previously shared bot running (see main._adopt_env_token).
     DISCORD_BOT_TOKEN: str = ""
     BOT_ENABLED: bool = True
     # When set, dynamic custom slash commands are registered to this guild and

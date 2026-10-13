@@ -1,39 +1,43 @@
-"""Persistence for user-defined Discord custom commands (``BotCommand``).
+"""Persistence for the commands of a user's Discord bot (``BotCommand``).
 
 The WebUI performs CRUD via the API; the bot process reads enabled rows to
 respond to ``trigger`` + ``name`` messages. API and bot are separate processes
 sharing the SQLite DB, so the bot picks up changes on its next refresh.
+
+Every function works on the commands of the session's owner
+(``database.owned_session``); new rows are stamped with that owner on flush.
 """
 
 from __future__ import annotations
 
 from typing import List, Optional
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst
 from src.models import BotCommand
+from src.repositories.classroom_cache import owned, owner_of
 
 
 async def list_commands(session: AsyncSession) -> List[BotCommand]:
-    result = await session.execute(select(BotCommand).order_by(BotCommand.name))
+    result = await session.execute(owned(session, BotCommand).order_by(BotCommand.name))
     return list(result.scalars().all())
 
 
 async def list_enabled(session: AsyncSession) -> List[BotCommand]:
     result = await session.execute(
-        select(BotCommand).where(BotCommand.enabled == True)  # noqa: E712 — SQLModel filter
+        owned(session, BotCommand).where(BotCommand.enabled == True)  # noqa: E712 — SQLModel filter
     )
     return list(result.scalars().all())
 
 
 async def get_command(session: AsyncSession, cmd_id: int) -> Optional[BotCommand]:
-    return await session.get(BotCommand, cmd_id)
+    cmd = await session.get(BotCommand, cmd_id)
+    return cmd if cmd is not None and cmd.owner_user_id == owner_of(session) else None
 
 
 async def get_by_name(session: AsyncSession, name: str) -> Optional[BotCommand]:
-    result = await session.execute(select(BotCommand).where(BotCommand.name == name))
+    result = await session.execute(owned(session, BotCommand).where(BotCommand.name == name))
     return result.scalars().first()
 
 

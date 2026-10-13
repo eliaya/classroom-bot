@@ -326,15 +326,17 @@ class ClassroomSyncRun(SQLModel, table=True):
     message: Optional[str] = Field(default=None)  # e.g. current activity for live progress
     percent: Optional[int] = Field(default=None)  # 0-100 live progress percentage
     error_message: Optional[str] = None
+    # Attachments this run moved to external storage (not kept on the server).
+    external_attachments: Optional[int] = None
     started_at: datetime = Field(default_factory=now_jst)
     finished_at: Optional[datetime] = None
 
 
 class SchedulerSetting(SQLModel, table=True):
-    """Singleton row (id=1) holding the persisted SchedulerService config.
+    """Singleton row (id=1): the schedule every user starts with, from before
+    schedules were per user (see ``UserSchedulerSetting``).
 
-    Seeded from CLASSROOM_SYNC_INTERVAL_MINUTES on first run; afterwards the
-    WebUI is the source of truth so changes survive restarts.
+    Seeded from CLASSROOM_SYNC_INTERVAL_MINUTES on first run.
     """
     __tablename__ = "scheduler_settings"
 
@@ -343,6 +345,49 @@ class SchedulerSetting(SQLModel, table=True):
     # How often the bot process polls the cache and posts new items to Discord
     # (runs in a separate process from the cache sync above). Seeded from
     # SYNC_INTERVAL_MINUTES; the bot reconciles it live on its heartbeat.
+    poll_interval_minutes: int = Field(default=10)
+    enabled: bool = Field(default=True)
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
+class GoogleCalendarEvent(SQLModel, table=True):
+    """One event of a user's Google Calendar, saved by that user's full sync
+    (the whole window is replaced each time)."""
+    __tablename__ = "google_calendar_events"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "calendar_id", "id", name="uq_calendar_event"),
+    )
+
+    db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
+    id: str
+    calendar_id: str
+    calendar: str = ""  # the calendar's name
+    title: str = ""
+    all_day: bool = False
+    # As Google gives them: a date for all-day events (end exclusive), else a
+    # date-time with its own UTC offset.
+    start: str
+    end: Optional[str] = None
+    # The same instants as ISO-8601 UTC text, for range queries (an all-day
+    # date counts as midnight UTC).
+    start_utc: str = Field(index=True)
+    end_utc: str
+    link: Optional[str] = None
+    description: Optional[str] = None  # may hold HTML, as typed in Google Calendar
+    location: Optional[str] = None
+    synced_at: datetime = Field(default_factory=now_jst)
+
+
+class UserSchedulerSetting(SQLModel, table=True):
+    """One user's own sync schedule. A user without a row follows the legacy
+    ``SchedulerSetting`` values until they save their own."""
+    __tablename__ = "scheduler_user_settings"
+
+    owner_user_id: int = Field(primary_key=True)
+    # How often this user's Classroom data is synced from Google (0 = never).
+    interval_minutes: int = Field(default=30)
+    # How often this user's bot posts new items to Discord.
     poll_interval_minutes: int = Field(default=10)
     enabled: bool = Field(default=True)
     updated_at: datetime = Field(default_factory=now_jst)
@@ -381,16 +426,19 @@ class BackupSetting(SQLModel, table=True):
 
 
 class OpenCloudSetting(SQLModel, table=True):
-    """One row per user: where that user's downloaded Drive attachments are copied to.
+    """One row per user: the external storage that user's Drive attachments are
+    moved to (the table name predates the other providers).
 
-    ``webdav_url`` is the space's WebDAV URL from the OpenCloud info panel
-    (``https://host/remote.php/dav/spaces/<space-id>/``); ``app_token`` is an
-    OpenCloud app token used as the basic-auth password.
+    ``provider`` is ``opencloud`` or ``nextcloud`` (both WebDAV: ``webdav_url``
+    is the space's / user's WebDAV URL and ``app_token`` the app token or app
+    password used for basic auth) or ``gdrive`` (the user's own Google Drive,
+    through their Google connection; only ``folder`` applies).
     """
     __tablename__ = "opencloud_user_settings"
 
     owner_user_id: int = Field(primary_key=True)
     enabled: bool = Field(default=False)
+    provider: str = Field(default="opencloud")
     webdav_url: str = Field(default="")
     username: str = Field(default="")
     app_token: str = Field(default="")
@@ -443,9 +491,21 @@ class RestoreJob(SQLModel, table=True):
     completed_at: Optional[datetime] = None
 
 
+class DiscordBotSetting(SQLModel, table=True):
+    """One user's own Discord bot. The bot process runs one connection per row
+    with a token; an empty token means that user has no bot."""
+    __tablename__ = "discord_bot_user_settings"
+
+    owner_user_id: int = Field(primary_key=True)
+    token: str = ""
+    # The bot account's name, as Discord reported it when the token was saved.
+    bot_name: Optional[str] = None
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class BotHeartbeat(SQLModel, table=True):
-    """Singleton row (id=1) written by the Discord bot process so the API can
-    report live bot connection status to the dashboard."""
+    """One row per user's bot (``id`` is the owner's user id), written by the
+    bot process so the API can report that bot's live connection status."""
     __tablename__ = "bot_heartbeat"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -455,7 +515,7 @@ class BotHeartbeat(SQLModel, table=True):
 
 
 class BotCommand(SQLModel, table=True):
-    """A user-defined Discord custom command, managed via the WebUI.
+    """A Discord command of one user's bot, managed via the WebUI.
 
     The bot process reads enabled rows and replies with ``response`` when a
     message matches ``trigger`` + ``name`` (e.g. ``!hello``). Distinct from the
@@ -463,10 +523,11 @@ class BotCommand(SQLModel, table=True):
     """
     __tablename__ = "bot_commands"
     __table_args__ = (
-        UniqueConstraint("name", name="uq_bot_command_name"),
+        UniqueConstraint("owner_user_id", "name", name="uq_bot_command_owner_name"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     name: str = Field(index=True)  # command word, e.g. "hello"
     description: Optional[str] = None
     trigger: str = Field(default="!")  # invocation prefix (template commands)
@@ -485,19 +546,20 @@ class BotCommand(SQLModel, table=True):
 
 
 class BotMessage(SQLModel, table=True):
-    """A WebUI-editable bot response template.
+    """A WebUI-editable response template of one user's bot.
 
     The DB is the source of truth: ``src/message_templates.py`` defaults are
-    seeded on init and act only as a fallback if a referenced key is missing.
+    seeded per user and act only as a fallback if a referenced key is missing.
     The bot renders ``template`` with ``str.format`` using each message's
     documented placeholders.
     """
     __tablename__ = "bot_messages"
     __table_args__ = (
-        UniqueConstraint("key", name="uq_bot_message_key"),
+        UniqueConstraint("owner_user_id", "key", name="uq_bot_message_owner_key"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
     key: str = Field(index=True)  # registry key, e.g. "coursework.empty"
     template: str  # message text, supports {placeholder} interpolation
     description: Optional[str] = None  # docs the available {placeholders}
@@ -608,7 +670,7 @@ class DiscordGuildBinding(SQLModel, table=True):
 OWNED_MODELS = (
     ClassroomCourse, ClassroomAnnouncement, ClassroomCoursework, ClassroomTopic,
     ClassroomMaterial, ClassroomAttachment, ClassroomPerson, ClassroomTodo,
-    ClassroomSyncChange, ClassroomSyncRun,
+    ClassroomSyncChange, ClassroomSyncRun, BotCommand, BotMessage, GoogleCalendarEvent,
 )
 
 

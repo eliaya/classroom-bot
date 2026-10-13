@@ -3,6 +3,7 @@ import { Header } from '@/components/layout/header'
 import { TopNav } from '@/components/layout/top-nav'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { SyncButton } from '@/components/sync-button'
 import { ThemeSwitch } from '@/components/theme-switch'
 import {
   Tooltip,
@@ -45,6 +46,7 @@ export function ClassroomHeader({ topNav, fixed, title, description }: Classroom
       <Search className={topNav || title ? undefined : 'ms-auto'} />
       <ThemeSwitch />
       <ConfigDrawer />
+      <SyncButton />
       <ProfileDropdown />
     </Header>
   )

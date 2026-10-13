@@ -5,6 +5,7 @@ import { Main } from '@/components/layout/main'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClassroomHeader } from '../classroom/layout-header'
 import { BotCommandsSection } from './bot-commands-section'
+import { BotTokenCard } from './bot-token-card'
 import { LinksSection } from './links-section'
 
 const route = getRouteApi('/_authenticated/bot/')
@@ -13,7 +14,7 @@ export function BotConsolePage() {
   const { t } = useTranslation()
   const search = route.useSearch()
   const navigate = route.useNavigate()
-  // Two modules share this page: channel links (per user) and bot commands (system).
+  // Two modules share this page: channel links and the commands of your own bot.
   const canLinks = useCan('links:view')
   const canCommands = useCan('bot:view')
 
@@ -25,6 +26,7 @@ export function BotConsolePage() {
         description={t('botConsole.desc')}
       />
       <Main fluid className='flex flex-1 flex-col gap-4 sm:gap-6'>
+        {canCommands && <BotTokenCard />}
         <Tabs defaultValue={canLinks ? 'links' : 'commands'} className='flex flex-1 flex-col gap-4'>
           <TabsList>
             {canLinks && <TabsTrigger value='links'>{t('links.title')}</TabsTrigger>}

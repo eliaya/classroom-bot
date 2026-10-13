@@ -5,10 +5,9 @@ The WebUI Channel Links page uses this to show real guild/channel names and to
 populate selection dropdowns. Populated by the bot (see ``src/main.py``); empty
 when the bot is offline, in which case the WebUI falls back to manual ID entry.
 
-A server must be bound to a user before it can be linked to a course: the bot
-then acts in that server with that user's Classroom data. Users see the
-channels and roles of their own servers only, and may claim a server nobody
-has claimed yet.
+A server is bound to the user whose bot is in it (the bot does this itself),
+and that bot acts there with that user's Classroom data. Users see the
+channels and roles of their own servers only.
 """
 
 from __future__ import annotations
@@ -27,8 +26,8 @@ async def list_guilds(
     session: AsyncSession = Depends(get_db_session),
     principal: Principal = Depends(get_principal),
 ) -> dict:
-    """Servers the bot is in, as far as the caller may know about them: their
-    own, and unclaimed ones. Someone else's server is listed (as ``taken``)
+    """Servers the bots are in, as far as the caller may know about them: their
+    own, and unbound ones. Someone else's server is listed (as ``taken``)
     only for a user administrator, who may release it."""
     bindings = await guild_bindings.all_bindings(session)
     names = {c.guild_id: c.guild_name for c in await repo.list_channels(session)}
@@ -48,22 +47,6 @@ async def list_guilds(
     return {"items": items, "total": len(items)}
 
 
-@router.post("/guilds/{guild_id}/bind")
-async def bind_guild(
-    guild_id: int,
-    session: AsyncSession = Depends(get_db_session),
-    principal: Principal = Depends(get_principal),
-) -> dict:
-    """Claim a server for yourself. First come, first served."""
-    if not await guild_bindings.bind(session, guild_id, principal.user_id):
-        raise HTTPException(status_code=409, detail="This server is already connected to another user.")
-    await audit_log.record(
-        session, category="api", action="discord.guild_bound",
-        actor=principal.email, target=str(guild_id),
-    )
-    return {"guild_id": str(guild_id), "state": "mine"}
-
-
 @router.delete("/guilds/{guild_id}/bind")
 async def release_guild(
     guild_id: int,
@@ -71,7 +54,8 @@ async def release_guild(
     principal: Principal = Depends(get_principal),
 ) -> dict:
     """Release a server: its owner, or a user administrator. Its links stay but
-    stop posting until someone claims the server again."""
+    stop posting until a bot that is in the server binds it again (within a
+    minute, if its owner's bot is still there)."""
     owner = await guild_bindings.owner_of_guild(session, guild_id)
     if owner is None or (owner != principal.user_id and not principal.can("users:use")):
         raise HTTPException(status_code=404, detail="Server not found")

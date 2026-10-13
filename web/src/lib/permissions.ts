@@ -4,30 +4,48 @@ import { type NavGroup } from '@/components/layout/types'
 /** Held by the admin role: every permission. */
 const WILDCARD = '*'
 
+/**
+ * A person's own Classroom data and Discord bot. These are used in the root
+ * area only, so the wildcard does not open them: the admin area has no
+ * courses, to-dos, sync, OpenCloud or bot pages.
+ */
+const USER_MODULES: readonly string[] = ['courses', 'todos', 'sync', 'links', 'bot']
+
 /** Does this permission list grant `key` (e.g. `sync:use`)? */
 export function can(permissions: readonly string[], key: string): boolean {
-  return permissions.includes(WILDCARD) || permissions.includes(key)
+  if (permissions.includes(key)) return true
+  return permissions.includes(WILDCARD) && !USER_MODULES.includes(key.split(':')[0])
+}
+
+/** Administrators (the wildcard holders) use the `/admin` area. */
+export function isAdmin(permissions: readonly string[]): boolean {
+  return permissions.includes(WILDCARD)
 }
 
 /**
  * Page path prefix -> permissions that open it (any one is enough). The route
  * guard, sidebar, settings nav and command menu all read this one table; a
- * path matching no entry (dashboard, settings status/language/setup) is open
+ * path matching no entry (dashboard, settings status/language) is open
  * to every approved user. The API enforces the same keys on its own.
  */
 export const ROUTE_PERMISSIONS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['/courses', ['courses:view']],
-  ['/todos', ['todos:view']],
+  // Shows the courses' posts.
+  ['/calendar', ['courses:view']],
   ['/search', ['search:view']],
   ['/sync', ['sync:view']],
   ['/audit', ['audit:view']],
   // Two tabs: channel links (links) and bot commands (bot).
   ['/bot', ['links:view', 'bot:view']],
-  ['/settings/scheduler', ['scheduler:view']],
+  ['/settings/opencloud', ['sync:view']],
+  // A user's own sync schedule.
+  ['/settings/scheduler', ['sync:view']],
   ['/settings/audit', ['audit:view']],
   ['/settings/backup', ['backup:view']],
   ['/settings/users', ['users:view']],
   ['/settings/roles', ['users:view']],
+  // Server setup guide: administrators only.
+  ['/settings/setup', [WILDCARD]],
 ]
 
 /** Permissions that open `pathname` (any-of), or null when it needs none. */

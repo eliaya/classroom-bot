@@ -1,12 +1,12 @@
 import { useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { AuthLayout } from '../auth-layout'
 import { AdminAuthForm } from './components/admin-auth-form'
 
 /** The administrators' own sign-in page; everyone else uses `/login`. */
 export function AdminSignIn() {
-  const { redirect } = useSearch({ from: '/(auth)/admin/login' })
+  const { redirect } = useSearch({ from: '/(auth)/login' })
   const { t } = useTranslation()
 
   return (
@@ -18,6 +18,15 @@ export function AdminSignIn() {
         <CardContent>
           <AdminAuthForm redirectTo={redirect} />
         </CardContent>
+        <CardFooter>
+          {/* Administrators without a password sign in with Google, outside /admin. */}
+          <a
+            href={redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login'}
+            className='text-sm text-muted-foreground underline underline-offset-4 hover:text-primary'
+          >
+            {t('auth.continueWithGoogle')}
+          </a>
+        </CardFooter>
       </Card>
     </AuthLayout>
   )

@@ -3,6 +3,7 @@ import {
   Activity,
   BookOpen,
   CalendarClock,
+  Cloud,
   DatabaseBackup,
   Languages,
   ScrollText,
@@ -22,6 +23,7 @@ type NavItem = { to: string; label: string; icon: LucideIcon; exact?: boolean }
 const navItems: NavItem[] = [
   { to: '/settings', label: 'settings.nav.status', icon: Activity, exact: true },
   { to: '/settings/language', label: 'settings.nav.language', icon: Languages },
+  { to: '/settings/opencloud', label: 'settings.opencloud.title', icon: Cloud },
   { to: '/settings/scheduler', label: 'settings.nav.scheduler', icon: CalendarClock },
   { to: '/settings/audit', label: 'settings.nav.audit', icon: ScrollText },
   { to: '/settings/backup', label: 'settings.nav.backup', icon: DatabaseBackup },

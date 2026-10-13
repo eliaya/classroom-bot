@@ -2,13 +2,14 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import mimetypes
 import os
 from typing import Any, Callable, Dict, List, Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from src.config import settings
 
 logger = logging.getLogger("classroom_sync.google")
@@ -37,8 +38,18 @@ DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 # required-scope validation — push is disabled until the operator re-authorizes.
 PUSH_SCOPE = "https://www.googleapis.com/auth/classroom.push-notifications"
 
-# Full scope set requested by the OAuth setup flow (Classroom + optional Drive + push).
-SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE, PUSH_SCOPE]
+# Optional write scope for external storage in the user's own Drive: the app may
+# create files and sees only the files it created. Like the others, optional.
+DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
+
+# Optional: read the user's Google Calendar (e.g. the calendars Classroom keeps
+# per course, with coursework due dates). Like the others, not required.
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+
+# Full scope set requested by the OAuth setup flow (Classroom + optional Drive,
+# Calendar + push).
+SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE, DRIVE_FILE_SCOPE, CALENDAR_SCOPE, PUSH_SCOPE]
 
 CLASSROOM_MAX_PAGE_SIZE = 30
 
@@ -84,6 +95,19 @@ class GoogleClassroomService:
         Attachment download/export is only attempted when this is True; otherwise
         downloads are skipped so the operator can re-run setup_google_auth.py.
         """
+        return self._granted(DRIVE_SCOPE)
+
+    def has_drive_write_scope(self) -> bool:
+        """Whether attachments may be stored in the user's own Drive
+        (external storage). Granted by connecting Google again."""
+        return self._granted(DRIVE_FILE_SCOPE)
+
+    def has_calendar_scope(self) -> bool:
+        """Whether the user's Google Calendar may be read. Granted by
+        connecting Google again."""
+        return self._granted(CALENDAR_SCOPE)
+
+    def _granted(self, scope: str) -> bool:
         creds = self.creds
         if not creds:
             try:
@@ -92,7 +116,7 @@ class GoogleClassroomService:
                 creds = Credentials.from_authorized_user_file(self.token_path)
             except Exception:
                 return False
-        return DRIVE_SCOPE in (creds.scopes or [])
+        return scope in (creds.scopes or [])
 
     def has_push_scope(self) -> bool:
         """Whether the loaded credentials were granted the optional push scope.
@@ -252,6 +276,51 @@ class GoogleClassroomService:
             logger.warning("Could not read the connected account's profile", exc_info=True)
             return None
 
+    async def list_calendar_events(self, time_min: str, time_max: str) -> List[Dict[str, Any]]:
+        """Events between two RFC 3339 times on every calendar the user shows in
+        Google Calendar (their own, and the one Classroom keeps per course),
+        oldest first. Needs ``CALENDAR_SCOPE``."""
+        def _sync_list() -> List[Dict[str, Any]]:
+            if not self.creds or not self.creds.valid:
+                if not self.load_credentials():
+                    raise ConnectionError("Google Calendar API connection failed: Missing or invalid credentials.")
+            service = build("calendar", "v3", credentials=self.creds)
+            events: List[Dict[str, Any]] = []
+            calendars = service.calendarList().list(maxResults=250).execute().get("items", [])
+            for calendar in calendars:
+                if not calendar.get("selected"):
+                    continue  # hidden in the user's own Google Calendar
+                token = None
+                while True:
+                    page = service.events().list(
+                        calendarId=calendar["id"], timeMin=time_min, timeMax=time_max,
+                        singleEvents=True, orderBy="startTime", maxResults=250, pageToken=token,
+                    ).execute()
+                    for event in page.get("items", []):
+                        start, end = event.get("start") or {}, event.get("end") or {}
+                        if event.get("status") == "cancelled" or not (start.get("dateTime") or start.get("date")):
+                            continue
+                        events.append({
+                            "id": event["id"],
+                            "calendar_id": calendar["id"],
+                            "calendar": calendar.get("summaryOverride") or calendar.get("summary") or "",
+                            "title": event.get("summary") or "",
+                            # All-day events carry a date (end exclusive), the rest a date-time.
+                            "all_day": "date" in start,
+                            "start": start.get("dateTime") or start.get("date"),
+                            "end": end.get("dateTime") or end.get("date"),
+                            "link": event.get("htmlLink"),
+                            "description": event.get("description"),
+                            "location": event.get("location"),
+                        })
+                    token = page.get("nextPageToken")
+                    if not token:
+                        break
+            events.sort(key=lambda e: e["start"])
+            return events
+
+        return await asyncio.to_thread(_sync_list)
+
     async def get_drive_file_metadata(self, file_id: str) -> Optional[Dict[str, Any]]:
         """Fetch lightweight Drive file metadata (id, name, mimeType, size)."""
         def _sync_get() -> Dict[str, Any]:
@@ -284,6 +353,44 @@ class GoogleClassroomService:
         except Exception as e:
             logger.error(f"Failed to download Drive file '{file_id}': {e}")
             raise e
+
+    async def upload_to_drive(self, path: str, data: bytes, folders: Dict[str, str]) -> None:
+        """Create or replace the file at ``path`` (``Folder/Sub/name.pdf``) in the
+        user's Drive, creating the folders. ``folders`` caches folder path -> id
+        across calls. Needs ``DRIVE_FILE_SCOPE``, under which only files and
+        folders this app created are visible — so it never touches anything else."""
+        def _find(service: Any, name: str, parent: str, folder: bool) -> Optional[str]:
+            quoted = name.replace("\\", "\\\\").replace("'", "\\'")
+            query = (
+                f"name = '{quoted}' and '{parent}' in parents and trashed = false "
+                f"and mimeType {'=' if folder else '!='} '{DRIVE_FOLDER_MIME}'"
+            )
+            hits = service.files().list(q=query, fields="files(id)", pageSize=1).execute()
+            return (hits.get("files") or [{}])[0].get("id")
+
+        def _sync_upload() -> None:
+            service = self._get_drive_service()
+            *dirs, name = path.split("/")
+            parent, walked = "root", ""
+            for part in dirs:
+                walked = f"{walked}/{part}"
+                if walked not in folders:
+                    folders[walked] = _find(service, part, parent, True) or service.files().create(
+                        body={"name": part, "mimeType": DRIVE_FOLDER_MIME, "parents": [parent]},
+                        fields="id",
+                    ).execute()["id"]
+                parent = folders[walked]
+            media = MediaIoBaseUpload(
+                io.BytesIO(data),
+                mimetype=mimetypes.guess_type(name)[0] or "application/octet-stream",
+            )
+            existing = _find(service, name, parent, False)
+            if existing:
+                service.files().update(fileId=existing, media_body=media).execute()
+            else:
+                service.files().create(body={"name": name, "parents": [parent]}, media_body=media).execute()
+
+        await asyncio.to_thread(_sync_upload)
 
     async def export_drive_file(self, file_id: str, export_mime: str) -> bytes:
         """Export a Google-native file (Docs/Sheets/Slides) to the given MIME type."""

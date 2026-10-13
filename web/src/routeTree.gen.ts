@@ -18,22 +18,22 @@ import { Route as errors403RouteImport } from './routes/(errors)/403'
 import { Route as errors401RouteImport } from './routes/(errors)/401'
 import { Route as authLoginRouteImport } from './routes/(auth)/login'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
-import { Route as AuthenticatedTodosIndexRouteImport } from './routes/_authenticated/todos/index'
 import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authenticated/sync/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSearchIndexRouteImport } from './routes/_authenticated/search/index'
 import { Route as AuthenticatedCoursesIndexRouteImport } from './routes/_authenticated/courses/index'
+import { Route as AuthenticatedCalendarIndexRouteImport } from './routes/_authenticated/calendar/index'
 import { Route as AuthenticatedBotIndexRouteImport } from './routes/_authenticated/bot/index'
 import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authenticated/audit/index'
 import { Route as AuthenticatedSettingsUsersRouteImport } from './routes/_authenticated/settings/users'
 import { Route as AuthenticatedSettingsSetupRouteImport } from './routes/_authenticated/settings/setup'
 import { Route as AuthenticatedSettingsSchedulerRouteImport } from './routes/_authenticated/settings/scheduler'
 import { Route as AuthenticatedSettingsRolesRouteImport } from './routes/_authenticated/settings/roles'
+import { Route as AuthenticatedSettingsOpencloudRouteImport } from './routes/_authenticated/settings/opencloud'
 import { Route as AuthenticatedSettingsLanguageRouteImport } from './routes/_authenticated/settings/language'
 import { Route as AuthenticatedSettingsBackupRouteImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAuditRouteImport } from './routes/_authenticated/settings/audit'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
-import { Route as authAdminLoginRouteImport } from './routes/(auth)/admin/login'
 import { Route as AuthenticatedCoursesCourseIdRouteRouteImport } from './routes/_authenticated/courses/$courseId/route'
 import { Route as AuthenticatedCoursesCourseIdIndexRouteImport } from './routes/_authenticated/courses/$courseId/index'
 import { Route as AuthenticatedCoursesCourseIdStreamRouteImport } from './routes/_authenticated/courses/$courseId/stream'
@@ -85,11 +85,6 @@ const AuthenticatedSettingsRouteRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedTodosIndexRoute = AuthenticatedTodosIndexRouteImport.update({
-  id: '/todos/',
-  path: '/todos/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedSyncIndexRoute = AuthenticatedSyncIndexRouteImport.update({
   id: '/sync/',
   path: '/sync/',
@@ -111,6 +106,12 @@ const AuthenticatedCoursesIndexRoute =
   AuthenticatedCoursesIndexRouteImport.update({
     id: '/courses/',
     path: '/courses/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCalendarIndexRoute =
+  AuthenticatedCalendarIndexRouteImport.update({
+    id: '/calendar/',
+    path: '/calendar/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedBotIndexRoute = AuthenticatedBotIndexRouteImport.update({
@@ -147,6 +148,12 @@ const AuthenticatedSettingsRolesRoute =
     path: '/roles',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsOpencloudRoute =
+  AuthenticatedSettingsOpencloudRouteImport.update({
+    id: '/opencloud',
+    path: '/opencloud',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedSettingsLanguageRoute =
   AuthenticatedSettingsLanguageRouteImport.update({
     id: '/language',
@@ -171,11 +178,6 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const authAdminLoginRoute = authAdminLoginRouteImport.update({
-  id: '/(auth)/admin/login',
-  path: '/admin/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedCoursesCourseIdRouteRoute =
   AuthenticatedCoursesCourseIdRouteRouteImport.update({
     id: '/courses/$courseId',
@@ -217,22 +219,22 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
-  '/admin/login': typeof authAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
+  '/settings/opencloud': typeof AuthenticatedSettingsOpencloudRoute
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/audit/': typeof AuthenticatedAuditIndexRoute
   '/bot/': typeof AuthenticatedBotIndexRoute
+  '/calendar/': typeof AuthenticatedCalendarIndexRoute
   '/courses/': typeof AuthenticatedCoursesIndexRoute
   '/search/': typeof AuthenticatedSearchIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/sync/': typeof AuthenticatedSyncIndexRoute
-  '/todos/': typeof AuthenticatedTodosIndexRoute
   '/courses/$courseId/classwork': typeof AuthenticatedCoursesCourseIdClassworkRoute
   '/courses/$courseId/people': typeof AuthenticatedCoursesCourseIdPeopleRoute
   '/courses/$courseId/stream': typeof AuthenticatedCoursesCourseIdStreamRoute
@@ -246,22 +248,22 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
-  '/admin/login': typeof authAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
+  '/settings/opencloud': typeof AuthenticatedSettingsOpencloudRoute
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/audit': typeof AuthenticatedAuditIndexRoute
   '/bot': typeof AuthenticatedBotIndexRoute
+  '/calendar': typeof AuthenticatedCalendarIndexRoute
   '/courses': typeof AuthenticatedCoursesIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/sync': typeof AuthenticatedSyncIndexRoute
-  '/todos': typeof AuthenticatedTodosIndexRoute
   '/courses/$courseId/classwork': typeof AuthenticatedCoursesCourseIdClassworkRoute
   '/courses/$courseId/people': typeof AuthenticatedCoursesCourseIdPeopleRoute
   '/courses/$courseId/stream': typeof AuthenticatedCoursesCourseIdStreamRoute
@@ -279,22 +281,22 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
-  '/(auth)/admin/login': typeof authAdminLoginRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/_authenticated/settings/language': typeof AuthenticatedSettingsLanguageRoute
+  '/_authenticated/settings/opencloud': typeof AuthenticatedSettingsOpencloudRoute
   '/_authenticated/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/_authenticated/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/_authenticated/settings/setup': typeof AuthenticatedSettingsSetupRoute
   '/_authenticated/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/_authenticated/audit/': typeof AuthenticatedAuditIndexRoute
   '/_authenticated/bot/': typeof AuthenticatedBotIndexRoute
+  '/_authenticated/calendar/': typeof AuthenticatedCalendarIndexRoute
   '/_authenticated/courses/': typeof AuthenticatedCoursesIndexRoute
   '/_authenticated/search/': typeof AuthenticatedSearchIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/sync/': typeof AuthenticatedSyncIndexRoute
-  '/_authenticated/todos/': typeof AuthenticatedTodosIndexRoute
   '/_authenticated/courses/$courseId/classwork': typeof AuthenticatedCoursesCourseIdClassworkRoute
   '/_authenticated/courses/$courseId/people': typeof AuthenticatedCoursesCourseIdPeopleRoute
   '/_authenticated/courses/$courseId/stream': typeof AuthenticatedCoursesCourseIdStreamRoute
@@ -312,22 +314,22 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/courses/$courseId'
-    | '/admin/login'
     | '/errors/$error'
     | '/settings/audit'
     | '/settings/backup'
     | '/settings/language'
+    | '/settings/opencloud'
     | '/settings/roles'
     | '/settings/scheduler'
     | '/settings/setup'
     | '/settings/users'
     | '/audit/'
     | '/bot/'
+    | '/calendar/'
     | '/courses/'
     | '/search/'
     | '/settings/'
     | '/sync/'
-    | '/todos/'
     | '/courses/$courseId/classwork'
     | '/courses/$courseId/people'
     | '/courses/$courseId/stream'
@@ -341,22 +343,22 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/'
-    | '/admin/login'
     | '/errors/$error'
     | '/settings/audit'
     | '/settings/backup'
     | '/settings/language'
+    | '/settings/opencloud'
     | '/settings/roles'
     | '/settings/scheduler'
     | '/settings/setup'
     | '/settings/users'
     | '/audit'
     | '/bot'
+    | '/calendar'
     | '/courses'
     | '/search'
     | '/settings'
     | '/sync'
-    | '/todos'
     | '/courses/$courseId/classwork'
     | '/courses/$courseId/people'
     | '/courses/$courseId/stream'
@@ -373,22 +375,22 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/'
     | '/_authenticated/courses/$courseId'
-    | '/(auth)/admin/login'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/audit'
     | '/_authenticated/settings/backup'
     | '/_authenticated/settings/language'
+    | '/_authenticated/settings/opencloud'
     | '/_authenticated/settings/roles'
     | '/_authenticated/settings/scheduler'
     | '/_authenticated/settings/setup'
     | '/_authenticated/settings/users'
     | '/_authenticated/audit/'
     | '/_authenticated/bot/'
+    | '/_authenticated/calendar/'
     | '/_authenticated/courses/'
     | '/_authenticated/search/'
     | '/_authenticated/settings/'
     | '/_authenticated/sync/'
-    | '/_authenticated/todos/'
     | '/_authenticated/courses/$courseId/classwork'
     | '/_authenticated/courses/$courseId/people'
     | '/_authenticated/courses/$courseId/stream'
@@ -403,7 +405,6 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
-  authAdminLoginRoute: typeof authAdminLoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -471,13 +472,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/todos/': {
-      id: '/_authenticated/todos/'
-      path: '/todos'
-      fullPath: '/todos/'
-      preLoaderRoute: typeof AuthenticatedTodosIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/sync/': {
       id: '/_authenticated/sync/'
       path: '/sync'
@@ -504,6 +498,13 @@ declare module '@tanstack/react-router' {
       path: '/courses'
       fullPath: '/courses/'
       preLoaderRoute: typeof AuthenticatedCoursesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/calendar/': {
+      id: '/_authenticated/calendar/'
+      path: '/calendar'
+      fullPath: '/calendar/'
+      preLoaderRoute: typeof AuthenticatedCalendarIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/bot/': {
@@ -548,6 +549,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRolesRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/opencloud': {
+      id: '/_authenticated/settings/opencloud'
+      path: '/opencloud'
+      fullPath: '/settings/opencloud'
+      preLoaderRoute: typeof AuthenticatedSettingsOpencloudRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/language': {
       id: '/_authenticated/settings/language'
       path: '/language'
@@ -575,13 +583,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/errors/$error'
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/(auth)/admin/login': {
-      id: '/(auth)/admin/login'
-      path: '/admin/login'
-      fullPath: '/admin/login'
-      preLoaderRoute: typeof authAdminLoginRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/courses/$courseId': {
       id: '/_authenticated/courses/$courseId'
@@ -625,6 +626,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAuditRoute: typeof AuthenticatedSettingsAuditRoute
   AuthenticatedSettingsBackupRoute: typeof AuthenticatedSettingsBackupRoute
   AuthenticatedSettingsLanguageRoute: typeof AuthenticatedSettingsLanguageRoute
+  AuthenticatedSettingsOpencloudRoute: typeof AuthenticatedSettingsOpencloudRoute
   AuthenticatedSettingsRolesRoute: typeof AuthenticatedSettingsRolesRoute
   AuthenticatedSettingsSchedulerRoute: typeof AuthenticatedSettingsSchedulerRoute
   AuthenticatedSettingsSetupRoute: typeof AuthenticatedSettingsSetupRoute
@@ -637,6 +639,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsAuditRoute: AuthenticatedSettingsAuditRoute,
     AuthenticatedSettingsBackupRoute: AuthenticatedSettingsBackupRoute,
     AuthenticatedSettingsLanguageRoute: AuthenticatedSettingsLanguageRoute,
+    AuthenticatedSettingsOpencloudRoute: AuthenticatedSettingsOpencloudRoute,
     AuthenticatedSettingsRolesRoute: AuthenticatedSettingsRolesRoute,
     AuthenticatedSettingsSchedulerRoute: AuthenticatedSettingsSchedulerRoute,
     AuthenticatedSettingsSetupRoute: AuthenticatedSettingsSetupRoute,
@@ -680,10 +683,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedAuditIndexRoute: typeof AuthenticatedAuditIndexRoute
   AuthenticatedBotIndexRoute: typeof AuthenticatedBotIndexRoute
+  AuthenticatedCalendarIndexRoute: typeof AuthenticatedCalendarIndexRoute
   AuthenticatedCoursesIndexRoute: typeof AuthenticatedCoursesIndexRoute
   AuthenticatedSearchIndexRoute: typeof AuthenticatedSearchIndexRoute
   AuthenticatedSyncIndexRoute: typeof AuthenticatedSyncIndexRoute
-  AuthenticatedTodosIndexRoute: typeof AuthenticatedTodosIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -694,10 +697,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedAuditIndexRoute: AuthenticatedAuditIndexRoute,
   AuthenticatedBotIndexRoute: AuthenticatedBotIndexRoute,
+  AuthenticatedCalendarIndexRoute: AuthenticatedCalendarIndexRoute,
   AuthenticatedCoursesIndexRoute: AuthenticatedCoursesIndexRoute,
   AuthenticatedSearchIndexRoute: AuthenticatedSearchIndexRoute,
   AuthenticatedSyncIndexRoute: AuthenticatedSyncIndexRoute,
-  AuthenticatedTodosIndexRoute: AuthenticatedTodosIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -711,7 +714,6 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
-  authAdminLoginRoute: authAdminLoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

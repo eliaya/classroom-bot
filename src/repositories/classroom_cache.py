@@ -1,10 +1,11 @@
 from __future__ import annotations
 import json
 import logging
-from datetime import datetime
+import unicodedata
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, delete, func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -20,6 +21,7 @@ from src.models import (
     ClassroomSyncRun,
     ClassroomTodo,
     ClassroomTopic,
+    GoogleCalendarEvent,
     dump_json,
 )
 
@@ -766,11 +768,13 @@ async def list_attachments(
     return list(result.scalars().all())
 
 
-async def list_cached_people(session: AsyncSession, course_id: str) -> List[ClassroomPerson]:
+async def list_cached_people(session: AsyncSession, course_id: Optional[str] = None) -> List[ClassroomPerson]:
+    """The people of one course, or of every course when ``course_id`` is None."""
+    stmt = owned(session, ClassroomPerson).where(ClassroomPerson.removed_at.is_(None))
+    if course_id is not None:
+        stmt = stmt.where(ClassroomPerson.course_id == course_id)
     result = await session.execute(
-        owned(session, ClassroomPerson)
-        .where(ClassroomPerson.course_id == course_id, ClassroomPerson.removed_at.is_(None))
-        .order_by(ClassroomPerson.role, ClassroomPerson.full_name)
+        stmt.order_by(ClassroomPerson.course_id, ClassroomPerson.role, ClassroomPerson.full_name)
     )
     return list(result.scalars().all())
 
@@ -1001,6 +1005,36 @@ async def list_sync_changes(
     return list(result.scalars().all())
 
 
+async def list_posts_between(session: AsyncSession, start: str, end: str) -> List[Dict[str, Any]]:
+    """Announcements, coursework and materials of every course last updated in
+    ``[start, end)``, oldest first. The update time is what the course pages
+    show and sort by; teachers often prepare an item early and publish or edit
+    it on the day of the class. Bounds are ISO-8601 UTC strings, compared as
+    text against the timestamps Google sends (same format)."""
+    items: List[Dict[str, Any]] = []
+    for kind, model in (
+        ("announcement", ClassroomAnnouncement),
+        ("coursework", ClassroomCoursework),
+        ("material", ClassroomMaterial),
+    ):
+        posted = func.coalesce(model.update_time, model.creation_time)
+        rows = await session.execute(
+            owned(session, model).where(model.removed_at.is_(None), posted >= start, posted < end)
+        )
+        for row in rows.scalars().all():
+            title = row.title if kind != "announcement" else (row.text or "").splitlines()[0][:120]
+            items.append({
+                "type": kind,
+                "id": row.id,
+                "course_id": row.course_id,
+                "title": title or kind.capitalize(),
+                "time": row.update_time or row.creation_time,
+                "alternate_link": row.alternate_link,
+            })
+    items.sort(key=lambda x: x["time"])
+    return items
+
+
 async def build_stream_items(session: AsyncSession, course_id: str, *, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     announcements = await list_cached_announcements(session, course_id)
     coursework = await list_cached_coursework(session, course_id)
@@ -1083,6 +1117,97 @@ async def start_sync_run(session: AsyncSession, resource: str, course_id: Option
     await session.commit()
     await session.refresh(run)
     return run
+
+
+def _utc_text(value: str) -> str:
+    """A Google date or date-time as ISO-8601 UTC text (same shape as the
+    bounds the web app sends), so text comparison orders by time."""
+    moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if moment.tzinfo is None:  # an all-day date
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+async def replace_calendar_events(session: AsyncSession, events: List[Dict[str, Any]]) -> int:
+    """Replace the session owner's saved Google Calendar events with ``events``
+    (as ``GoogleClassroomService.list_calendar_events`` returns them)."""
+    await session.execute(
+        delete(GoogleCalendarEvent).where(GoogleCalendarEvent.owner_user_id == owner_of(session))
+    )
+    seen: set = set()
+    for event in events:
+        key = (event["calendar_id"], event["id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        session.add(GoogleCalendarEvent(
+            **event,
+            start_utc=_utc_text(event["start"]),
+            end_utc=_utc_text(event["end"] or event["start"]),
+        ))
+    await session.commit()
+    return len(seen)
+
+
+async def list_calendar_events(session: AsyncSession, start: str, end: str) -> List[Dict[str, Any]]:
+    """The session owner's saved Google Calendar events overlapping
+    ``[start, end)`` (ISO-8601 UTC text), oldest first."""
+    # An all-day date is a day in the viewer's zone, not UTC: reach a day
+    # either side and let the caller match days.
+    low = (datetime.fromisoformat(start.replace("Z", "+00:00")) - timedelta(days=1)).isoformat()
+    high = (datetime.fromisoformat(end.replace("Z", "+00:00")) + timedelta(days=1)).isoformat()
+    rows = await session.execute(
+        owned(session, GoogleCalendarEvent)
+        .where(GoogleCalendarEvent.start_utc < _utc_text(high), GoogleCalendarEvent.end_utc >= _utc_text(low))
+        .order_by(GoogleCalendarEvent.start_utc)
+    )
+    courses = (await session.execute(
+        owned(session, ClassroomCourse).where(ClassroomCourse.removed_at.is_(None))
+    )).scalars().all()
+    by_calendar = {json.loads(c.raw_json or "{}").get("calendarId"): c.id for c in courses}
+    # Longest name first, so "実習１・２" wins over "実習１".
+    by_name = sorted(((_course_key(c.name), c.id) for c in courses), key=lambda p: -len(p[0]))
+    items: Dict[str, Dict[str, Any]] = {}
+    for r in rows.scalars().all():
+        course_id = by_calendar.get(r.calendar_id)
+        # An event the user was invited to is on two calendars (the shared one
+        # and their own): show it once, keeping a copy on a course's calendar.
+        if r.id in items and not course_id:
+            continue
+        if not course_id:
+            title = _fold(r.title)
+            # ponytail: name-in-title match (the school's timetable calendar
+            # names each class after its course); a title that words the course
+            # differently stays unmatched. Add a saved mapping if that bites.
+            course_id = next((cid for key, cid in by_name if key and key in title), None)
+        items[r.id] = {
+            "id": r.id, "calendar": r.calendar, "course_id": course_id, "title": r.title,
+            "all_day": r.all_day, "start": r.start, "end": r.end, "link": r.link,
+            "description": r.description, "location": r.location,
+        }
+    return list(items.values())
+
+
+def _fold(text: str) -> str:
+    """Full-width and half-width forms and letter case compare equal."""
+    return unicodedata.normalize("NFKC", text or "").casefold()
+
+
+def _course_key(name: str) -> str:
+    """A course name without its leading class tag: "【AI07】Ｗｅｂ技術演習" -> "web技術演習"."""
+    name = _fold(name).strip()
+    return name.split("】", 1)[1].strip() if name.startswith("【") and "】" in name else name
+
+
+async def last_full_sync_started(session: AsyncSession) -> Optional[datetime]:
+    """When the session owner's latest full sync started (scheduled or manual)."""
+    result = await session.execute(
+        owned(session, ClassroomSyncRun, ClassroomSyncRun.started_at)
+        .where(ClassroomSyncRun.resource == "all")
+        .order_by(ClassroomSyncRun.id.desc())
+        .limit(1)
+    )
+    return result.scalar()
 
 
 async def finish_sync_run(

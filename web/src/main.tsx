@@ -9,6 +9,7 @@ import {
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { BASE } from '@/lib/area'
 import { handleServerError } from '@/lib/handle-server-error'
 import { Loader } from '@/components/loader'
 // Initialize i18n (side-effect import) + use t() outside React render
@@ -79,6 +80,8 @@ const queryClient = new QueryClient({
 // Create a new router instance
 const router = createRouter({
   routeTree,
+  // '/admin' for administrators' pages, the root for everyone else's.
+  basepath: BASE || '/',
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,

@@ -1,7 +1,8 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { ApiError, api } from '@/lib/api'
-import { canOpen } from '@/lib/permissions'
+import { ADMIN_BASE, BASE } from '@/lib/area'
+import { canOpen, isAdmin } from '@/lib/permissions'
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
 
 export const Route = createFileRoute('/_authenticated')({
@@ -22,6 +23,13 @@ export const Route = createFileRoute('/_authenticated')({
         throw error
       }
       auth.setUser(user)
+    }
+    // Administrators' pages are under /admin, everyone else's at the root:
+    // reload into the right area, then wait for the page to unload.
+    const base = isAdmin(user.permissions) ? ADMIN_BASE : ''
+    if (base !== BASE) {
+      window.location.replace(base + location.href)
+      await new Promise(() => {})
     }
     if (user.permissions.length > 0 && !canOpen(user.permissions, location.pathname)) {
       throw redirect({ to: '/403' })

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import update
@@ -11,6 +12,7 @@ from src.config import now_jst, settings
 from src.database import OWNER_KEY
 from src.models import (
     AuditRetentionSetting, BackupSetting, ClassroomAttachment, OpenCloudSetting, SchedulerSetting,
+    UserSchedulerSetting,
 )
 
 _SINGLETON_ID = 1
@@ -58,6 +60,57 @@ async def update_scheduler_setting(
     await session.commit()
     await session.refresh(row)
     return row
+
+
+async def get_user_scheduler_setting(session: AsyncSession, owner_user_id: int) -> UserSchedulerSetting:
+    """The user's own schedule. Until they save one, the legacy site-wide
+    schedule is returned (not stored: only a save creates their row)."""
+    row = await session.get(UserSchedulerSetting, owner_user_id)
+    if row is None:
+        base = await get_scheduler_setting(session)
+        row = UserSchedulerSetting(
+            owner_user_id=owner_user_id,
+            interval_minutes=base.interval_minutes,
+            poll_interval_minutes=base.poll_interval_minutes,
+            enabled=base.enabled,
+        )
+    return row
+
+
+async def update_user_scheduler_setting(
+    session: AsyncSession,
+    owner_user_id: int,
+    *,
+    interval_minutes: Optional[int] = None,
+    poll_interval_minutes: Optional[int] = None,
+    enabled: Optional[bool] = None,
+) -> UserSchedulerSetting:
+    row = await get_user_scheduler_setting(session, owner_user_id)
+    if interval_minutes is not None:
+        row.interval_minutes = interval_minutes
+    if poll_interval_minutes is not None:
+        row.poll_interval_minutes = poll_interval_minutes
+    if enabled is not None:
+        row.enabled = enabled
+    row.updated_at = now_jst()
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+def next_sync_time(row: UserSchedulerSetting, last_started: Optional[datetime]) -> Optional[datetime]:
+    """When the user's next scheduled sync is due: one interval after their
+    last full sync started (manual ones count), or now if there was none.
+    None when their schedule is off."""
+    if not row.enabled or row.interval_minutes <= 0:
+        return None
+    now = now_jst()
+    if last_started is None:
+        return now
+    if last_started.tzinfo is None:  # SQLite drops the zone
+        last_started = last_started.replace(tzinfo=now.tzinfo)
+    return last_started + timedelta(minutes=row.interval_minutes)
 
 
 async def get_audit_retention_setting(session: AsyncSession) -> AuditRetentionSetting:
@@ -155,11 +208,16 @@ async def get_opencloud_setting(session: AsyncSession) -> OpenCloudSetting:
 
 async def update_opencloud_setting(session: AsyncSession, **fields) -> OpenCloudSetting:
     row = await get_opencloud_setting(session)
-    moved = any(k in fields and fields[k] != getattr(row, k) for k in ("webdav_url", "folder"))
+    moved = any(
+        k in fields and fields[k] != getattr(row, k)
+        for k in ("enabled", "provider", "webdav_url", "folder")
+    )
     for key, value in fields.items():
         setattr(row, key, value)
     if moved:
-        # New destination: forget what was uploaded so the next sync re-sends it.
+        # New destination, or switched on/off: forget what was uploaded. Files
+        # whose local copy went to the old destination are fetched from Drive
+        # again by the next sync, and stay local when the upload is now off.
         await session.execute(
             update(ClassroomAttachment)
             .where(ClassroomAttachment.owner_user_id == row.owner_user_id)

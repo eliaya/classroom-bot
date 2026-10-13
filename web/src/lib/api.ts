@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth-store'
+import { BASE } from '@/lib/area'
 import { hardNavigate } from '@/lib/navigate'
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -36,7 +37,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (res.status === 401 && !path.startsWith('/auth/')) {
       useAuthStore.getState().auth.reset()
       const here = window.location.pathname + window.location.search
-      hardNavigate(`/login?redirect=${encodeURIComponent(here)}`)
+      hardNavigate(`${BASE}/login?redirect=${encodeURIComponent(here)}`)
     }
     throw new ApiError(res.status, text || res.statusText)
   }
@@ -111,6 +112,42 @@ export type StreamItem = {
   alternate_link?: string
 }
 
+/** An announcement or coursework, as listed on the dashboard calendar. */
+export type Post = {
+  type: 'announcement' | 'coursework' | 'material'
+  id: string
+  course_id: string
+  title: string
+  /** When it was last updated (ISO-8601 UTC), as the course pages show. */
+  time: string
+  alternate_link?: string | null
+}
+
+export type CoursePerson = {
+  course_id: string
+  user_id: string
+  role: string
+  full_name?: string | null
+  photo_url?: string | null
+}
+
+export type CalendarEvent = {
+  id: string
+  /** Name of the Google calendar it is on. */
+  calendar: string
+  /** The course it belongs to: its calendar's, or the one its title names. */
+  course_id?: string | null
+  title: string
+  /** All-day events carry dates (end exclusive); the rest date-times. */
+  all_day: boolean
+  start: string
+  end: string | null
+  link?: string | null
+  /** May hold HTML, as typed in Google Calendar. */
+  description?: string | null
+  location?: string | null
+}
+
 export type SyncRun = {
   id: number
   course_id?: string | null
@@ -120,6 +157,8 @@ export type SyncRun = {
   message?: string | null
   percent?: number | null
   error_message?: string | null
+  /** Attachments this run moved to external storage (not kept on the server). */
+  external_attachments?: number
   started_at?: string | null
   finished_at?: string | null
 }
@@ -181,8 +220,12 @@ export type BackupSettings = {
   max_retention_days: number
 }
 
+export type StorageProvider = 'opencloud' | 'nextcloud' | 'gdrive'
+
 export type OpenCloudSettings = {
   enabled: boolean
+  /** OpenCloud and Nextcloud are WebDAV; Google Drive uses the Google connection. */
+  provider: StorageProvider
   webdav_url: string
   username: string
   folder: string
@@ -197,6 +240,12 @@ export type BotStatus = {
   stale: boolean
   detail?: string | null
   checked_at: string
+}
+
+export type BotSettings = {
+  has_token: boolean
+  /** The bot account's name, once a token is saved. */
+  bot_name: string | null
 }
 
 export type BotCommand = {
@@ -435,6 +484,16 @@ export const api = {
     ),
   listCourses: () => request<{ items: Course[]; total: number }>('/courses'),
   getCourse: (id: string) => request<Course>(`/courses/${id}`),
+  /** Posts of every course in `[start, end)` (ISO-8601 UTC). */
+  listPosts: (start: string, end: string) =>
+    request<{ items: Post[]; count: number }>(
+      `/courses/posts?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+    ),
+  // `granted` is false until the user allowed Google Calendar access.
+  listCalendarEvents: (start: string, end: string) =>
+    request<{ granted: boolean; items: CalendarEvent[] }>(
+      `/courses/calendar-events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+    ),
   getStream: (id: string, limit = 50, offset = 0) =>
     request<{ items: StreamItem[]; count: number }>(
       `/courses/${id}/stream?limit=${limit}&offset=${offset}`
@@ -443,6 +502,8 @@ export const api = {
     const qs = topicId ? `?topic_id=${encodeURIComponent(topicId)}` : ''
     return request<ClassworkResponse>(`/courses/${id}/classwork${qs}`)
   },
+  // Every course's teachers and students.
+  listPeople: () => request<{ items: CoursePerson[] }>('/courses/people'),
   getPeople: (id: string) =>
     request<{
       items: Array<{
@@ -490,6 +551,10 @@ export const api = {
     )
   },
   botStatus: () => request<BotStatus>('/bot/status'),
+  getBotSettings: () => request<BotSettings>('/bot/settings'),
+  // The token is write-only: an empty string removes the bot.
+  updateBotSettings: (token: string) =>
+    request<BotSettings>('/bot/settings', { method: 'PUT', body: JSON.stringify({ token }) }),
   listBotCommands: () =>
     request<{ items: BotCommand[]; total: number }>('/bot/commands'),
   createBotCommand: (body: BotCommandInput) =>
@@ -512,10 +577,6 @@ export const api = {
     ),
   listGuilds: () =>
     request<{ items: DiscordGuild[]; total: number }>('/discord/guilds'),
-  bindGuild: (guildId: string) =>
-    request<{ guild_id: string; state: string }>(`/discord/guilds/${guildId}/bind`, {
-      method: 'POST',
-    }),
   releaseGuild: (guildId: string) =>
     request<{ guild_id: string; state: string }>(`/discord/guilds/${guildId}/bind`, {
       method: 'DELETE',

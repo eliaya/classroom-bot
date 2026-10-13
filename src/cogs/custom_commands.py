@@ -96,7 +96,7 @@ def parse_params(raw: Optional[str]) -> List[Dict[str, Any]]:
 
 
 class CustomCommandsCog(commands.Cog):
-    """Bridges the WebUI-managed ``bot_commands`` registry to live Discord commands.
+    """Bridges the bot owner's WebUI-managed ``bot_commands`` registry to live Discord commands.
 
     Each enabled row is exposed two ways:
       * a **dynamic slash command** ``/name`` (registered into the bot's app-command
@@ -273,7 +273,7 @@ class CustomCommandsCog(commands.Cog):
         loop retries.
         """
         try:
-            async with database.async_session_factory() as session:
+            async with database.owned_session(self.bot.owner_user_id) as session:
                 records = await repo.list_commands(session)
         except Exception:  # noqa: BLE001
             logger.warning("Failed to read command registry for slash rebuild", exc_info=True)
@@ -348,7 +348,7 @@ class CustomCommandsCog(commands.Cog):
     async def _poll_registry(self) -> None:
         """Detect WebUI changes and rebuild the slash tree only when needed."""
         try:
-            async with database.async_session_factory() as session:
+            async with database.owned_session(self.bot.owner_user_id) as session:
                 records = await repo.list_commands(session)
         except Exception:  # noqa: BLE001
             logger.warning("Registry poll failed; will retry", exc_info=True)
@@ -368,7 +368,7 @@ class CustomCommandsCog(commands.Cog):
         if self._cache and (now - self._cache_at) < CACHE_TTL_SECONDS:
             return self._cache
         try:
-            async with database.async_session_factory() as session:
+            async with database.owned_session(self.bot.owner_user_id) as session:
                 self._cache = await repo.list_enabled(session)
                 self._cache_at = now
         except Exception:  # noqa: BLE001 — never break message handling on a DB hiccup

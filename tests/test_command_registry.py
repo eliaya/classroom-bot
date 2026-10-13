@@ -26,6 +26,7 @@ async def _make_bot() -> commands.Bot:
     from src.cogs.custom_commands import CustomCommandsCog
 
     bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
+    bot.owner_user_id = 1  # each bot serves one user's commands
     await bot.add_cog(ClassroomCog(bot))
     await bot.add_cog(CustomCommandsCog(bot))  # cog_load rebuilds from DB
     return bot
@@ -34,6 +35,7 @@ async def _make_bot() -> commands.Bot:
 @pytest.mark.asyncio
 async def test_builtins_seeded_and_registered_under_group():
     await init_db()
+    await database.seed_bot_defaults(1)
     bot = await _make_bot()
     grp = bot.tree.get_command("classroom")
     assert isinstance(grp, discord.app_commands.Group)
@@ -47,6 +49,7 @@ async def test_builtins_seeded_and_registered_under_group():
 @pytest.mark.asyncio
 async def test_disable_rename_and_custom_group():
     await init_db()
+    await database.seed_bot_defaults(1)
     async with database.async_session_factory() as s:
         post = await repo.get_by_name(s, "post")
         await repo.update_command(s, post, enabled=False)

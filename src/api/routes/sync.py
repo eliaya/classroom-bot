@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.api.deps import Principal, get_owned_session, get_principal
 from src.api.services import opencloud
 from src.api.services.classroom_sync import classroom_sync_service
+from src.config import now_jst
 from src.models import OpenCloudSetting
 from src.repositories import app_settings, audit_log
 from src.repositories import classroom_cache as cache
@@ -80,14 +81,22 @@ async def _run_course_sync(user_id: int, course_id: str, actor: str = SCHEDULER_
 
 
 async def run_scheduled_sync() -> None:
-    """The scheduled pass: every active user with a connected Google account,
-    one at a time. One user's failure (revoked token, quota) must not stop the
-    rest; it is already recorded on that user's sync run and in the audit log."""
-    from src.database import async_session_factory
+    """The scheduled pass, run every ``SYNC_TICK_MINUTES``: every active user
+    with a connected Google account whose own schedule is due, one at a time.
+    One user's failure (revoked token, quota) must not stop the rest; it is
+    already recorded on that user's sync run and in the audit log."""
+    from src.database import async_session_factory, owned_session
 
     async with async_session_factory() as session:
         user_ids = await google_connections.connected_user_ids(session)
+    due = []
     for user_id in user_ids:
+        async with owned_session(user_id) as session:
+            row = await app_settings.get_user_scheduler_setting(session, user_id)
+            at = app_settings.next_sync_time(row, await cache.last_full_sync_started(session))
+        if at is not None and at <= now_jst():
+            due.append(user_id)
+    for user_id in due:
         try:
             await _run_full_sync(user_id)
         except Exception:  # noqa: BLE001 — keep going for the other users
@@ -117,6 +126,7 @@ async def sync_status(
                 "message": getattr(r, "message", None),
                 "percent": getattr(r, "percent", None),
                 "error_message": r.error_message,
+                "external_attachments": r.external_attachments or 0,
                 "started_at": r.started_at.isoformat() if r.started_at else None,
                 "finished_at": r.finished_at.isoformat() if r.finished_at else None,
             }
@@ -216,6 +226,7 @@ async def delete_sync_run(
 
 class OpenCloudUpdate(BaseModel):
     enabled: Optional[bool] = None
+    provider: Optional[Literal["opencloud", "nextcloud", "gdrive"]] = None
     webdav_url: Optional[str] = Field(default=None, max_length=500, pattern=r"^(https?://\S+)?$")
     username: Optional[str] = Field(default=None, max_length=200)
     # Write-only. Empty/omitted keeps the stored token.
@@ -227,6 +238,7 @@ def _opencloud_dict(row: OpenCloudSetting) -> dict:
     # The token never leaves the server.
     return {
         "enabled": row.enabled,
+        "provider": row.provider,
         "webdav_url": row.webdav_url,
         "username": row.username,
         "folder": row.folder,
@@ -250,7 +262,14 @@ async def update_opencloud_settings(
         changes.pop("app_token", None)
     row = await app_settings.get_opencloud_setting(session)
     candidate = OpenCloudSetting(**{**row.model_dump(), **changes})
-    if candidate.enabled:
+    if candidate.enabled and candidate.provider == "gdrive":
+        if not (await google_connections.service_for(session)).has_drive_write_scope():
+            raise HTTPException(
+                status_code=400,
+                detail="Google Drive storage needs permission to create files. "
+                       "Connect Google again (Settings → Status) and allow it, then save.",
+            )
+    elif candidate.enabled:
         # Refuse to switch on a destination that doesn't work, rather than
         # letting every later sync fail quietly in the log.
         if not (candidate.webdav_url and candidate.username and candidate.app_token):

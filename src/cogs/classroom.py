@@ -91,9 +91,9 @@ class ClassroomCog(commands.Cog):
         # Reads are served from the synced SQL DB, never directly from Google.
         self.api = ClassroomApiClient()
         # WebUI-editable response templates (overrides cached from the shared DB).
-        self.messages = MessageStore()
+        self.messages = MessageStore(getattr(bot, "owner_user_id", None))
         # WebUI-editable per-command config (e.g. default item limit).
-        self.config = CommandConfigStore()
+        self.config = CommandConfigStore(getattr(bot, "owner_user_id", None))
 
     # Register '/classroom' command grouping
     classroom = app_commands.Group(

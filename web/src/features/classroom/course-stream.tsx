@@ -29,7 +29,7 @@ export function CourseStreamPage({ courseId }: { courseId: string }) {
             <Badge variant='secondary'>{item.type}</Badge>
           </CardHeader>
           <CardContent className='text-muted-foreground text-sm'>
-            <p className='mb-2 whitespace-pre-wrap'>{item.text || '—'}</p>
+            <p className='mb-2 wrap-anywhere whitespace-pre-wrap'>{item.text || '—'}</p>
             <p>{t('courseStream.updated', { time: item.update_time || '—' })}</p>
                       </CardContent>
         </Card>

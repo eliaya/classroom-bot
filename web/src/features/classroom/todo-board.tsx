@@ -7,9 +7,7 @@ import { cn, fullTimestamp, humanReadableTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Main } from '@/components/layout/main'
 import { api, type Course, type TodoItem } from '@/lib/api'
-import { ClassroomHeader } from './layout-header'
 
 const PAGE_SIZE = 10
 
@@ -79,7 +77,7 @@ function TodoCard({
   const { t } = useTranslation()
   return (
     <div className='flex flex-col gap-2 rounded-md border bg-card p-3 shadow-sm'>
-      <p className='text-sm font-medium leading-snug'>{item.title || '—'}</p>
+      <p className='text-sm leading-snug font-medium wrap-anywhere'>{item.title || '—'}</p>
       <p className='truncate text-xs text-muted-foreground'>{courseName}</p>
       <div className='flex items-center justify-between gap-2'>
         <Badge variant={statusVariant(item)} className='text-[11px]'>
@@ -164,7 +162,7 @@ function KanbanColumn({
   }, [hasMore, loadingMore])
 
   return (
-    <div className='flex max-h-[75vh] flex-col rounded-lg border bg-muted/30'>
+    <div className='flex max-h-[75vh] min-w-0 flex-col rounded-lg border bg-muted/30'>
       <div className='flex items-center gap-2 border-b px-3 py-2.5'>
         <span className={cn('size-2 rounded-full', dotClass)} />
         <h3 className='text-sm font-semibold'>{label}</h3>
@@ -198,7 +196,8 @@ function KanbanColumn({
   )
 }
 
-export function TodoPage() {
+/** The to-dos of all courses as a Kanban board (the dashboard). */
+export function TodoBoard() {
   const { t } = useTranslation()
   const [items, setItems] = useState<TodoItem[]>([])
   const [courses, setCourses] = useState<Course[]>([])
@@ -233,47 +232,39 @@ export function TodoPage() {
 
   return (
     <>
-      <ClassroomHeader
-        fixed
-        title={t('todo.title')}
-        description={t('todo.desc')}
-      />
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+      {error && <p className='text-destructive text-sm'>{error}</p>}
 
-        {error && <p className='text-destructive text-sm'>{error}</p>}
-
-        {loading ? (
-          <div className='grid gap-4 md:grid-cols-3'>
-            {COLUMNS.map((col) => (
-              <div key={col.key} className='flex flex-col gap-3 rounded-lg border bg-muted/30 p-3'>
-                <Skeleton className='h-5 w-24' />
-                {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className='h-20 w-full rounded-md' />
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : items.length === 0 ? (
-          <div className='flex flex-col items-center gap-3 py-16 text-center'>
-            <ClipboardList className='size-10 text-muted-foreground' />
-            <p className='text-muted-foreground text-sm'>
-              {t('todo.empty')}
-            </p>
-          </div>
-        ) : (
-          <div className='grid gap-4 md:grid-cols-3'>
-            {COLUMNS.map((col) => (
-              <KanbanColumn
-                key={col.key}
-                label={t(col.label)}
-                dotClass={col.dotClass}
-                items={board[col.key]}
-                courseMap={courseMap}
-              />
-            ))}
-          </div>
-        )}
-      </Main>
+      {loading ? (
+        <div className='grid gap-4 md:grid-cols-3'>
+          {COLUMNS.map((col) => (
+            <div key={col.key} className='flex flex-col gap-3 rounded-lg border bg-muted/30 p-3'>
+              <Skeleton className='h-5 w-24' />
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className='h-20 w-full rounded-md' />
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className='flex flex-col items-center gap-3 py-16 text-center'>
+          <ClipboardList className='size-10 text-muted-foreground' />
+          <p className='text-muted-foreground text-sm'>
+            {t('todo.empty')}
+          </p>
+        </div>
+      ) : (
+        <div className='grid gap-4 md:grid-cols-3'>
+          {COLUMNS.map((col) => (
+            <KanbanColumn
+              key={col.key}
+              label={t(col.label)}
+              dotClass={col.dotClass}
+              items={board[col.key]}
+              courseMap={courseMap}
+            />
+          ))}
+        </div>
+      )}
     </>
   )
 }

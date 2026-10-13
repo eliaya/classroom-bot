@@ -7,7 +7,9 @@
  * status into a `SyncSnapshot`.
  */
 import { configureSyncNotification, type SyncSnapshot } from '@/packages/sync-notification'
+import { toast } from 'sonner'
 import { api, type SyncRun } from '@/lib/api'
+import i18n from '@/lib/i18n'
 
 /** Reduce this app's run list into the package's normalized snapshot. */
 function runsToSnapshot(runs: SyncRun[]): SyncSnapshot {
@@ -37,9 +39,27 @@ function runsToSnapshot(runs: SyncRun[]): SyncSnapshot {
   }
 }
 
+// The run last seen running, so its outcome is announced once when it ends.
+let watchedRunId: number | null = null
+
+/** With external storage on, attachments leave the server: tell the user. */
+function notifyExternalStorage(runs: SyncRun[]) {
+  const active = runs.find((r) => r.status === 'running')
+  if (active) {
+    watchedRunId = active.id
+    return
+  }
+  const finished = runs.find((r) => r.id === watchedRunId)
+  watchedRunId = null
+  if (finished?.external_attachments) {
+    toast.info(i18n.t('sync.externalStored', { count: finished.external_attachments }))
+  }
+}
+
 configureSyncNotification({
   source: async () => {
     const data = await api.syncStatus({ page: 1, limit: 10 })
+    notifyExternalStorage(data.runs)
     return runsToSnapshot(data.runs)
   },
 })

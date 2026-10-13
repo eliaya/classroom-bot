@@ -15,7 +15,6 @@ MODULES: dict[str, tuple[str, ...]] = {
     "sync": ("view", "use"),
     "links": ("view", "use"),
     "bot": ("view", "use"),
-    "scheduler": ("view", "use"),
     "audit": ("view", "use"),
     "backup": ("view", "use"),
     "users": ("view", "use"),
@@ -28,7 +27,9 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
 # Held only by the seeded ``admin`` role; never assignable through the API.
 WILDCARD = "*"
 
-# Granted to the seeded ``user`` role: a person's own Classroom data.
+# Granted to the seeded ``user`` role: a person's own Classroom data and the
+# Discord bot console. The web admin area shows none of these pages.
 DEFAULT_USER_PERMISSIONS: list[str] = [
     "courses:view", "todos:view", "search:view", "sync:view", "sync:use",
+    "links:view", "links:use", "bot:view", "bot:use",
 ]
