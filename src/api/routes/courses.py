@@ -2,12 +2,14 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.deps import get_owned_session
+from src.api.services.attachment_sync import attachment_sync_service
 from src.config import settings
 from src.models import ClassroomAttachment
 from src.repositories import classroom_cache as cache
@@ -21,7 +23,8 @@ _INLINE_SAFE = {"application/pdf", "image/png", "image/jpeg", "image/gif", "imag
 
 def _attachment_public(a: ClassroomAttachment) -> dict:
     """Serialize an attachment row for API responses (no on-disk path leaked)."""
-    downloadable = bool(a.local_path) and a.fetch_status == "fetched"
+    # Kept here, or moved to the user's external storage (then served from there).
+    downloadable = bool(a.local_path or a.opencloud_path) and a.fetch_status == "fetched"
     return {
         "id": a.db_id,
         "source": a.source,
@@ -40,6 +43,7 @@ def _attachment_public(a: ClassroomAttachment) -> dict:
 @router.get("")
 async def list_courses(session: AsyncSession = Depends(get_owned_session)) -> dict:
     courses = await cache.list_cached_courses(session)
+    latest = await cache.last_post_times(session)
     return {
         "items": [
             {
@@ -51,6 +55,7 @@ async def list_courses(session: AsyncSession = Depends(get_owned_session)) -> di
                 "state": c.state,
                 "alternate_link": c.alternate_link,
                 "synced_at": c.synced_at.isoformat() if c.synced_at else None,
+                "last_update": latest.get(c.id),
             }
             for c in courses
         ],
@@ -63,10 +68,11 @@ async def list_courses(session: AsyncSession = Depends(get_owned_session)) -> di
 async def list_posts(
     start: str = Query(description="ISO-8601 UTC, inclusive"),
     end: str = Query(description="ISO-8601 UTC, exclusive"),
+    course_id: Optional[str] = Query(default=None, description="Only this course's posts."),
     session: AsyncSession = Depends(get_owned_session),
 ) -> dict:
     """Announcements, coursework and materials of all courses updated in a time range (dashboard calendar)."""
-    items = await cache.list_posts_between(session, start, end)
+    items = await cache.list_posts_between(session, start, end, course_id)
     return {"items": items, "count": len(items)}
 
 
@@ -221,30 +227,46 @@ async def download_attachment(
     course_id: str,
     db_id: int,
     session: AsyncSession = Depends(get_owned_session),
-) -> FileResponse:
+) -> Response:
     attachment = await cache.get_attachment(session, db_id)
     if not attachment or attachment.course_id != course_id or attachment.removed_at is not None:
         raise HTTPException(status_code=404, detail="Attachment not found.")
-    if not attachment.local_path or attachment.fetch_status != "fetched":
-        raise HTTPException(status_code=404, detail="Attachment content not available locally.")
+    if attachment.fetch_status != "fetched" or not (
+        attachment.local_path or attachment.opencloud_path
+    ):
+        raise HTTPException(status_code=404, detail="Attachment content not available.")
 
-    full_path = Path(settings.ATTACHMENT_STORAGE_DIR) / attachment.local_path
-    if not full_path.is_file():
-        raise HTTPException(status_code=404, detail="Stored file is missing on disk.")
-
-    filename = attachment.title or full_path.name
     media_type = attachment.content_type or "application/octet-stream"
     # Inline disposition so PDFs/images render in the split-screen viewer's
     # <iframe>/<img>; the frontend's <a download> still forces a save when used.
     # Everything else is forced to download: the file comes from whoever posted
     # it in the course, and an HTML or SVG served inline would run in this
     # origin with the viewer's session cookie.
+    disposition = "inline" if media_type in _INLINE_SAFE else "attachment"
+    headers = {"X-Content-Type-Options": "nosniff"}
+
+    if not attachment.local_path:
+        # Moved to the user's external storage: relay it from there.
+        # ponytail: whole file in memory (capped by ATTACHMENT_MAX_BYTES);
+        # stream it if that cap is raised a lot.
+        try:
+            data = await attachment_sync_service.read_external(session, attachment.opencloud_path)
+        except Exception as e:  # noqa: BLE001 — any provider failure is the same to the viewer
+            raise HTTPException(status_code=502, detail="External storage is unavailable.") from e
+        name = attachment.title or attachment.opencloud_path.rsplit("/", 1)[-1]
+        headers["Content-Disposition"] = f"{disposition}; filename*=utf-8''{quote(name)}"
+        return Response(content=data, media_type=media_type, headers=headers)
+
+    full_path = Path(settings.ATTACHMENT_STORAGE_DIR) / attachment.local_path
+    if not full_path.is_file():
+        raise HTTPException(status_code=404, detail="Stored file is missing on disk.")
+
     return FileResponse(
         path=str(full_path),
         media_type=media_type,
-        filename=filename,
-        content_disposition_type="inline" if media_type in _INLINE_SAFE else "attachment",
-        headers={"X-Content-Type-Options": "nosniff"},
+        filename=attachment.title or full_path.name,
+        content_disposition_type=disposition,
+        headers=headers,
     )
 
 

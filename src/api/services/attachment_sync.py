@@ -123,21 +123,33 @@ class AttachmentSyncService:
         storage_root = Path(settings.ATTACHMENT_STORAGE_DIR)
         stats = {"total": 0, "fetched": 0, "skipped": 0, "failed": 0, "links": 0}
         seen_ref_keys: set[str] = set()
+        # Every stored row of the course, read once: the Drive work below runs
+        # concurrently and must not share the session.
+        existing = {
+            (a.item_type, a.item_id, a.ref_key): a
+            for a in await cache.list_attachments(session, course_id, include_removed=True)
+        }
+        owner = cache.owner_of(session)
+        sem = asyncio.Semaphore(max(1, settings.ATTACHMENT_SYNC_CONCURRENCY))
 
+        async def _one(item_type: str, item_id: str, d: Dict[str, Any]) -> ClassroomAttachment:
+            async with sem:
+                return await self._process_one(
+                    google_service, course_id, item_type, item_id, d,
+                    existing.get((item_type, item_id, d["ref_key"])),
+                    owner, drive_ok, storage_root, stats,
+                )
+
+        jobs = []
         for item_type, item_id, materials_json in items:
-            descriptors = cache.extract_attachments(
+            for d in cache.extract_attachments(
                 json.loads(materials_json) if materials_json else None
-            )
-            for d in descriptors:
+            ):
                 stats["total"] += 1
                 seen_ref_keys.add(d["ref_key"])
-                row = await self._process_one(
-                    session, google_service, course_id, item_type, item_id, d,
-                    drive_ok, storage_root, stats,
-                )
-                await cache.upsert_attachment(session, row)
-            # Commit per item so partial progress is durable and the session stays small.
-            await session.commit()
+                jobs.append(_one(item_type, item_id, d))
+        for row in await asyncio.gather(*jobs):
+            await cache.upsert_attachment(session, row)
 
         # Soft-delete attachment rows that no longer appear on any item upstream.
         await cache.soft_delete_missing(
@@ -235,6 +247,15 @@ class AttachmentSyncService:
                 session.add(r)
         await session.commit()
 
+    async def read_external(self, session: AsyncSession, path: str) -> bytes:
+        """The content of a file moved to the user's external storage."""
+        oc = await app_settings.get_opencloud_setting(session)
+        if oc.provider == "gdrive":
+            service = await google_connections.service_for(session)
+            return await service.download_drive_path(path)
+        async with opencloud.client(oc) as client:
+            return await opencloud.get(client, path)
+
     @asynccontextmanager
     async def _destination(
         self, session: AsyncSession, oc: OpenCloudSetting
@@ -259,25 +280,15 @@ class AttachmentSyncService:
 
                 yield put
 
-    async def _existing(
-        self, session: AsyncSession, course_id: str, item_type: str, item_id: str, ref_key: str
-    ) -> Optional[ClassroomAttachment]:
-        stmt = cache.owned(session, ClassroomAttachment).where(
-            ClassroomAttachment.course_id == course_id,
-            ClassroomAttachment.item_type == item_type,
-            ClassroomAttachment.item_id == item_id,
-            ClassroomAttachment.ref_key == ref_key,
-        )
-        return (await session.execute(stmt)).scalar_one_or_none()
-
     async def _process_one(
         self,
-        session: AsyncSession,
         google_service: GoogleClassroomService,
         course_id: str,
         item_type: str,
         item_id: str,
         d: Dict[str, Any],
+        existing: Optional[ClassroomAttachment],
+        owner: int,
         drive_ok: bool,
         storage_root: Path,
         stats: dict,
@@ -316,9 +327,22 @@ class AttachmentSyncService:
             stats["failed"] += 1
             return row
 
+        # Settled on an earlier sync: stored, too big, or never downloadable.
+        # Nothing to ask Drive, so no request is made.
+        # ponytail: a binary file replaced in place under the same id is not
+        # re-downloaded any more (Google Docs never were); compare Drive's
+        # modifiedTime here if that turns out to matter.
+        if existing and self._settled(existing, storage_root):
+            for f in ("content_type", "file_size", "local_path", "exported",
+                      "fetch_status", "error_message"):
+                setattr(row, f, getattr(existing, f))
+            row.fetched_at = existing.fetched_at or now
+            stats[existing.fetch_status] += 1
+            return row
+
         try:
             await self._fetch_drive(
-                session, google_service, row, course_id, item_id, file_id, storage_root, stats
+                google_service, row, existing, owner, item_id, file_id, storage_root, stats
             )
         except Exception as e:  # noqa: BLE001 — never let one attachment break the sync
             row.fetch_status = "failed"
@@ -328,12 +352,31 @@ class AttachmentSyncService:
             logger.warning("Attachment download failed (file=%s item=%s): %s", file_id, item_id, e)
         return row
 
+    @staticmethod
+    def _settled(existing: ClassroomAttachment, storage_root: Path) -> bool:
+        """Whether an earlier sync's result for this Drive file still holds."""
+        if existing.fetch_status == "fetched":
+            # On disk, or moved to external storage (then there is no local copy).
+            return bool(existing.opencloud_path) or bool(
+                existing.local_path and (storage_root / existing.local_path).exists()
+            )
+        if existing.fetch_status == "skipped":
+            # Too big for the current limit (a raised limit fetches it next time).
+            return (existing.file_size or 0) > settings.ATTACHMENT_MAX_BYTES
+        # Drive's answers that do not change by asking again.
+        # ponytail: never retried once seen; clear the row's status to retry
+        # if a teacher later shares or restores the file.
+        return existing.fetch_status == "failed" and any(
+            reason in (existing.error_message or "")
+            for reason in ("cannotDownloadFile", "File not found")
+        )
+
     async def _fetch_drive(
         self,
-        session: AsyncSession,
         google_service: GoogleClassroomService,
         row: ClassroomAttachment,
-        course_id: str,
+        existing: Optional[ClassroomAttachment],
+        owner: int,
         item_id: str,
         file_id: str,
         storage_root: Path,
@@ -345,29 +388,7 @@ class AttachmentSyncService:
         mime = meta.get("mimeType")
         name = meta.get("name")
         meta_size = int(meta["size"]) if meta.get("size") else None
-
-        existing = await self._existing(session, course_id, row.item_type, item_id, row.ref_key)
         is_google_native = mime in _GOOGLE_EXPORT
-
-        # Idempotency: skip re-fetch when already fetched and the file is on disk,
-        # or was moved to external storage (then there is no local copy).
-        # For binary files we additionally require the Drive size to be unchanged;
-        # Google-native exports have no size, so existence is the only signal.
-        if existing and existing.fetch_status == "fetched":
-            stored = bool(existing.opencloud_path) or bool(
-                existing.local_path and (storage_root / existing.local_path).exists()
-            )
-            if stored and (
-                is_google_native or (meta_size is not None and meta_size == existing.file_size)
-            ):
-                row.content_type = existing.content_type
-                row.file_size = existing.file_size
-                row.local_path = existing.local_path
-                row.exported = existing.exported
-                row.fetch_status = "fetched"
-                row.fetched_at = existing.fetched_at or now_jst()
-                stats["fetched"] += 1
-                return
 
         # Enforce the size cap up-front for binary files (known size).
         if meta_size is not None and meta_size > settings.ATTACHMENT_MAX_BYTES:
@@ -409,7 +430,7 @@ class AttachmentSyncService:
         # course ids, so the prefix cannot collide with them).
         # ponytail: two users in one course each store their own copy; share
         # blobs by content hash if disk use ever matters.
-        rel = Path(f"u{cache.owner_of(session)}") / course_id / item_id / f"{file_id}.{ext}"
+        rel = Path(f"u{owner}") / row.course_id / item_id / f"{file_id}.{ext}"
         full = storage_root / rel
         await asyncio.to_thread(full.parent.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(full.write_bytes, data)

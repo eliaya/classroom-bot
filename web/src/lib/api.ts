@@ -99,6 +99,8 @@ export type Course = {
   state?: string | null
   alternate_link?: string | null
   synced_at?: string | null
+  /** Time of the latest announcement, coursework or material. */
+  last_update?: string | null
 }
 
 export type StreamItem = {
@@ -484,10 +486,11 @@ export const api = {
     ),
   listCourses: () => request<{ items: Course[]; total: number }>('/courses'),
   getCourse: (id: string) => request<Course>(`/courses/${id}`),
-  /** Posts of every course in `[start, end)` (ISO-8601 UTC). */
-  listPosts: (start: string, end: string) =>
+  /** Posts of every course, or of `courseId`, in `[start, end)` (ISO-8601 UTC). */
+  listPosts: (start: string, end: string, courseId?: string) =>
     request<{ items: Post[]; count: number }>(
-      `/courses/posts?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+      `/courses/posts?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}` +
+        (courseId ? `&course_id=${encodeURIComponent(courseId)}` : '')
     ),
   // `granted` is false until the user allowed Google Calendar access.
   listCalendarEvents: (start: string, end: string) =>

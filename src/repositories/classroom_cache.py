@@ -1005,9 +1005,11 @@ async def list_sync_changes(
     return list(result.scalars().all())
 
 
-async def list_posts_between(session: AsyncSession, start: str, end: str) -> List[Dict[str, Any]]:
-    """Announcements, coursework and materials of every course last updated in
-    ``[start, end)``, oldest first. The update time is what the course pages
+async def list_posts_between(
+    session: AsyncSession, start: str, end: str, course_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """Announcements, coursework and materials of every course (or of
+    ``course_id``) last updated in ``[start, end)``, oldest first. The update time is what the course pages
     show and sort by; teachers often prepare an item early and publish or edit
     it on the day of the class. Bounds are ISO-8601 UTC strings, compared as
     text against the timestamps Google sends (same format)."""
@@ -1018,9 +1020,10 @@ async def list_posts_between(session: AsyncSession, start: str, end: str) -> Lis
         ("material", ClassroomMaterial),
     ):
         posted = func.coalesce(model.update_time, model.creation_time)
-        rows = await session.execute(
-            owned(session, model).where(model.removed_at.is_(None), posted >= start, posted < end)
-        )
+        stmt = owned(session, model).where(model.removed_at.is_(None), posted >= start, posted < end)
+        if course_id is not None:
+            stmt = stmt.where(model.course_id == course_id)
+        rows = await session.execute(stmt)
         for row in rows.scalars().all():
             title = row.title if kind != "announcement" else (row.text or "").splitlines()[0][:120]
             items.append({
@@ -1033,6 +1036,23 @@ async def list_posts_between(session: AsyncSession, start: str, end: str) -> Lis
             })
     items.sort(key=lambda x: x["time"])
     return items
+
+
+async def last_post_times(session: AsyncSession) -> Dict[str, str]:
+    """Time of each course's latest announcement, coursework or material, by
+    the same update time as ``list_posts_between``."""
+    latest: Dict[str, str] = {}
+    for model in (ClassroomAnnouncement, ClassroomCoursework, ClassroomMaterial):
+        posted = func.max(func.coalesce(model.update_time, model.creation_time))
+        rows = await session.execute(
+            owned(session, model, model.course_id, posted)
+            .where(model.removed_at.is_(None))
+            .group_by(model.course_id)
+        )
+        for course_id, time in rows.all():
+            if time and time > latest.get(course_id, ""):
+                latest[course_id] = time
+    return latest
 
 
 async def build_stream_items(session: AsyncSession, course_id: str, *, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:

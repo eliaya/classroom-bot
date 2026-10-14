@@ -1,7 +1,8 @@
+import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { CircleAlert, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { type Course, type Post } from '@/lib/api'
+import { api, type Course, type Post } from '@/lib/api'
 import { cn, weekdayLabel } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +13,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CourseClassworkPage } from '../course-classwork'
+import { CoursePeoplePage } from '../course-people'
+import { CourseStreamPage } from '../course-stream'
 
 /** `today`: held on today's weekday. `active`: updated in the period. `quiet`: neither. */
 export type CourseStatus = 'today' | 'active' | 'quiet'
@@ -26,7 +32,8 @@ export type CourseRow = {
   /** Time of the latest update (ms), or null when there is none. */
   last: number | null
   status: CourseStatus
-  recent: Post[]
+  /** The period's posts are still loading: the counts are not known yet. */
+  pending: boolean
 }
 
 const STATUS_STYLES: Record<CourseStatus, string> = {
@@ -86,75 +93,128 @@ type CourseSheetProps = {
   onClose: () => void
 }
 
-/** Wide side sheet with one course's details. Read-only: courses come from Google Classroom. */
+const TABS = ['general', 'classwork', 'stream', 'people'] as const
+
+/** Wide side sheet with one course's details, classwork, stream and people.
+ * Read-only: courses come from Google Classroom. */
 export function CourseSheet({ row, periodLabel, relative, onClose }: CourseSheetProps) {
   const { t, i18n } = useTranslation()
+  // Loaded when the sheet opens, for this course only.
+  const courseId = row?.course.id
+  const [recent, setRecent] = useState<{ courseId: string; items: Post[] } | null>(null)
+  useEffect(() => {
+    if (!courseId) return
+    // ponytail: every post of the course, newest 8 kept; add a limit to the API
+    // if a course ever has thousands.
+    api
+      .listPosts(new Date(0).toISOString(), new Date(Date.now() + 86_400_000).toISOString(), courseId)
+      .then((res) => setRecent({ courseId, items: res.items.slice(-8).reverse() }))
+      .catch(() => setRecent({ courseId, items: [] }))
+  }, [courseId])
+  const recentItems = recent && recent.courseId === courseId ? recent.items : null
+  const count = (n: number) => (row?.pending ? t('common.dash') : n)
   return (
     <Sheet open={row !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className='w-full gap-0 sm:max-w-xl'>
+      <SheetContent className='w-full gap-0 sm:max-w-3xl'>
         {row && (
           <>
             <SheetHeader className='border-b'>
               <SheetTitle className='pe-8 text-xl'>{row.course.name}</SheetTitle>
               <SheetDescription>{row.course.section || t('common.dash')}</SheetDescription>
             </SheetHeader>
-            <div className='flex flex-1 flex-col gap-3 overflow-y-auto bg-muted/40 p-3'>
-              <Section title={t('courses.basics')} description={t('courses.basicsDesc')}>
-                <dl className='grid grid-cols-2 gap-4'>
-                  <Field label={t('courses.courseId')}>{row.course.id}</Field>
-                  <Field label={t('courses.week')}>
-                    {weekdayLabel(row.course.week, i18n.language) ?? t('common.dash')}
-                  </Field>
-                  <Field label={t('courses.state')}>{row.course.state || t('common.dash')}</Field>
-                  <Field label={t('courses.status')}>
-                    <StatusBadge status={row.status} />
-                  </Field>
-                </dl>
-              </Section>
-              <Section
-                title={t('courses.activity')}
-                description={t('courses.activityDesc', { period: periodLabel })}
-              >
-                <dl className='grid grid-cols-2 gap-4 sm:grid-cols-4'>
-                  <Field label={t('courses.updates')}>{row.updates}</Field>
-                  <Field label={t('courses.announcements')}>{row.announcements}</Field>
-                  <Field label={t('courses.coursework')}>{row.coursework}</Field>
-                  <Field label={t('courses.materials')}>{row.materials}</Field>
-                </dl>
-              </Section>
-              <Section title={t('courses.recent')} description={t('courses.recentDesc')}>
-                {row.recent.length ? (
-                  <ul className='flex flex-col divide-y'>
-                    {row.recent.map((post) => (
-                      <li key={`${post.type}:${post.id}`} className='py-2 first:pt-0 last:pb-0'>
-                        <a
-                          href={post.alternate_link ?? undefined}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='block rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring'
-                        >
-                          <span className='block truncate text-sm font-medium'>{post.title}</span>
-                          <span className='block text-xs text-muted-foreground'>
-                            {t(`courses.${post.type}`)} · {relative(post.time)}
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className='text-sm text-muted-foreground'>{t('courses.noRecent')}</p>
-                )}
-              </Section>
-            </div>
+            {/* key: every course opens on General. Inactive tabs are unmounted, so
+                each one loads its data only when it is chosen. */}
+            <Tabs key={row.course.id} defaultValue='general' className='min-h-0 flex-1 gap-0'>
+              <div className='border-b px-4 py-2'>
+                <TabsList className='w-full sm:w-fit'>
+                  {TABS.map((tab) => (
+                    <TabsTrigger key={tab} value={tab}>
+                      {t(`courses.${tab}`)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              <TabsContent value='general' className='flex flex-col gap-3 overflow-y-auto bg-muted/40 p-3'>
+                <Section title={t('courses.basics')} description={t('courses.basicsDesc')}>
+                  <dl className='grid grid-cols-2 gap-4'>
+                    <Field label={t('courses.courseId')}>{row.course.id}</Field>
+                    <Field label={t('courses.week')}>
+                      {weekdayLabel(row.course.week, i18n.language) ?? t('common.dash')}
+                    </Field>
+                    <Field label={t('courses.state')}>{row.course.state || t('common.dash')}</Field>
+                    <Field label={t('courses.status')}>
+                      <StatusBadge status={row.status} />
+                    </Field>
+                  </dl>
+                </Section>
+                <Section
+                  title={t('courses.activity')}
+                  description={t('courses.activityDesc', { period: periodLabel })}
+                >
+                  <dl className='grid grid-cols-2 gap-4 sm:grid-cols-4'>
+                    <Field label={t('courses.updates')}>{count(row.updates)}</Field>
+                    <Field label={t('courses.announcements')}>{count(row.announcements)}</Field>
+                    <Field label={t('courses.coursework')}>{count(row.coursework)}</Field>
+                    <Field label={t('courses.materials')}>{count(row.materials)}</Field>
+                  </dl>
+                </Section>
+                <Section title={t('courses.recent')} description={t('courses.recentDesc')}>
+                  {recentItems === null ? (
+                    <div className='flex flex-col gap-2'>
+                      <Skeleton className='h-4 w-3/4' />
+                      <Skeleton className='h-4 w-1/2' />
+                    </div>
+                  ) : recentItems.length ? (
+                    <ul className='flex flex-col divide-y'>
+                      {recentItems.map((post) => (
+                        <li key={`${post.type}:${post.id}`} className='py-2 first:pt-0 last:pb-0'>
+                          <a
+                            href={post.alternate_link ?? undefined}
+                            target='_blank'
+                            rel='noreferrer'
+                            className='block rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring'
+                          >
+                            <span className='block truncate text-sm font-medium'>{post.title}</span>
+                            <span className='block text-xs text-muted-foreground'>
+                              {t(`courses.${post.type}`)} · {relative(post.time)}
+                            </span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className='text-sm text-muted-foreground'>{t('courses.noRecent')}</p>
+                  )}
+                </Section>
+              </TabsContent>
+              <TabsContent value='classwork' className='overflow-y-auto p-3'>
+                <CourseClassworkPage courseId={row.course.id} />
+              </TabsContent>
+              <TabsContent value='stream' className='overflow-y-auto p-3'>
+                <CourseStreamPage courseId={row.course.id} />
+              </TabsContent>
+              <TabsContent value='people' className='overflow-y-auto p-3'>
+                <CoursePeoplePage courseId={row.course.id} />
+              </TabsContent>
+            </Tabs>
             <SheetFooter className='flex-row justify-between border-t'>
               <Button variant='ghost' onClick={onClose}>
                 {t('common.close')}
               </Button>
-              <Button asChild>
-                <Link to='/courses/$courseId' params={{ courseId: row.course.id }}>
-                  {t('courses.openCourse')}
-                </Link>
-              </Button>
+              <div className='flex gap-2'>
+                {row.course.alternate_link && (
+                  <Button variant='outline' asChild>
+                    <a href={row.course.alternate_link} target='_blank' rel='noreferrer'>
+                      {t('courses.openInClassroom')}
+                    </a>
+                  </Button>
+                )}
+                <Button asChild>
+                  <Link to='/courses/$courseId' params={{ courseId: row.course.id }}>
+                    {t('courses.openCourse')}
+                  </Link>
+                </Button>
+              </div>
             </SheetFooter>
           </>
         )}

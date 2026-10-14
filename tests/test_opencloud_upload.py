@@ -44,6 +44,9 @@ def remote(monkeypatch):
         state.calls.append((request.method, request.url.path))
         if request.method == "PUT":
             state.files[request.url.path] = request.content
+        if request.method == "GET":
+            data = state.files.get(request.url.path)
+            return httpx.Response(200, content=data) if data is not None else httpx.Response(404)
         return httpx.Response(207 if request.method == "PROPFIND" else 201)
 
     monkeypatch.setattr(opencloud, "_transport", httpx.MockTransport(handler))
@@ -213,6 +216,29 @@ async def test_external_storage_keeps_no_local_copy(session, remote, google_serv
     await app_settings.update_opencloud_setting(session, enabled=False)
     await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
     assert len(_local_files(tmp_path)) == 3
+
+
+@pytest.mark.asyncio
+async def test_externally_stored_file_is_downloadable(session, remote, sign_in):
+    from src.api.main import app
+    from src.api.routes.courses import _attachment_public
+
+    await _enable(session)
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    rows = await cache.list_attachments(session, COURSE_ID)
+    f1 = next(r for r in rows if r.drive_file_id == "f1")
+    url = _attachment_public(f1)["download_url"]
+    assert f1.local_path is None and url
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert await sign_in(client, permissions=["courses:view"]) == 1  # the rows' owner
+        res = await client.get("/api" + url)
+        assert res.status_code == 200 and res.content == b"f1  "
+        assert res.headers["content-type"] == "application/pdf"
+        assert res.headers["content-disposition"].startswith("inline; filename*=utf-8''Report.pdf")
+
+        remote.down = True
+        assert (await client.get("/api" + url)).status_code == 502
 
 
 @pytest.mark.asyncio

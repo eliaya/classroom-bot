@@ -5,7 +5,7 @@ import '@/lib/i18n'
 // The page shows a table or cards depending on the breakpoint: needs the real CSS.
 import '@/styles/index.css'
 import { useAuthStore } from '@/stores/auth-store'
-import { type Course, type CoursePerson, type Post } from '@/lib/api'
+import { api, type Course, type CoursePerson, type Post } from '@/lib/api'
 import { CoursesListPage } from './courses-list'
 
 const DAY = 86_400_000
@@ -14,10 +14,11 @@ const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString()
 const today = new Date().getDay() || 7
 const otherDay = (today % 7) + 1
 
+// last_update: the newest of each course's posts below, as the API sends it.
 const COURSES: Course[] = [
-  { id: '101', name: '【AI07】Machine Learning', section: 'Mon 1-2 / Sato', week: today, state: 'ACTIVE' },
-  { id: '102', name: '【AI07】Web Engineering', section: 'Tue 3-4 / Abe', week: otherDay, state: 'ACTIVE' },
-  { id: '103', name: 'Homeroom', section: null, week: 8, state: 'ACTIVE' },
+  { id: '101', name: '【AI07】Machine Learning', section: 'Mon 1-2 / Sato', week: today, state: 'ACTIVE', last_update: ago(1) },
+  { id: '102', name: '【AI07】Web Engineering', section: 'Tue 3-4 / Abe', week: otherDay, state: 'ACTIVE', last_update: ago(2) },
+  { id: '103', name: 'Homeroom', section: null, week: 8, state: 'ACTIVE', last_update: ago(300) },
 ]
 const post = (id: string, course_id: string, type: Post['type'], days: number): Post => ({
   id, course_id, type, title: `${type} ${id}`, time: ago(days), alternate_link: 'https://classroom.example/x',
@@ -47,8 +48,17 @@ vi.mock('@/lib/api', async (importOriginal) => {
     api: {
       ...actual.api,
       listCourses: vi.fn(async () => ({ items: COURSES, total: COURSES.length })),
-      listPosts: vi.fn(async () => ({ items: POSTS, count: POSTS.length })),
+      // The API filters by time and course: so does the mock.
+      listPosts: vi.fn(async (start: string, end: string, courseId?: string) => {
+        const items = POSTS.filter(
+          (p) => p.time >= start && p.time < end && (!courseId || p.course_id === courseId)
+        )
+        return { items, count: items.length }
+      }),
       listPeople: vi.fn(async () => ({ items: PEOPLE })),
+      getStream: vi.fn(async () => ({
+        items: [{ id: 's1', type: 'announcement', title: 'Exam moved', text: 'To Friday', update_time: ago(1) }],
+      })),
     },
   }
 })
@@ -67,34 +77,41 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 vi.mock('./layout-header', () => ({ ClassroomHeader: () => null }))
 
 const names = () =>
-  [...document.querySelectorAll('tbody tr td a span span:first-child')].map((el) => el.textContent)
+  [...document.querySelectorAll('tbody tr td:nth-child(2) > button')].map((el) => el.textContent)
 
 describe('CoursesListPage', () => {
   beforeEach(async () => {
     await page.viewport(1440, 900)
+    localStorage.clear()
+    vi.mocked(api.listPosts).mockClear()
     useAuthStore.getState().auth.setUser({
       id: 1, email: 'user@example.com', name: null, picture_url: null, role: 'user',
       permissions: ['courses:view', 'sync:use'],
     })
   })
 
-  it('lists courses with their activity, status and KPIs', async () => {
+  it('lists courses with their activity and status', async () => {
     const screen = await render(<CoursesListPage />)
-    await expect.element(screen.getByRole('link', { name: /Web Engineering/ })).toBeInTheDocument()
+    await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
     // Default order: latest update first.
     expect(names()).toEqual(['【AI07】Machine Learning', '【AI07】Web Engineering', 'Homeroom'])
     const rows = [...document.querySelectorAll('tbody tr')].map((tr) => tr.textContent ?? '')
     expect(rows[0]).toContain('Today') // held on today's weekday
     expect(rows[1]).toContain('Active') // updated in the period
     expect(rows[2]).toContain('Quiet') // nothing in the last 90 days
-    // Two courses were updated in the period; one announcement, two coursework, one material.
-    const kpis = [...document.querySelectorAll('.\\@5xl\\:grid-cols-4 > div')].map((el) => el.textContent ?? '')
-    expect(kpis.map((text) => text.replace(/\D+/g, ' ').trim().split(' ')[0])).toEqual(['2', '1', '2', '1'])
+    // No KPI cards, no row menu, no sync button, no section under the name.
+    expect(document.body.textContent).not.toContain('Active courses')
+    expect(document.querySelector('[aria-label^="Actions for"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Sync now' }).elements()).toHaveLength(0)
+    expect(document.querySelector('tbody')?.textContent).not.toContain('Sato /')
+    // Only the period's posts were read; the last update came with the courses.
+    expect(api.listPosts).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(api.listPosts).mock.calls[0][0] > ago(91)).toBe(true)
   })
 
   it('puts the week first, the course id in a tooltip and the people in avatars', async () => {
     const screen = await render(<CoursesListPage />)
-    await expect.element(screen.getByRole('link', { name: /Web Engineering/ })).toBeInTheDocument()
+    await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
     const heads = [...document.querySelectorAll('thead th')].map((th) => th.textContent)
     expect(heads.slice(0, 3)).toEqual(['Week', 'Course name', 'People'])
     expect(heads).not.toContain('Course ID')
@@ -109,13 +126,13 @@ describe('CoursesListPage', () => {
     expect(document.querySelector('tbody tr:nth-child(2)')?.textContent).toContain('+2')
     expect(document.querySelector('tbody tr:nth-child(3) td:nth-child(3)')?.textContent).toBe('—')
 
-    await userEvent.hover(screen.getByRole('link', { name: /Machine Learning/ }))
+    await userEvent.hover(screen.getByRole('button', { name: /Machine Learning/ }))
     await expect.element(screen.getByRole('tooltip')).toHaveTextContent('Course ID: 101')
   })
 
   it('filters by tab, search and activity, and sorts by a column', async () => {
     const screen = await render(<CoursesListPage />)
-    await expect.element(screen.getByRole('link', { name: /Web Engineering/ })).toBeInTheDocument()
+    await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Active' }))
     expect(names()).toEqual(['【AI07】Web Engineering'])
@@ -131,20 +148,46 @@ describe('CoursesListPage', () => {
     expect(names()[0]).toBe('【AI07】Web Engineering')
   })
 
-  it('opens the details sheet and hides a column from Manage Table', async () => {
+  it('remembers the sort order', async () => {
+    const first = await render(<CoursesListPage />)
+    await expect.element(first.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
+    // Descending by name: an order the default (latest update first) never gives.
+    await userEvent.click(first.getByRole('button', { name: 'Course name' }))
+    await userEvent.click(first.getByRole('button', { name: 'Course name' }))
+    expect(names()).toEqual(['Homeroom', '【AI07】Web Engineering', '【AI07】Machine Learning'])
+    await first.unmount()
+
+    const again = await render(<CoursesListPage />)
+    await expect.element(again.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
+    expect(names()).toEqual(['Homeroom', '【AI07】Web Engineering', '【AI07】Machine Learning'])
+    expect(document.querySelector('th[aria-sort="descending"]')?.textContent).toBe('Course name')
+  })
+
+  it('opens the details sheet from the title and hides a column from Manage Table', async () => {
     const screen = await render(<CoursesListPage />)
-    await expect.element(screen.getByRole('link', { name: /Web Engineering/ })).toBeInTheDocument()
+    await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Manage Table' }))
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Week' }))
     await userEvent.keyboard('{Escape}')
     expect(document.querySelector('thead')?.textContent).not.toContain('Week')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Actions for 【AI07】Web Engineering' }))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'View details' }))
-    await expect.element(screen.getByRole('dialog')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Web Engineering/ }))
+    const sheet = screen.getByRole('dialog')
+    await expect.element(sheet).toBeInTheDocument()
+    // Opens on General: the details shown before the tabs existed.
+    expect(sheet.getByRole('tab').elements().map((el) => el.textContent)).toEqual([
+      'General', 'Classwork', 'Stream', 'People',
+    ])
+    await expect.element(sheet.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true')
     await expect.element(screen.getByText('Course basics')).toBeInTheDocument()
+    // Its recent posts are read when it opens, for this course only.
     await expect.element(screen.getByText('coursework w1')).toBeInTheDocument()
+    expect(vi.mocked(api.listPosts).mock.lastCall?.[2]).toBe('102')
+
+    await userEvent.click(sheet.getByRole('tab', { name: 'Stream' }))
+    await expect.element(sheet.getByText('Exam moved')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('Course basics')
   })
 
   it('shows one card per course on a phone', async () => {

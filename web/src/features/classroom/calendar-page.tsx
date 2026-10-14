@@ -31,7 +31,7 @@ import {
   MapPin,
   Megaphone,
 } from 'lucide-react'
-import { api, type CalendarEvent, type Course, type Post } from '@/lib/api'
+import { api, type Attachment, type CalendarEvent, type Course, type Post } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -55,6 +55,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
 import { gridOffset, layoutColumns, monthGrid } from './calendar-layout'
+import { AttachmentView } from './components/attachment-view'
 import { ClassroomHeader } from './layout-header'
 
 const HOUR_HEIGHT = 72
@@ -224,19 +225,19 @@ export function CalendarPage() {
         p.at < to
     )
   // An all-day date is a calendar day wherever the viewer is, not UTC midnight.
-  const rangeEvents: TimedEvent[] = !types.has('event')
-    ? []
-    : events
-        .map((e) => {
-          const at = (value: string) => new Date(e.all_day ? `${value}T00:00:00` : value)
-          const from = at(e.start)
-          return { ...e, from, to: e.end ? at(e.end) : from }
-        })
-        .filter((e) => e.from < to && e.to >= from)
+  // Shown or not, they tell which courses are held on a day.
+  const allRangeEvents: TimedEvent[] = events
+    .map((e) => {
+      const at = (value: string) => new Date(e.all_day ? `${value}T00:00:00` : value)
+      const from = at(e.start)
+      return { ...e, from, to: e.end ? at(e.end) : from }
+    })
+    .filter((e) => e.from < to && e.to >= from)
+  const rangeEvents = types.has('event') ? allRangeEvents : []
   /** Events on `day`; a zero-length one belongs to the day it starts on. */
-  const eventsOn = (day: Date, ofHiddenCourses = false) => {
+  const eventsOn = (day: Date, ofHiddenCourses = false, list = rangeEvents) => {
     const from = startOfDay(day)
-    return rangeEvents.filter(
+    return list.filter(
       (e) =>
         (ofHiddenCourses || !hiddenCourses.has(e.course_id ?? '')) &&
         e.from < addDays(from, 1) &&
@@ -245,14 +246,21 @@ export function CalendarPage() {
   }
   const dayEvents = eventsOn(date)
 
-  // Day columns: the courses held on this weekday and those with an event today
-  // (a make-up class, a deadline), in class order (the section starts with the
-  // weekday and period). Course weekdays are 1 (Mon) … 7 (Sun).
+  // Day columns: the courses with an event today (a class, a make-up class, a
+  // deadline), in class order (the section starts with the weekday and period).
+  // The course's weekday counts only without a timetable: a past term's course
+  // keeps its weekday and stays active in Classroom after its last class.
+  // ponytail: "timetable" = any timed course event in the loaded week; a week
+  // with none (a holiday week) falls back to the weekdays.
+  // Course weekdays are 1 (Mon) … 7 (Sun).
   // Posts of that day from any other course show in the week view and the log only.
   const weekday = date.getDay() || 7
+  const timetable = allRangeEvents.some((e) => e.course_id && !e.all_day)
   const heldToday = courses
     .filter(
-      (c) => c.week === weekday || eventsOn(date, true).some((e) => e.course_id === c.id)
+      (c) =>
+        (!timetable && c.week === weekday) ||
+        eventsOn(date, true, allRangeEvents).some((e) => e.course_id === c.id)
     )
     .sort((a, b) => (a.section ?? '').localeCompare(b.section ?? ''))
   const dayCourses = heldToday.filter((c) => !hiddenCourses.has(c.id))
@@ -387,6 +395,30 @@ export function CalendarPage() {
   const openedTone = openedPost ? TONES[openedPost.type] : EVENT_TONE
   const openedCourse = courseOf(opened?.course_id ?? '')
   const openedLink = openedPost ? openedPost.alternate_link : openedEvent?.link
+  // Posts carry no attachments: a Classwork post's come from its course's classwork.
+  const [loaded, setLoaded] = useState<{ key: string; list: Attachment[] } | null>(null)
+  const classworkKey =
+    openedPost && openedPost.type !== 'announcement'
+      ? `${openedPost.course_id}/${openedPost.id}`
+      : null
+  useEffect(() => {
+    if (!classworkKey) return
+    const [courseId, id] = classworkKey.split('/')
+    let stale = false
+    api
+      .getClasswork(courseId)
+      .then((res) => {
+        const item = [...res.coursework, ...res.materials].find((i) => i.id === id)
+        if (!stale) setLoaded({ key: classworkKey, list: item?.attachments ?? [] })
+      })
+      .catch(() => undefined) // the drawer still shows the post without them
+    return () => {
+      stale = true
+    }
+  }, [classworkKey])
+  const attachments = loaded && loaded.key === classworkKey ? loaded.list : []
+  const forms = attachments.filter((a) => a.source === 'form')
+  const files = attachments.filter((a) => a.source !== 'form')
 
   const lineTrigger =
     'relative flex-none rounded-none border-0 px-2 py-1 text-foreground/60 shadow-none after:absolute after:inset-x-0 after:bottom-[-5px] after:h-0.5 after:bg-foreground after:opacity-0 after:transition-opacity hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:opacity-100 dark:data-[state=active]:bg-transparent'
@@ -1129,6 +1161,20 @@ export function CalendarPage() {
                   <p className='border-t pt-3 break-words whitespace-pre-wrap'>
                     {plainText(openedEvent.description)}
                   </p>
+                )}
+                {[
+                  { key: 'forms', label: t('calendar.googleForms', { count: forms.length }), list: forms },
+                  { key: 'files', label: t('classwork.attachments', { count: files.length }), list: files },
+                ].map(
+                  ({ key, label, list }) =>
+                    list.length > 0 && (
+                      <div key={key} className='space-y-2 border-t pt-3'>
+                        <p className='text-xs font-medium text-muted-foreground uppercase'>{label}</p>
+                        {list.map((att) => (
+                          <AttachmentView key={att.id} att={att} />
+                        ))}
+                      </div>
+                    )
                 )}
               </div>
               {openedLink && (
