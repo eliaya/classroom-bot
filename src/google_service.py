@@ -58,6 +58,17 @@ CLASSROOM_MAX_PAGE_SIZE = 30
 NOT_CONNECTED = "No Google Classroom account is connected. Connect one in Settings."
 
 
+def _find(service: Any, name: str, parent: str, folder: bool) -> Optional[str]:
+    """Id of the folder (or file) ``name`` directly inside ``parent``."""
+    quoted = name.replace("\\", "\\\\").replace("'", "\\'")
+    query = (
+        f"name = '{quoted}' and '{parent}' in parents and trashed = false "
+        f"and mimeType {'=' if folder else '!='} '{DRIVE_FOLDER_MIME}'"
+    )
+    hits = service.files().list(q=query, fields="files(id)", pageSize=1).execute()
+    return (hits.get("files") or [{}])[0].get("id")
+
+
 class GoogleClassroomService:
     """Handles interaction with the clean, production-ready Google Classroom API.
 
@@ -359,15 +370,6 @@ class GoogleClassroomService:
         user's Drive, creating the folders. ``folders`` caches folder path -> id
         across calls. Needs ``DRIVE_FILE_SCOPE``, under which only files and
         folders this app created are visible — so it never touches anything else."""
-        def _find(service: Any, name: str, parent: str, folder: bool) -> Optional[str]:
-            quoted = name.replace("\\", "\\\\").replace("'", "\\'")
-            query = (
-                f"name = '{quoted}' and '{parent}' in parents and trashed = false "
-                f"and mimeType {'=' if folder else '!='} '{DRIVE_FOLDER_MIME}'"
-            )
-            hits = service.files().list(q=query, fields="files(id)", pageSize=1).execute()
-            return (hits.get("files") or [{}])[0].get("id")
-
         def _sync_upload() -> None:
             service = self._get_drive_service()
             *dirs, name = path.split("/")
@@ -391,6 +393,28 @@ class GoogleClassroomService:
                 service.files().create(body={"name": name, "parents": [parent]}, media_body=media).execute()
 
         await asyncio.to_thread(_sync_upload)
+
+    async def download_drive_path(self, path: str) -> bytes:
+        """The content of the file ``upload_to_drive`` stored at ``path``."""
+        def _sync_download() -> bytes:
+            service = self._get_drive_service()
+            *dirs, name = path.split("/")
+            parent: Optional[str] = "root"
+            for part in dirs:
+                parent = _find(service, part, parent, True)
+                if not parent:
+                    raise FileNotFoundError(path)
+            file_id = _find(service, name, parent, False)
+            if not file_id:
+                raise FileNotFoundError(path)
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, service.files().get_media(fileId=file_id))
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            return buffer.getvalue()
+
+        return await asyncio.to_thread(_sync_download)
 
     async def export_drive_file(self, file_id: str, export_mime: str) -> bytes:
         """Export a Google-native file (Docs/Sheets/Slides) to the given MIME type."""

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-14
+
+### Added
+- **PDF preview in the page.** A fetched PDF attachment (uploaded, or a Doc/Slides exported to PDF) has a Preview link that opens it in a dialog with EmbedPDF (`@embedpdf/react-pdf-viewer` and `@embedpdf/pdfium` 2.15.1, MIT): zoom, search, thumbnails, print and download; annotation and redaction are turned off. The viewer and its PDFium WebAssembly (about 4.6 MB) are served with the app and load only when a PDF is opened. The mouse wheel scrolls the pages while the page behind stays locked. Settings → Language has a per-device switch to open PDFs in the browser's own viewer instead.
+- **Attachments from external storage can be downloaded.** Once a file has moved to OpenCloud, Nextcloud or Google Drive, its download link stays: the API relays the file from the user's storage with their saved credentials (the token never reaches the browser), and answers 502 when the storage cannot be reached.
+- **Calendar side sheet lists a post's attachments**, with Google Forms apart from the other files.
+- **Course side sheet tabs.** General (the details shown before), Classwork, Stream and People; each tab loads its data when chosen. The sheet is wider and links to Google Classroom.
+- `ATTACHMENT_SYNC_CONCURRENCY` (default 4): how many Drive attachments a sync handles at once.
+
+### Changed
+- **Faster syncs.** Attachments already settled (stored, too large, or failed for good: `cannotDownloadFile`, "File not found") are no longer asked of Drive on every sync, the rest are handled several at a time, and each course commits once. With every attachment settled a sync makes no Drive metadata calls. A Drive file replaced in place under the same id is not fetched again, and a file that failed for good is not retried.
+- **Courses page.** The four KPI cards, the row menu and the Sync Now button are gone (the header keeps its Sync Now button); the course name opens the side sheet and shows without its section or an underline. The sort order is remembered per device. The page loads in batches: the course list first, then the selected period's posts (fetched once per period instead of two years of posts at once) and the people; a course's latest updates load when its sheet opens. `GET /api/courses` returns each course's `last_update`, and `GET /api/courses/posts` takes an optional `course_id`.
+
+### Fixed
+- **Calendar day view showed past-term courses.** A course held on the day's weekday got a column even when its term had ended (it stays active in Classroom). With timetable events in the loaded week, the day view now shows only the courses with an event that day; the weekday counts only when there is no timetable. Hiding Google Calendar events in Filters no longer removes the day's columns.
+
 ## [0.20.0] - 2026-10-13
 
 **Upgrade notes.** `DISCORD_BOT_TOKEN` is read one last time: on the first start the previously shared bot, with its commands and message templates, becomes the bot of the account its servers are connected to, so it keeps running. After that the variable is ignored and tokens are managed on the Discord bot page. Bot tokens are stored in the database, so they are part of every backup archive.

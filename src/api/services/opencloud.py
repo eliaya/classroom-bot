@@ -45,6 +45,13 @@ async def check(setting: OpenCloudSetting) -> None:
         (await c.request("PROPFIND", "", headers={"Depth": "0"})).raise_for_status()
 
 
+async def get(c: httpx.AsyncClient, path: str) -> bytes:
+    """The content of the file at ``path`` (relative to the space)."""
+    r = await c.get("/".join(quote(p, safe="") for p in path.split("/")))
+    r.raise_for_status()
+    return r.content
+
+
 async def put(c: httpx.AsyncClient, path: str, data: bytes, made: set[str]) -> None:
     """Upload ``data`` to ``path`` (relative to the space), creating parent
     folders. ``made`` remembers folders already created on this client."""

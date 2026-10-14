@@ -115,7 +115,7 @@ Classroom キャッシュの自動同期は `SchedulerService` が管理しま�
 - **Drive スコープが必要**：この機能は任意の `drive.readonly` スコープを使用します。**既存トークンはそのまま動作し、Classroom 同期には影響しません**。Drive を有効化するまで添付ダウンロードはスキップされます（状態 `skipped`）。有効化するには Web UI の **設定** で「Re-authorize」を押して再認可してください。
 
 - **API**：`GET /api/courses/{id}/attachments`（一覧）、`GET /api/courses/{id}/attachments/{db_id}/download`（保存済みファイルを配信）。
-- **設定**：`ATTACHMENT_SYNC_ENABLED` / `ATTACHMENT_STORAGE_DIR` / `ATTACHMENT_MAX_BYTES` / `ATTACHMENT_DOWNLOAD_RETRIES`。
+- **設定**：`ATTACHMENT_SYNC_ENABLED` / `ATTACHMENT_STORAGE_DIR` / `ATTACHMENT_MAX_BYTES` / `ATTACHMENT_DOWNLOAD_RETRIES` / `ATTACHMENT_SYNC_CONCURRENCY`。
 
 ## ドキュメント
 

@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import '@/lib/i18n'
 import '@/styles/index.css'
-import { type CalendarEvent, type Course, type Post } from '@/lib/api'
+import { api, type CalendarEvent, type Course, type Post } from '@/lib/api'
 import { gridOffset, layoutColumns, monthGrid } from './calendar-layout'
 import { CalendarPage } from './calendar-page'
 
@@ -22,7 +22,8 @@ const COURSES: Course[] = [
   // Held on another weekday: no column in the day view, even with a post today.
   { id: '103', name: 'English Communication', week: (TODAY % 7) + 1 },
   { id: '105', name: 'Physical Education', week: (TODAY % 7) + 1 },
-  // Held today, without posts: has a column.
+  // Held on today's weekday, but not on today's timetable (a past term's course):
+  // a column only when there is no timetable to tell.
   { id: '104', name: 'Homeroom', week: TODAY },
 ]
 const POSTS: Post[] = [
@@ -57,6 +58,19 @@ vi.mock('@/lib/api', async (importOriginal) => {
       listCourses: vi.fn(async () => ({ items: COURSES, total: COURSES.length })),
       listPosts: vi.fn(async () => ({ items: POSTS, count: POSTS.length })),
       listCalendarEvents: vi.fn(async () => ({ granted: true, items: EVENTS })),
+      getClasswork: vi.fn(async () => ({
+        coursework: [],
+        topics: [],
+        materials: [
+          {
+            id: 'm1',
+            attachments: [
+              { id: 1, source: 'form', title: 'Week 5 quiz', source_url: 'https://forms.example/q', fetch_status: 'skipped' },
+              { id: 2, source: 'link', title: 'Reading', source_url: 'https://example.com/r', fetch_status: 'skipped' },
+            ],
+          },
+        ],
+      })),
     },
   }
 })
@@ -109,10 +123,11 @@ describe('CalendarPage', () => {
     await page.viewport(1280, 900)
     render(<CalendarPage />)
 
-    // Day view: a column per course, and the grid grows to hold the 22:00 post.
+    // Day view: a column per course on today's timetable, and the grid grows to
+    // hold the 22:00 post.
     await expect.element(page.getByText('Room change')).toBeVisible()
     await expect.element(page.getByText('Machine Learning')).toBeVisible()
-    await expect.element(page.getByText('Homeroom')).toBeVisible()
+    expect(document.body.textContent).not.toContain('Homeroom')
     expect(document.body.textContent).not.toContain('Physical Education')
     expect(document.body.textContent).not.toContain('Essay draft')
     await expect.element(page.getByText('Late quiz')).toBeInTheDocument()
@@ -122,7 +137,7 @@ describe('CalendarPage', () => {
     expect(!!document.querySelector('[data-slot="now-line"]')).toBe(minutes >= 480 && minutes <= 1380)
 
     // The course picker counts the day's courses only.
-    await expect.element(page.getByRole('button', { name: '4 of 4 courses' })).toBeVisible()
+    await expect.element(page.getByRole('button', { name: '3 of 3 courses' })).toBeVisible()
 
     // Filter out coursework.
     await page.getByRole('button', { name: 'Filters' }).click()
@@ -143,10 +158,38 @@ describe('CalendarPage', () => {
     // A post opens its details.
     await page.getByText('Slides week 5').click()
     await expect.element(page.getByRole('dialog')).toHaveTextContent('Web Engineering')
+    // Its Google Forms and other attachments are listed apart.
+    await expect.element(page.getByText('Google Forms (1)')).toBeVisible()
+    await expect.element(page.getByText('Attachments (1)')).toBeVisible()
+    await expect
+      .element(page.getByRole('link', { name: /Week 5 quiz/ }))
+      .toHaveAttribute('href', 'https://forms.example/q')
+    await expect.element(page.getByRole('link', { name: /Reading/ })).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).click()
 
     await page.getByRole('tab', { name: 'Log history' }).click()
     await expect.element(page.getByText('Recent updates · 5 posts')).toBeVisible()
+  })
+
+  it('falls back to the courses\' weekdays without a timetable', async () => {
+    await page.viewport(1280, 900)
+    vi.mocked(api.listCalendarEvents).mockResolvedValueOnce({ granted: false, items: [] })
+    render(<CalendarPage />)
+    await expect.element(page.getByText('Homeroom')).toBeVisible()
+    await expect.element(page.getByText('Web Engineering')).toBeVisible()
+    expect(document.body.textContent).not.toContain('English Communication')
+  })
+
+  it('keeps the day\'s columns when calendar events are hidden', async () => {
+    await page.viewport(1280, 900)
+    render(<CalendarPage />)
+    await expect.element(page.getByText('English Communication')).toBeVisible()
+    await page.getByRole('button', { name: 'Filters' }).click()
+    await page.getByRole('menuitemcheckbox', { name: 'Google Calendar' }).click()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(document.body.textContent).not.toContain('Make-up class')
+    await expect.element(page.getByText('English Communication')).toBeVisible()
+    expect(document.body.textContent).not.toContain('Homeroom')
   })
 
   it('shows Google Calendar events with their course, opens them, and can hide them', async () => {
@@ -215,6 +258,6 @@ describe('CalendarPage', () => {
     await day.click()
     // Back in the day view, on that day.
     await expect.element(page.getByText('Room change')).toBeVisible()
-    await expect.element(page.getByRole('button', { name: '4 of 4 courses' })).toBeVisible()
+    await expect.element(page.getByRole('button', { name: '3 of 3 courses' })).toBeVisible()
   })
 })

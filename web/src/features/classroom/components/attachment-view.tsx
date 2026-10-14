@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { fileUrl, type Attachment } from '@/lib/api'
+import { PdfPreview, usesBrowserViewer } from './pdf-preview'
 
 // Shared attachment design used by both the Classwork page and the Courses
 // split-screen detail panel, so the two stay visually identical.
@@ -89,6 +91,7 @@ export function AttachmentIcon({ att }: { att: Attachment }) {
 
 export function AttachmentView({ att }: { att: Attachment }) {
   const { t } = useTranslation()
+  const [previewing, setPreviewing] = useState(false)
   const label = att.title || att.source
 
   // Non-Drive items: external link only.
@@ -134,6 +137,8 @@ export function AttachmentView({ att }: { att: Attachment }) {
   }
 
   const url = fileUrl(att.download_url)
+  // Uploaded PDFs, and Docs/Slides exported to PDF.
+  const isPdf = att.content_type === 'application/pdf'
 
   return (
     <div className='flex items-center justify-between gap-2 rounded border p-2 text-sm'>
@@ -150,6 +155,19 @@ export function AttachmentView({ att }: { att: Attachment }) {
                 {t('attachment.open')}
               </a>
             )}
+            {isPdf && (
+              <button
+                type='button'
+                onClick={() =>
+                  usesBrowserViewer()
+                    ? window.open(url, '_blank', 'noopener')
+                    : setPreviewing(true)
+                }
+                className='text-primary text-xs underline'
+              >
+                {t('attachment.preview')}
+              </button>
+            )}
             <a href={url} download className='text-primary text-xs underline'>
               {att.file_size
                 ? t('attachment.downloadWithSize', { size: formatBytes(att.file_size) })
@@ -158,6 +176,9 @@ export function AttachmentView({ att }: { att: Attachment }) {
           </div>
         </div>
       </div>
+      {isPdf && (
+        <PdfPreview url={url} title={label} open={previewing} onOpenChange={setPreviewing} />
+      )}
     </div>
   )
 }

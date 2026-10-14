@@ -40,3 +40,15 @@ async def test_list_posts_between_filters_by_update_time():
         ("material", "c3", "Slides"),
         ("announcement", "c1", "Hello"),
     ]
+
+    async with db.async_session_factory() as s:
+        one = await cache.list_posts_between(s, "2026-10-11T15:00:00.000Z", "2026-10-12T15:00:00.000Z", "c2")
+        latest = await cache.last_post_times(s)
+
+    assert [i["id"] for i in one] == ["w1"]
+    # The latest of each course, by update time.
+    assert latest == {
+        "c1": "2026-10-12T03:00:00.123Z",
+        "c2": "2026-10-20T00:00:00.000Z",
+        "c3": "2026-10-12T02:00:00.000Z",
+    }

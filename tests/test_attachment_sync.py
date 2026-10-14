@@ -196,15 +196,83 @@ async def test_resync_is_idempotent(session, gs, monkeypatch):
     await _seed_coursework(session, {
         "id": "cw1", "title": "t", "materials": [_drive_material("f1", "Report.pdf")],
     })
-    monkeypatch.setattr(gs, "get_drive_file_metadata",
-                        AsyncMock(return_value={"id": "f1", "name": "Report.pdf",
-                                                "mimeType": "application/pdf", "size": "5"}))
+    meta = AsyncMock(return_value={"id": "f1", "name": "Report.pdf",
+                                   "mimeType": "application/pdf", "size": "5"})
+    monkeypatch.setattr(gs, "get_drive_file_metadata", meta)
     download = AsyncMock(return_value=b"12345")
     monkeypatch.setattr(gs, "download_drive_file", download)
 
     await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
-    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
 
-    # Unchanged size on the second run → no re-download.
+    # Already stored → the second run asks Drive nothing.
+    assert meta.await_count == 1
     assert download.await_count == 1
-    assert len(await cache.list_attachments(session, COURSE_ID)) == 1
+    assert stats["fetched"] == 1
+    [att] = await cache.list_attachments(session, COURSE_ID)
+    assert att.fetch_status == "fetched" and att.local_path
+
+
+@pytest.mark.asyncio
+async def test_settled_failures_and_oversize_are_not_asked_again(session, gs, monkeypatch):
+    monkeypatch.setattr(config_module.settings, "ATTACHMENT_DOWNLOAD_RETRIES", 0)
+    monkeypatch.setattr(config_module.settings, "ATTACHMENT_MAX_BYTES", 10)
+    await _seed_coursework(session, {
+        "id": "cw1", "title": "t", "materials": [
+            _drive_material("gone", "Gone.pdf"),
+            _drive_material("big", "Huge.pdf"),
+            _drive_material("flaky", "Flaky.pdf"),
+        ],
+    })
+
+    async def metadata(file_id):
+        if file_id == "gone":
+            raise RuntimeError("<HttpError 404 ... File not found: gone.>")
+        if file_id == "flaky":
+            raise RuntimeError("timed out")
+        return {"id": file_id, "name": "Huge.pdf", "mimeType": "application/pdf", "size": "999"}
+
+    meta = AsyncMock(side_effect=metadata)
+    monkeypatch.setattr(gs, "get_drive_file_metadata", meta)
+
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert meta.await_count == 3
+    stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+
+    # Only the transient failure is tried again; the rows keep their results.
+    assert meta.await_count == 4
+    assert meta.await_args.args[0] == "flaky"
+    assert (stats["failed"], stats["skipped"]) == (2, 1)
+    by_id = {a.drive_file_id: a for a in await cache.list_attachments(session, COURSE_ID)}
+    assert by_id["gone"].fetch_status == "failed"
+    assert "File not found" in by_id["gone"].error_message
+    assert by_id["big"].fetch_status == "skipped" and by_id["big"].file_size == 999
+
+
+@pytest.mark.asyncio
+async def test_drive_files_are_fetched_concurrently(session, gs, monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(config_module.settings, "ATTACHMENT_SYNC_CONCURRENCY", 3)
+    await _seed_coursework(session, {
+        "id": "cw1", "title": "t",
+        "materials": [_drive_material(f"f{i}", f"R{i}.pdf") for i in range(6)],
+    })
+    running = peak = 0
+
+    async def metadata(file_id):
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        return {"id": file_id, "name": "R.pdf", "mimeType": "application/pdf", "size": "3"}
+
+    monkeypatch.setattr(gs, "get_drive_file_metadata", metadata)
+    monkeypatch.setattr(gs, "download_drive_file", AsyncMock(return_value=b"abc"))
+
+    stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+
+    assert peak == 3
+    assert stats["fetched"] == 6
+    assert len(await cache.list_attachments(session, COURSE_ID)) == 6

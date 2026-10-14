@@ -1,30 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import {
-  BookOpen,
-  ChevronDown,
-  ChevronUp,
-  ClipboardList,
-  FileText,
-  Megaphone,
-  MoreHorizontal,
-  RefreshCw,
-  Search,
-  SlidersHorizontal,
-  type LucideIcon,
-} from 'lucide-react'
+import { ChevronDown, ChevronUp, Search, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import { useSyncStatusStore } from '@/stores/sync-status-store'
 import { api, type Course, type CoursePerson, type Post } from '@/lib/api'
-import { useCan } from '@/lib/permissions'
 import { cn, fullTimestamp, humanReadableTime, weekdayLabel } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -35,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Main } from '@/components/layout/main'
 import AnimatedTooltipMotion from '@/components/shadcn-space/tooltip/tooltip-03'
@@ -61,127 +45,60 @@ const COLUMNS: { key: ColumnKey; label: string }[] = [
 ]
 
 const DAY_MS = 86_400_000
-const SPARK_POINTS = 12
 // Avatars shown per course before the rest are counted as "+N".
 const MAX_AVATARS = 5
-// ponytail: one request for two years of posts, sliced in the browser for every
-// period; page the API if a user's history ever makes this slow.
-const HISTORY_MS = 730 * DAY_MS
 
-/** Start of the selected period and of the equally long one before it. */
-function periodBounds(period: Period, now: number) {
-  const start =
-    period === 'year'
-      ? new Date(new Date(now).getFullYear(), 0, 1).getTime()
-      : now - Number(period) * DAY_MS
-  return { start, prevStart: start - (now - start) }
-}
-
-/** Percent change, or null when there is nothing to compare with. */
-function change(current: number, previous: number): number | null {
-  return previous === 0 ? null : ((current - previous) / previous) * 100
-}
-
-function Sparkline({ points, className }: { points: number[]; className?: string }) {
-  const max = Math.max(...points, 1)
-  const coords = points
-    .map((p, i) => `${(i / (points.length - 1)) * 78 + 1},${34 - (p / max) * 32}`)
-    .join(' ')
-  return (
-    <svg viewBox='0 0 80 36' aria-hidden='true' className={cn('h-9 w-20 shrink-0', className)}>
-      <polyline
-        points={coords}
-        fill='none'
-        strokeWidth='1.5'
-        strokeLinejoin='round'
-        strokeLinecap='round'
-        vectorEffect='non-scaling-stroke'
-        className='stroke-sky-500'
-      />
-    </svg>
-  )
-}
-
-type Kpi = { label: string; icon: LucideIcon; value: number; delta: number | null; points: number[] }
-
-/** One KPI. `compact` is the card used below md: the label gets the full width. */
-function KpiBody({ kpi, compact }: { kpi: Kpi; compact?: boolean }) {
-  const { t } = useTranslation()
-  const Icon = kpi.icon
-  const label = (
-    <span className={cn('flex items-center gap-2 text-muted-foreground', compact ? 'text-xs' : 'text-sm')}>
-      <Icon className='size-4 shrink-0' aria-hidden='true' />
-      <span className='truncate'>{t(kpi.label)}</span>
-    </span>
-  )
-  const figures = (
-    <span className={cn('flex', compact ? 'flex-col' : 'items-baseline gap-2')}>
-      <span className={cn('font-semibold tabular-nums', compact ? 'text-lg' : 'text-2xl')}>
-        {kpi.value.toLocaleString()}
-      </span>
-      {kpi.delta !== null && (
-        <span
-          className={cn(
-            'font-medium tabular-nums',
-            compact ? 'text-xs' : 'text-sm',
-            kpi.delta < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
-          )}
-        >
-          {kpi.delta >= 0 ? '+' : ''}
-          {kpi.delta.toFixed(1)}%
-        </span>
-      )}
-    </span>
-  )
-  if (compact) {
-    return (
-      <div className='flex w-full min-w-0 flex-col gap-2'>
-        {label}
-        <div className='flex items-end justify-between gap-2'>
-          {figures}
-          <Sparkline points={kpi.points} className='h-7 w-14' />
-        </div>
-      </div>
-    )
+// Per-device: the table keeps the last sort order.
+const SORT_KEY = 'courses-sort'
+type Sort = { key: ColumnKey; desc: boolean }
+function savedSort(): Sort {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SORT_KEY) ?? 'null') as Sort | null
+    if (saved && COLUMNS.some((c) => c.key === saved.key)) return { key: saved.key, desc: !!saved.desc }
+  } catch {
+    // private mode or a bad value: the default
   }
-  return (
-    <>
-      <div className='flex min-w-0 flex-col gap-2'>
-        {label}
-        {figures}
-      </div>
-      <Sparkline points={kpi.points} />
-    </>
-  )
+  return { key: 'last', desc: true }
+}
+
+/** Start of the selected period. */
+function periodStart(period: Period, now: number) {
+  return period === 'year'
+    ? new Date(new Date(now).getFullYear(), 0, 1).getTime()
+    : now - Number(period) * DAY_MS
 }
 
 export function CoursesListPage() {
   const { t, i18n } = useTranslation()
-  const canSync = useCan('sync:use')
   const [courses, setCourses] = useState<Course[]>([])
-  const [posts, setPosts] = useState<Post[]>([])
+  // The posts of each period, fetched the first time it is chosen.
+  const [posts, setPosts] = useState<Partial<Record<Period, Post[]>>>({})
   const [people, setPeople] = useState<CoursePerson[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
   const [tab, setTab] = useState<StatusTab>('all')
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<Period>('90')
   const [band, setBand] = useState<Band>('all')
   const [hidden, setHidden] = useState<ColumnKey[]>([])
-  const [sort, setSort] = useState<{ key: ColumnKey; desc: boolean }>({ key: 'last', desc: true })
-  const [selected, setSelected] = useState<CourseRow | null>(null)
+  const [sort, setSort] = useState<Sort>(savedSort)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   // Fixed for the page's lifetime so the periods do not shift while it is open.
   const [now] = useState(() => Date.now())
 
   useEffect(() => {
-    Promise.all([
-      api.listCourses(),
-      api.listPosts(new Date(now - HISTORY_MS).toISOString(), new Date(now + DAY_MS).toISOString()),
-    ])
-      .then(([courseRes, postRes]) => {
-        setCourses(courseRes.items)
-        setPosts(postRes.items)
-      })
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sort))
+    } catch {
+      // private mode: not remembered
+    }
+  }, [sort])
+
+  // Loaded in batches, none waiting for another: the courses (with their last
+  // update) fill the table, then the period's posts and the people fill in.
+  useEffect(() => {
+    api
+      .listCourses()
+      .then((res) => setCourses(res.items))
       .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
     // An extra: without it the People column stays empty.
     api
@@ -191,68 +108,37 @@ export function CoursesListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (posts[period]) return
+    api
+      .listPosts(new Date(periodStart(period, now)).toISOString(), new Date(now + DAY_MS).toISOString())
+      .then((res) => setPosts((all) => ({ ...all, [period]: res.items })))
+      .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period])
+
   // Teachers first, as the API orders them within a course ("student" < "teacher").
   const peopleOf = (courseId: string) =>
     people.filter((p) => p.course_id === courseId).sort((a, b) => b.role.localeCompare(a.role))
 
-  const { rows, kpis } = useMemo(() => {
-    const { start, prevStart } = periodBounds(period, now)
-    const timed = posts.map((p) => ({ ...p, at: new Date(p.time).getTime() }))
-    const current = timed.filter((p) => p.at >= start)
-    const previous = timed.filter((p) => p.at >= prevStart && p.at < start)
+  const rows = useMemo(() => {
+    const current = posts[period] ?? []
     // Course weekdays are 1 (Mon) … 7 (Sun); getDay() is 0 (Sun) … 6 (Sat).
     const todayWeek = new Date(now).getDay() || 7
 
-    const rows: CourseRow[] = courses.map((course) => {
+    return courses.map((course): CourseRow => {
       const mine = current.filter((p) => p.course_id === course.id)
-      const all = timed.filter((p) => p.course_id === course.id)
-      const last = all.length ? Math.max(...all.map((p) => p.at)) : null
       return {
         course,
         updates: mine.length,
         announcements: mine.filter((p) => p.type === 'announcement').length,
         coursework: mine.filter((p) => p.type === 'coursework').length,
         materials: mine.filter((p) => p.type === 'material').length,
-        last,
+        last: course.last_update ? new Date(course.last_update).getTime() : null,
         status: course.week === todayWeek ? 'today' : mine.length ? 'active' : 'quiet',
-        recent: all.sort((a, b) => b.at - a.at).slice(0, 8),
+        pending: !posts[period],
       }
     })
-
-    const bucket = (at: number) =>
-      Math.min(SPARK_POINTS - 1, Math.floor(((at - start) / (now - start)) * SPARK_POINTS))
-    const series = (items: typeof current) => {
-      const points = Array<number>(SPARK_POINTS).fill(0)
-      items.forEach((p) => (points[bucket(p.at)] += 1))
-      return points
-    }
-    const activeSeries = Array.from({ length: SPARK_POINTS }, (_, i) =>
-      new Set(current.filter((p) => bucket(p.at) === i).map((p) => p.course_id)).size
-    )
-    const ofType = (items: typeof current, type: Post['type']) => items.filter((p) => p.type === type)
-    const typed = (label: string, icon: LucideIcon, type: Post['type']): Kpi => ({
-      label,
-      icon,
-      value: ofType(current, type).length,
-      delta: change(ofType(current, type).length, ofType(previous, type).length),
-      points: series(ofType(current, type)),
-    })
-    const kpis: Kpi[] = [
-      {
-        label: 'courses.activeCourses',
-        icon: BookOpen,
-        value: new Set(current.map((p) => p.course_id)).size,
-        delta: change(
-          new Set(current.map((p) => p.course_id)).size,
-          new Set(previous.map((p) => p.course_id)).size
-        ),
-        points: activeSeries,
-      },
-      typed('courses.announcements', Megaphone, 'announcement'),
-      typed('courses.coursework', ClipboardList, 'coursework'),
-      typed('courses.materials', FileText, 'material'),
-    ]
-    return { rows, kpis }
   }, [courses, posts, period, now])
 
   const visible = useMemo(() => {
@@ -296,24 +182,13 @@ export function CoursesListPage() {
       })
   }, [rows, tab, query, band, sort, people])
 
-  const sync = async () => {
-    setSyncing(true)
-    try {
-      await api.triggerSync()
-      useSyncStatusStore.getState().startPolling()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('sync.syncFailed'))
-    } finally {
-      setSyncing(false)
-    }
-  }
-
   const shown = COLUMNS.filter((column) => !hidden.includes(column.key))
   const lastUpdate = (row: CourseRow) =>
     row.last
       ? new Date(row.last).toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: '2-digit' })
       : t('common.dash')
 
+  const pending = <Skeleton className='h-4 w-8' />
   const cell = (row: CourseRow, key: ColumnKey) => {
     switch (key) {
       case 'day':
@@ -322,18 +197,13 @@ export function CoursesListPage() {
         return (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Link
-                to='/courses/$courseId'
-                params={{ courseId: row.course.id }}
-                className='flex min-w-0 items-center gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              <button
+                type='button'
+                onClick={() => setSelectedId(row.course.id)}
+                className='block max-w-full truncate rounded-sm text-start font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring'
               >
-                <span className='min-w-0'>
-                  <span className='block truncate font-medium'>{row.course.name}</span>
-                  <span className='block truncate text-xs text-muted-foreground'>
-                    {row.course.section || t('common.dash')}
-                  </span>
-                </span>
-              </Link>
+                {row.course.name}
+              </button>
             </TooltipTrigger>
             <TooltipContent side='top' align='start'>
               {t('courses.courseId')}: <span className='tabular-nums'>{row.course.id}</span>
@@ -356,11 +226,11 @@ export function CoursesListPage() {
         )
       }
       case 'updates':
-        return <span className='tabular-nums'>{row.updates}</span>
+        return row.pending ? pending : <span className='tabular-nums'>{row.updates}</span>
       case 'coursework':
-        return <span className='tabular-nums'>{row.coursework}</span>
+        return row.pending ? pending : <span className='tabular-nums'>{row.coursework}</span>
       case 'status':
-        return <StatusBadge status={row.status} />
+        return row.pending && row.status !== 'today' ? pending : <StatusBadge status={row.status} />
       case 'last':
         return (
           <span title={row.last ? fullTimestamp(new Date(row.last).toISOString()) || undefined : undefined}>
@@ -369,33 +239,6 @@ export function CoursesListPage() {
         )
     }
   }
-
-  const rowMenu = (row: CourseRow) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant='ghost' size='icon' className='size-8' aria-label={t('courses.rowActions', { name: row.course.name })}>
-          <MoreHorizontal aria-hidden='true' />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align='end'>
-        <DropdownMenuItem onSelect={() => setSelected(row)}>{t('courses.viewDetails')}</DropdownMenuItem>
-        {(['stream', 'classwork', 'people'] as const).map((page) => (
-          <DropdownMenuItem key={page} asChild>
-            <Link to={`/courses/$courseId/${page}`} params={{ courseId: row.course.id }}>
-              {t(`courses.${page}`)}
-            </Link>
-          </DropdownMenuItem>
-        ))}
-        {row.course.alternate_link && (
-          <DropdownMenuItem asChild>
-            <a href={row.course.alternate_link} target='_blank' rel='noreferrer'>
-              {t('courses.openInClassroom')}
-            </a>
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
 
   const tabs: { key: StatusTab; label: string }[] = [
     { key: 'all', label: 'courses.allCourses' },
@@ -407,17 +250,9 @@ export function CoursesListPage() {
     <>
       <ClassroomHeader fixed />
       <Main fluid className='flex flex-1 flex-col gap-6'>
-        <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
-          <div>
-            <h1 className='text-3xl font-medium tracking-tight'>{t('courses.title')}</h1>
-            <p className='mt-1 text-sm text-muted-foreground'>{t('courses.desc')}</p>
-          </div>
-          {canSync && (
-            <Button onClick={() => void sync()} disabled={syncing} className='w-full md:w-auto'>
-              <RefreshCw className={cn(syncing && 'animate-spin')} aria-hidden='true' />
-              {t('sync.syncNow')}
-            </Button>
-          )}
+        <div>
+          <h1 className='text-3xl font-medium tracking-tight'>{t('courses.title')}</h1>
+          <p className='mt-1 text-sm text-muted-foreground'>{t('courses.desc')}</p>
         </div>
 
         {error && (
@@ -425,28 +260,6 @@ export function CoursesListPage() {
             {error}
           </p>
         )}
-
-        {/* KPI row: one bordered strip when the content area is wide, a card grid
-            otherwise. Sized by the container: the sidebar takes part of the viewport. */}
-        <div className='@container'>
-        <div className='hidden overflow-hidden rounded-lg border @5xl:grid @5xl:grid-cols-4'>
-          {kpis.map((kpi, i) => (
-            <div
-              key={kpi.label}
-              className={cn('flex min-h-28 items-end justify-between gap-3 p-5', i < kpis.length - 1 && 'border-r')}
-            >
-              <KpiBody kpi={kpi} />
-            </div>
-          ))}
-        </div>
-        <div className='grid grid-cols-2 gap-3 @2xl:grid-cols-4 @5xl:hidden'>
-          {kpis.map((kpi) => (
-            <div key={kpi.label} className='rounded-lg border p-4'>
-              <KpiBody kpi={kpi} compact />
-            </div>
-          ))}
-        </div>
-        </div>
 
         <div className='flex flex-col gap-4'>
           <div role='tablist' aria-label={t('courses.status')} className='flex gap-1 border-b'>
@@ -564,9 +377,6 @@ export function CoursesListPage() {
                       </button>
                     </th>
                   ))}
-                  <th scope='col' className='w-12'>
-                    <span className='sr-only'>{t('common.actions')}</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -577,12 +387,11 @@ export function CoursesListPage() {
                         {cell(row, key)}
                       </td>
                     ))}
-                    <td className='px-2 text-end'>{rowMenu(row)}</td>
                   </tr>
                 ))}
                 {!visible.length && (
                   <tr>
-                    <td colSpan={shown.length + 1} className='h-24 text-center text-muted-foreground'>
+                    <td colSpan={shown.length} className='h-24 text-center text-muted-foreground'>
                       {courses.length ? t('courses.noMatch') : t('courses.noCourses')}
                     </td>
                   </tr>
@@ -595,10 +404,7 @@ export function CoursesListPage() {
           <ul className='flex flex-col gap-3 md:hidden'>
             {visible.map((row) => (
               <li key={row.course.id} className='rounded-lg border p-4'>
-                <div className='flex items-center justify-between'>
-                  <span className='text-xs text-muted-foreground tabular-nums'>{row.course.id}</span>
-                  {rowMenu(row)}
-                </div>
+                <span className='text-xs text-muted-foreground tabular-nums'>{row.course.id}</span>
                 <div className='mt-1'>{cell(row, 'name')}</div>
                 <div className='mt-3'>
                   <StatusBadge status={row.status} />
@@ -625,10 +431,10 @@ export function CoursesListPage() {
       </Main>
 
       <CourseSheet
-        row={selected}
+        row={rows.find((row) => row.course.id === selectedId) ?? null}
         periodLabel={t(period === 'year' ? 'courses.thisYear' : `courses.last${period}`)}
         relative={(time) => humanReadableTime(time, t('common.dash'))}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
       />
     </>
   )

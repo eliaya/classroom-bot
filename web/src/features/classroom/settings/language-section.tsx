@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { Languages } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { setBrowserViewer, usesBrowserViewer } from '../components/pdf-preview'
 import { useTranslation } from 'react-i18next'
 import {
   Card,
@@ -22,6 +25,7 @@ import { type Locale, SUPPORTED_LOCALES } from '@/lib/i18n'
 export function LanguageSection() {
   const { t } = useTranslation()
   const { locale, setLocale } = useLocale()
+  const [browserPdf, setBrowserPdf] = useState(usesBrowserViewer)
 
   return (
     <Card>
@@ -47,6 +51,17 @@ export function LanguageSection() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+        <div className='mt-4 flex items-center gap-2'>
+          <Switch
+            id='pdf-browser-viewer'
+            checked={browserPdf}
+            onCheckedChange={(on) => {
+              setBrowserViewer(on)
+              setBrowserPdf(on)
+            }}
+          />
+          <Label htmlFor='pdf-browser-viewer'>{t('language.pdfBrowser')}</Label>
         </div>
       </CardContent>
     </Card>
