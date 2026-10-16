@@ -175,6 +175,7 @@ const ja: Resources = {
     stream: 'ストリーム',
     people: 'メンバー',
     general: '一般',
+    todo: 'ToDo',
     synced: '{{time}} に同期',
     noClasswork: 'キャッシュに授業がありません。同期を実行してください。',
     noStream: 'キャッシュにストリーム項目がありません。',
@@ -275,6 +276,20 @@ const ja: Resources = {
     preview: 'プレビュー',
     downloadWithSize: 'ダウンロード（{{size}}）',
     exported: '（エクスポート済み）',
+  },
+  board: {
+    today: '今日',
+    week: '今週',
+    reorder: '{{name}} を並べ替え',
+    columnActions: '{{name}} 列の操作',
+    filterTeachers: '先生で絞り込み',
+    noTeacher: '先生なし',
+    noRecords: 'この授業の投稿はまだありません。',
+    openClasswork: '授業を開く',
+    noLessons: {
+      today: '今日の授業はありません。',
+      week: '今週の授業はありません。',
+    },
   },
   todo: {
     loadFailed: '読み込みに失敗しました',

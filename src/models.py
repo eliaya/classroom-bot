@@ -393,6 +393,16 @@ class UserSchedulerSetting(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class DashboardBoard(SQLModel, table=True):
+    """One user's dashboard Kanban: its columns, where each card sits and the
+    user's own cards. Kept as the JSON the web UI sends; the API never reads it."""
+    __tablename__ = "dashboard_boards"
+
+    owner_user_id: int = Field(primary_key=True)
+    data: str = Field(default="{}")
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class AuditRetentionSetting(SQLModel, table=True):
     """Singleton row (id=1) holding the audit-log auto-rotation config.
 

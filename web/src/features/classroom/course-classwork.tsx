@@ -30,10 +30,13 @@ export function CourseClassworkPage({
   courseId,
   initialItemId,
   initialKind,
+  lessonItemIds,
 }: {
   courseId: string
   initialItemId?: string
   initialKind?: 'coursework' | 'material'
+  /** Opens on the topic holding these items (a lesson's classwork), or on Topics when none has one. */
+  lessonItemIds?: string[]
 }) {
   const { t, i18n } = useTranslation()
   const [data, setData] = useState<ClassworkResponse | null>(null)
@@ -51,6 +54,14 @@ export function CourseClassworkPage({
       .then((d) => {
         setData(d)
         setError(null)
+        if (lessonItemIds) {
+          const ids = new Set(lessonItemIds)
+          const hit = [...(d.coursework || []), ...(d.materials || [])].find(
+            (it) => it.topic_id && ids.has(String(it.id))
+          )
+          if (hit) setSelectedTopicId(String(hit.topic_id))
+          else setTab('topics')
+        }
       })
       .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
   }

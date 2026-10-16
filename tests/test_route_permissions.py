@@ -30,6 +30,7 @@ MATRIX = [
     ("get", "/api/courses/people", "courses:view"),
     ("get", f"/api/auth/google/start?origin={ORIGIN}", "courses:view"),
     ("get", "/api/todos", "todos:view"),
+    ("get", "/api/dashboard/board", "courses:view"),
     ("get", "/api/search?q=x", "search:view"),
     ("get", "/api/sync/status", "sync:view"),
     ("post", "/api/sync/runs/1/clear", "sync:use"),

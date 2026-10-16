@@ -539,6 +539,10 @@ export const api = {
     const q = qs.toString()
     return request<{ items: TodoItem[]; total: number }>(`/todos${q ? `?${q}` : ''}`)
   },
+  /** The dashboard Kanban layout the user saved, or null before the first save. */
+  getBoard: <T,>() => request<{ data: T | null }>('/dashboard/board'),
+  saveBoard: <T,>(data: T) =>
+    request<{ data: T }>('/dashboard/board', { method: 'PUT', body: JSON.stringify({ data }) }),
   search: (q: string, limit = 5) =>
     request<SearchResponse>(
       `/search?q=${encodeURIComponent(q)}&limit=${limit}`

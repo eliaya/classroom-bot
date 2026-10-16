@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from src import __version__
 from src.api.deps import require_module
-from src.api.routes import audit, auth, backup, bot, bot_commands, bot_messages, courses, discord_meta, health, links, roles, scheduler, search, sync, todos, users
+from src.api.routes import audit, auth, backup, board, bot, bot_commands, bot_messages, courses, discord_meta, health, links, roles, scheduler, search, sync, todos, users
 from src.api.services.scheduler_service import SYNC_TICK_MINUTES, SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
@@ -53,6 +53,8 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api")
     app.include_router(courses.router, prefix="/api", dependencies=guard("courses"))
     app.include_router(todos.router, prefix="/api", dependencies=guard("todos"))
+    # Guarded per route: saving one's own layout needs only courses:view.
+    app.include_router(board.router, prefix="/api")
     app.include_router(search.router, prefix="/api", dependencies=guard("search"))
     app.include_router(sync.router, prefix="/api", dependencies=guard("sync"))
     app.include_router(links.router, prefix="/api", dependencies=guard("links"))

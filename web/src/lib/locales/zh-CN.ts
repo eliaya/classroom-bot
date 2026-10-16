@@ -175,6 +175,7 @@ const zhCN: Resources = {
     stream: '消息流',
     people: '成员',
     general: '常规',
+    todo: '待办',
     synced: '已于 {{time}} 同步',
     noClasswork: '缓存中没有课堂作业。请执行同步。',
     noStream: '缓存中没有消息流项目。',
@@ -275,6 +276,20 @@ const zhCN: Resources = {
     preview: '预览',
     downloadWithSize: '下载（{{size}}）',
     exported: '（已导出）',
+  },
+  board: {
+    today: '今天',
+    week: '本周',
+    reorder: '重新排列 {{name}}',
+    columnActions: '{{name}} 栏操作',
+    filterTeachers: '按老师筛选',
+    noTeacher: '无老师',
+    noRecords: '这节课还没有帖子。',
+    openClasswork: '打开课堂作业',
+    noLessons: {
+      today: '今天没有课节。',
+      week: '本周没有课节。',
+    },
   },
   todo: {
     loadFailed: '加载失败',

@@ -174,6 +174,7 @@ export const en = {
     stream: 'Stream',
     people: 'People',
     general: 'General',
+    todo: 'To-do',
     synced: 'Synced {{time}}',
     noClasswork: 'No classwork in cache. Run a sync.',
     noStream: 'No stream items in cache.',
@@ -278,6 +279,20 @@ export const en = {
     preview: 'Preview',
     downloadWithSize: 'Download ({{size}})',
     exported: '(exported)',
+  },
+  board: {
+    today: 'Today',
+    week: 'Week',
+    reorder: 'Reorder {{name}}',
+    columnActions: '{{name}} column actions',
+    filterTeachers: 'Filter by teacher',
+    noTeacher: 'No teacher',
+    noRecords: 'Nothing posted for this lesson yet.',
+    openClasswork: 'Open classwork',
+    noLessons: {
+      today: 'No lessons today.',
+      week: 'No lessons this week.',
+    },
   },
   todo: {
     loadFailed: 'Failed to load',

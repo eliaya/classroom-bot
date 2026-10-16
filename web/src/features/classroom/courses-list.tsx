@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Search, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, type Course, type CoursePerson, type Post } from '@/lib/api'
+import { useCan } from '@/lib/permissions'
 import { cn, fullTimestamp, humanReadableTime, weekdayLabel } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,10 +29,11 @@ import {
   type CourseRow,
 } from './components/course-sheet'
 import { ClassroomHeader } from './layout-header'
+import { TodoBoard } from './todo-board'
 
 type Period = '30' | '90' | 'year'
 type Band = 'all' | 'high' | 'mid' | 'low'
-type StatusTab = 'all' | 'today' | 'active'
+type StatusTab = 'all' | 'today' | 'active' | 'todo'
 type ColumnKey = 'day' | 'name' | 'people' | 'updates' | 'coursework' | 'status' | 'last'
 
 const COLUMNS: { key: ColumnKey; label: string }[] = [
@@ -84,6 +86,8 @@ export function CoursesListPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Fixed for the page's lifetime so the periods do not shift while it is open.
   const [now] = useState(() => Date.now())
+  // The API would answer 403 otherwise (administrators have no to-dos).
+  const canTodos = useCan('todos:view')
 
   useEffect(() => {
     try {
@@ -244,6 +248,7 @@ export function CoursesListPage() {
     { key: 'all', label: 'courses.allCourses' },
     { key: 'today', label: 'courses.statusName.today' },
     { key: 'active', label: 'courses.statusName.active' },
+    ...(canTodos ? [{ key: 'todo' as const, label: 'courses.todo' }] : []),
   ]
 
   return (
@@ -282,151 +287,157 @@ export function CoursesListPage() {
             ))}
           </div>
 
-          <div className='flex flex-col gap-3 md:flex-row md:items-center'>
-            <div className='relative md:w-56'>
-              <Search
-                className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
-                aria-hidden='true'
-              />
-              <Input
-                type='search'
-                aria-label={t('courses.searchCourses')}
-                placeholder={t('courses.searchCourses')}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className='ps-9'
-              />
-            </div>
-            <div className='grid grid-cols-2 gap-3 md:flex'>
-              <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
-                <SelectTrigger aria-label={t('courses.period')} className='w-full md:w-40'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='30'>{t('courses.last30')}</SelectItem>
-                  <SelectItem value='90'>{t('courses.last90')}</SelectItem>
-                  <SelectItem value='year'>{t('courses.thisYear')}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={band} onValueChange={(value) => setBand(value as Band)}>
-                <SelectTrigger aria-label={t('courses.activityBand')} className='w-full md:w-40'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(['all', 'high', 'mid', 'low'] as const).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {t(`courses.band.${value}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant='outline' className='hidden md:ms-auto md:inline-flex'>
-                  <SlidersHorizontal aria-hidden='true' />
-                  {t('courses.manageTable')}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='end'>
-                {COLUMNS.map(({ key, label }) => (
-                  <DropdownMenuCheckboxItem
-                    key={key}
-                    checked={!hidden.includes(key)}
-                    onSelect={(e) => e.preventDefault()}
-                    onCheckedChange={(checked) =>
-                      setHidden((keys) => (checked ? keys.filter((k) => k !== key) : [...keys, key]))
-                    }
-                  >
-                    {t(label)}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Desktop: sortable table. */}
-          {/* relative: keeps the table's sr-only (absolute) labels inside the scroll area. */}
-          <div className='relative hidden overflow-x-auto md:block'>
-            <table className='w-full text-sm'>
-              <thead>
-                <tr className='bg-muted/50 text-left'>
-                  {shown.map(({ key, label }) => (
-                    <th
-                      key={key}
-                      scope='col'
-                      aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'}
-                      className='h-10 px-2 font-medium first:ps-3'
-                    >
-                      <button
-                        type='button'
-                        onClick={() =>
-                          setSort((s) => ({ key, desc: s.key === key ? !s.desc : false }))
+          {tab === 'todo' ? (
+            <TodoBoard />
+          ) : (
+            <>
+              <div className='flex flex-col gap-3 md:flex-row md:items-center'>
+                <div className='relative md:w-56'>
+                  <Search
+                    className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
+                    aria-hidden='true'
+                  />
+                  <Input
+                    type='search'
+                    aria-label={t('courses.searchCourses')}
+                    placeholder={t('courses.searchCourses')}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className='ps-9'
+                  />
+                </div>
+                <div className='grid grid-cols-2 gap-3 md:flex'>
+                  <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
+                    <SelectTrigger aria-label={t('courses.period')} className='w-full md:w-40'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='30'>{t('courses.last30')}</SelectItem>
+                      <SelectItem value='90'>{t('courses.last90')}</SelectItem>
+                      <SelectItem value='year'>{t('courses.thisYear')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={band} onValueChange={(value) => setBand(value as Band)}>
+                    <SelectTrigger aria-label={t('courses.activityBand')} className='w-full md:w-40'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(['all', 'high', 'mid', 'low'] as const).map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {t(`courses.band.${value}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant='outline' className='hidden md:ms-auto md:inline-flex'>
+                      <SlidersHorizontal aria-hidden='true' />
+                      {t('courses.manageTable')}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align='end'>
+                    {COLUMNS.map(({ key, label }) => (
+                      <DropdownMenuCheckboxItem
+                        key={key}
+                        checked={!hidden.includes(key)}
+                        onSelect={(e) => e.preventDefault()}
+                        onCheckedChange={(checked) =>
+                          setHidden((keys) => (checked ? keys.filter((k) => k !== key) : [...keys, key]))
                         }
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-sm text-xs whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
-                          sort.key === key ? 'text-foreground' : 'text-muted-foreground'
-                        )}
                       >
                         {t(label)}
-                        {sort.key === key && !sort.desc ? (
-                          <ChevronUp className='size-3' aria-hidden='true' />
-                        ) : (
-                          <ChevronDown className='size-3' aria-hidden='true' />
-                        )}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((row) => (
-                  <tr key={row.course.id} className='border-b transition-colors hover:bg-muted/40'>
-                    {shown.map(({ key }) => (
-                      <td key={key} className={cn('h-14 px-2 first:ps-3', key === 'name' && 'max-w-80')}>
-                        {cell(row, key)}
-                      </td>
+                      </DropdownMenuCheckboxItem>
                     ))}
-                  </tr>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Desktop: sortable table. */}
+              {/* relative: keeps the table's sr-only (absolute) labels inside the scroll area. */}
+              <div className='relative hidden overflow-x-auto md:block'>
+                <table className='w-full text-sm'>
+                  <thead>
+                    <tr className='bg-muted/50 text-left'>
+                      {shown.map(({ key, label }) => (
+                        <th
+                          key={key}
+                          scope='col'
+                          aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'}
+                          className='h-10 px-2 font-medium first:ps-3'
+                        >
+                          <button
+                            type='button'
+                            onClick={() =>
+                              setSort((s) => ({ key, desc: s.key === key ? !s.desc : false }))
+                            }
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-sm text-xs whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+                              sort.key === key ? 'text-foreground' : 'text-muted-foreground'
+                            )}
+                          >
+                            {t(label)}
+                            {sort.key === key && !sort.desc ? (
+                              <ChevronUp className='size-3' aria-hidden='true' />
+                            ) : (
+                              <ChevronDown className='size-3' aria-hidden='true' />
+                            )}
+                          </button>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((row) => (
+                      <tr key={row.course.id} className='border-b transition-colors hover:bg-muted/40'>
+                        {shown.map(({ key }) => (
+                          <td key={key} className={cn('h-14 px-2 first:ps-3', key === 'name' && 'max-w-80')}>
+                            {cell(row, key)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {!visible.length && (
+                      <tr>
+                        <td colSpan={shown.length} className='h-24 text-center text-muted-foreground'>
+                          {courses.length ? t('courses.noMatch') : t('courses.noCourses')}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Below md: one card per course. */}
+              <ul className='flex flex-col gap-3 md:hidden'>
+                {visible.map((row) => (
+                  <li key={row.course.id} className='rounded-lg border p-4'>
+                    <span className='text-xs text-muted-foreground tabular-nums'>{row.course.id}</span>
+                    <div className='mt-1'>{cell(row, 'name')}</div>
+                    <div className='mt-3'>
+                      <StatusBadge status={row.status} />
+                    </div>
+                    <dl className='mt-4 grid grid-cols-2 gap-3 text-sm'>
+                      <div>
+                        <dt className='text-xs text-muted-foreground'>{t('courses.updates')}</dt>
+                        <dd className='font-medium tabular-nums'>{row.updates}</dd>
+                      </div>
+                      <div>
+                        <dt className='text-xs text-muted-foreground'>{t('courses.lastUpdate')}</dt>
+                        <dd className='font-medium'>{lastUpdate(row)}</dd>
+                      </div>
+                    </dl>
+                  </li>
                 ))}
                 {!visible.length && (
-                  <tr>
-                    <td colSpan={shown.length} className='h-24 text-center text-muted-foreground'>
-                      {courses.length ? t('courses.noMatch') : t('courses.noCourses')}
-                    </td>
-                  </tr>
+                  <li className='rounded-lg border p-6 text-center text-sm text-muted-foreground'>
+                    {courses.length ? t('courses.noMatch') : t('courses.noCourses')}
+                  </li>
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Below md: one card per course. */}
-          <ul className='flex flex-col gap-3 md:hidden'>
-            {visible.map((row) => (
-              <li key={row.course.id} className='rounded-lg border p-4'>
-                <span className='text-xs text-muted-foreground tabular-nums'>{row.course.id}</span>
-                <div className='mt-1'>{cell(row, 'name')}</div>
-                <div className='mt-3'>
-                  <StatusBadge status={row.status} />
-                </div>
-                <dl className='mt-4 grid grid-cols-2 gap-3 text-sm'>
-                  <div>
-                    <dt className='text-xs text-muted-foreground'>{t('courses.updates')}</dt>
-                    <dd className='font-medium tabular-nums'>{row.updates}</dd>
-                  </div>
-                  <div>
-                    <dt className='text-xs text-muted-foreground'>{t('courses.lastUpdate')}</dt>
-                    <dd className='font-medium'>{lastUpdate(row)}</dd>
-                  </div>
-                </dl>
-              </li>
-            ))}
-            {!visible.length && (
-              <li className='rounded-lg border p-6 text-center text-sm text-muted-foreground'>
-                {courses.length ? t('courses.noMatch') : t('courses.noCourses')}
-              </li>
-            )}
-          </ul>
+              </ul>
+            </>
+          )}
         </div>
       </Main>
 

@@ -175,6 +175,7 @@ const zhTW: Resources = {
     stream: '訊息串',
     people: '成員',
     general: '一般',
+    todo: '待辦',
     synced: '已於 {{time}} 同步',
     noClasswork: '快取中沒有課堂作業。請執行同步。',
     noStream: '快取中沒有訊息串項目。',
@@ -275,6 +276,20 @@ const zhTW: Resources = {
     preview: '預覽',
     downloadWithSize: '下載（{{size}}）',
     exported: '（已匯出）',
+  },
+  board: {
+    today: '今天',
+    week: '本週',
+    reorder: '重新排列 {{name}}',
+    columnActions: '{{name}} 欄位操作',
+    filterTeachers: '依老師篩選',
+    noTeacher: '無老師',
+    noRecords: '這堂課還沒有貼文。',
+    openClasswork: '開啟課堂作業',
+    noLessons: {
+      today: '今天沒有課節。',
+      week: '本週沒有課節。',
+    },
   },
   todo: {
     loadFailed: '載入失敗',
