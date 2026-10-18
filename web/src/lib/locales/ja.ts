@@ -538,6 +538,14 @@ const ja: Resources = {
       envAdminHint: 'ADMIN_EMAILS に登録されています。ログインのたびに管理者ロールが再適用されます。',
     },
     roles: {
+      externalStorage: {
+        title: 'External Storage',
+        desc: 'ユーザーが添付ファイルを OpenCloud・Nextcloud・Google Drive に移動できるようにします（設定 → 外部ストレージ）。無効にすると新しいアップロードは止まりますが、移動済みのファイルは引き続き読み取れます。',
+        enabled: '有効',
+        disabled: '無効',
+        hosts: '許可する WebDAV ホスト',
+        hostsHint: 'カンマ区切りのホスト名（https:// やパスは不要）。サーバーは OpenCloud / Nextcloud についてこれらのホストにのみ接続します。Google Drive は設定不要です。',
+      },
       title: 'ロール',
       desc: 'ロールは権限のセットです。各ユーザーはロールを 1 つだけ持ちます。変更はすぐに保存され、ユーザーが次にページを再読み込みしたときに反映されます。',
       newRole: '新しいロール名',
@@ -593,7 +601,8 @@ const ja: Resources = {
       title: '外部ストレージ',
       desc: '添付ファイルをこのサーバーに保存するか、自分のストレージへ移動するかを選びます。オンにすると、同期のたびに Google ドライブからダウンロードした添付ファイルを下のプロバイダーへ「フォルダ / コース名 / ファイル名」で移動し、テキストはデータベースに残ります。この設定は自分のアカウントにのみ適用されます。',
       hosts: '利用可能なホスト：{{hosts}}',
-      noHosts: '管理者がまだストレージのホストを許可していません（OPENCLOUD_ALLOWED_HOSTS）。',
+      noHosts: '管理者がまだストレージのホストを許可していません（ロール → External Storage）。',
+      unavailable: '管理者が外部ストレージを無効にしています（ロール → External Storage）。',
       enabledDesc: '同期時に添付ファイルをこのストレージへ移動します。テキストはデータベースに残り、ファイルはサーバーに保存されません（保存時に接続を確認します）',
       url: 'WebDAV URL',
       urlHint: {

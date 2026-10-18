@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-18
+
+**Upgrade notes.** `OPENCLOUD_ALLOWED_HOSTS` is read once: on the first start its hosts become the External Storage allow list (switched on), and from then on the list is edited in the admin area under Roles → External Storage; the variable is ignored afterwards.
+
+### Added
+- **Lesson board on the dashboard.** The dashboard shows one column per lesson of today or this week (Today / Week), holding that lesson's classwork and stream posts as cards. Columns and cards can be dragged into another order (mouse or keyboard), a teacher's avatar filters the board to their lessons, and a column or card opens its course's Classwork on the lesson's topic. Only the order is saved, per user, through the new `GET`/`PUT /api/dashboard/board` (`courses:view`, up to 256 KB); Classroom is never changed.
+- **External Storage under Roles.** The admin area's Roles page has an External Storage card: an Enabled / Disabled switch for every user's external storage, and the WebDAV hosts (OpenCloud, Nextcloud) the server may connect to, which replaces editing `OPENCLOUD_ALLOWED_HOSTS`. Entries must be bare hostnames; changes are written to the audit log (`external_storage.updated`). `GET`/`PATCH /api/roles/external-storage` (`users:view` / `users:use`).
+
+### Changed
+- **The To-do board moved to the Courses page**, as a To-do tab next to All courses / Today / Active (for users holding `todos:view`).
+- **Switching External Storage off** stops new uploads for every provider, Google Drive included, and keeps users from switching their own storage on (they can still switch it off); files already moved stay readable. `GET /api/sync/opencloud` returns `available`, and the user's settings page says when the administrator has turned it off.
+- `scripts/dev.sh` prints the API and web addresses with the ports from `.env` (`API_PORT`, `HTTP_PORT`) instead of a fixed 8000 / 8080.
+
 ## [0.21.0] - 2026-10-14
 
 ### Added

@@ -79,9 +79,8 @@ class Settings(BaseSettings):
     ATTACHMENT_DOWNLOAD_RETRIES: int = 2
     # Drive downloads/exports running at once for one course.
     ATTACHMENT_SYNC_CONCURRENCY: int = 4
-    # Comma-separated OpenCloud hostnames users may upload attachments to. Each
-    # user enters their own WebDAV URL, so the server only ever connects to the
-    # hosts named here. Empty (the default) turns the feature off.
+    # Comma-separated WebDAV hostnames users may upload attachments to. Only the
+    # first-run seed: afterwards the list is edited under Roles → External Storage.
     OPENCLOUD_ALLOWED_HOSTS: str = ""
 
     # Backup / restore. Archives land under the shared app_data volume so they

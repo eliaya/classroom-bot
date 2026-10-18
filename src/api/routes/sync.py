@@ -12,7 +12,7 @@ from src.api.deps import Principal, get_owned_session, get_principal
 from src.api.services import opencloud
 from src.api.services.classroom_sync import classroom_sync_service
 from src.config import now_jst
-from src.models import OpenCloudSetting
+from src.models import ExternalStorageSetting, OpenCloudSetting
 from src.repositories import app_settings, audit_log
 from src.repositories import classroom_cache as cache
 from src.repositories import google_connections
@@ -234,7 +234,7 @@ class OpenCloudUpdate(BaseModel):
     folder: Optional[str] = Field(default=None, max_length=200)
 
 
-def _opencloud_dict(row: OpenCloudSetting) -> dict:
+def _opencloud_dict(row: OpenCloudSetting, external: ExternalStorageSetting) -> dict:
     # The token never leaves the server.
     return {
         "enabled": row.enabled,
@@ -243,14 +243,18 @@ def _opencloud_dict(row: OpenCloudSetting) -> dict:
         "username": row.username,
         "folder": row.folder,
         "has_token": bool(row.app_token),
-        # What the admin allows (OPENCLOUD_ALLOWED_HOSTS); empty = switched off.
-        "allowed_hosts": opencloud.allowed_hosts(),
+        # What the admin allows (Roles → External Storage).
+        "available": external.enabled,
+        "allowed_hosts": opencloud.allowed_hosts(external),
     }
 
 
 @router.get("/opencloud")
 async def get_opencloud_settings(session: AsyncSession = Depends(get_owned_session)) -> dict:
-    return _opencloud_dict(await app_settings.get_opencloud_setting(session))
+    return _opencloud_dict(
+        await app_settings.get_opencloud_setting(session),
+        await app_settings.get_external_storage_setting(session),
+    )
 
 
 @router.patch("/opencloud")
@@ -261,7 +265,10 @@ async def update_opencloud_settings(
     if not changes.get("app_token"):
         changes.pop("app_token", None)
     row = await app_settings.get_opencloud_setting(session)
+    external = await app_settings.get_external_storage_setting(session)
     candidate = OpenCloudSetting(**{**row.model_dump(), **changes})
+    if candidate.enabled and not external.enabled:
+        raise HTTPException(status_code=400, detail="External storage is turned off by the administrator.")
     if candidate.enabled and candidate.provider == "gdrive":
         if not (await google_connections.service_for(session)).has_drive_write_scope():
             raise HTTPException(
@@ -275,7 +282,7 @@ async def update_opencloud_settings(
         if not (candidate.webdav_url and candidate.username and candidate.app_token):
             raise HTTPException(status_code=400, detail="WebDAV URL, username and app token are required.")
         try:
-            await opencloud.check(candidate)
+            await opencloud.check(candidate, external)
         except Exception as e:  # noqa: BLE001 — surfaced to the user as-is
             raise HTTPException(status_code=400, detail=f"OpenCloud connection failed: {e}"[:300])
-    return _opencloud_dict(await app_settings.update_opencloud_setting(session, **changes))
+    return _opencloud_dict(await app_settings.update_opencloud_setting(session, **changes), external)

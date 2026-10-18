@@ -161,7 +161,7 @@ class AttachmentSyncService:
         # Copy to OpenCloud last and guarded: a remote outage must never fail the sync.
         try:
             oc = await app_settings.get_opencloud_setting(session)
-            if oc.enabled:
+            if oc.enabled and (await app_settings.get_external_storage_setting(session)).enabled:
                 start = time.perf_counter()
                 result: Dict[str, Any] = {"uploaded": 0, "failed": 0, "error": None}
                 try:
@@ -253,7 +253,8 @@ class AttachmentSyncService:
         if oc.provider == "gdrive":
             service = await google_connections.service_for(session)
             return await service.download_drive_path(path)
-        async with opencloud.client(oc) as client:
+        external = await app_settings.get_external_storage_setting(session)
+        async with opencloud.client(oc, external) as client:
             return await opencloud.get(client, path)
 
     @asynccontextmanager
@@ -273,7 +274,8 @@ class AttachmentSyncService:
             yield put
         else:  # opencloud / nextcloud: WebDAV
             made: set[str] = set()
-            async with opencloud.client(oc) as client:
+            external = await app_settings.get_external_storage_setting(session)
+            async with opencloud.client(oc, external) as client:
 
                 async def put(path: str, data: bytes) -> None:
                     await opencloud.put(client, path, data, made)

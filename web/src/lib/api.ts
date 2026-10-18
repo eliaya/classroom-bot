@@ -232,7 +232,14 @@ export type OpenCloudSettings = {
   username: string
   folder: string
   has_token: boolean
-  /** Hosts the administrator allows; empty means the feature is off. */
+  /** The administrator's Roles → External Storage switch. */
+  available: boolean
+  /** WebDAV hosts the administrator allows. */
+  allowed_hosts: string[]
+}
+
+export type ExternalStorageAdmin = {
+  enabled: boolean
   allowed_hosts: string[]
 }
 
@@ -480,6 +487,12 @@ export const api = {
     request<Role>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRole: (id: number) =>
     request<{ id: number; deleted: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
+  getExternalStorage: () => request<ExternalStorageAdmin>('/roles/external-storage'),
+  updateExternalStorage: (body: Partial<ExternalStorageAdmin>) =>
+    request<ExternalStorageAdmin>('/roles/external-storage', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   googleAuthStart: (origin: string) =>
     request<{ authorization_url: string; redirect_uri: string; state: string }>(
       `/auth/google/start?origin=${encodeURIComponent(origin)}`
@@ -678,7 +691,7 @@ export const api = {
   getOpenCloudSettings: () => request<OpenCloudSettings>('/sync/opencloud'),
   // app_token is write-only: an empty string keeps the stored one.
   updateOpenCloudSettings: (
-    body: Partial<Omit<OpenCloudSettings, 'has_token' | 'allowed_hosts'>> & { app_token?: string }
+    body: Partial<Omit<OpenCloudSettings, 'has_token' | 'available' | 'allowed_hosts'>> & { app_token?: string }
   ) =>
     request<OpenCloudSettings>('/sync/opencloud', {
       method: 'PATCH',

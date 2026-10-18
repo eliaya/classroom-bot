@@ -538,6 +538,14 @@ const zhTW: Resources = {
       envAdminHint: '已列在 ADMIN_EMAILS 中：每次登入都會重新套用管理員角色。',
     },
     roles: {
+      externalStorage: {
+        title: 'External Storage',
+        desc: '允許使用者將附件移至 OpenCloud、Nextcloud 或 Google Drive（設定 → 外部儲存）。停用後不再上傳新檔案；已移出的檔案仍可讀取。',
+        enabled: '已啟用',
+        disabled: '已停用',
+        hosts: '允許的 WebDAV 主機',
+        hostsHint: '以逗號分隔的主機名稱（不含 https:// 與路徑）。伺服器僅會連線至這些 OpenCloud / Nextcloud 主機；Google Drive 不需設定。',
+      },
       title: '角色',
       desc: '角色是一組權限。每位使用者只有一個角色。變更會立即儲存，並在使用者下次重新載入頁面時生效。',
       newRole: '新角色名稱',
@@ -591,7 +599,8 @@ const zhTW: Resources = {
       title: '外部儲存',
       desc: '選擇附件要保存在這台伺服器上，還是移到你自己的儲存空間。啟用後，每次同步都會把從 Google Drive 下載的附件移到下方的供應商，路徑為 資料夾 / 課程名稱 / 檔名；文字仍保存在資料庫。此設定只對你的帳戶生效。',
       hosts: '可用主機：{{hosts}}',
-      noHosts: '管理員尚未允許任何儲存主機（OPENCLOUD_ALLOWED_HOSTS）。',
+      noHosts: '管理員尚未允許任何儲存主機（角色 → External Storage）。',
+      unavailable: '管理員已停用外部儲存（角色 → External Storage）。',
       enabledDesc: '同步時把附件移到此儲存空間：文字仍保存在資料庫，檔案不保留在伺服器上；儲存時會先測試連線',
       url: 'WebDAV 網址',
       urlHint: {

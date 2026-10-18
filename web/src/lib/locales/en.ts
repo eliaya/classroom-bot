@@ -544,6 +544,14 @@ export const en = {
       envAdminHint: 'Listed in ADMIN_EMAILS: the admin role is re-applied every time they sign in.',
     },
     roles: {
+      externalStorage: {
+        title: 'External Storage',
+        desc: 'Lets users move their attachments to OpenCloud, Nextcloud or Google Drive (Settings → External storage). Turning it off stops new uploads; files already moved stay readable.',
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        hosts: 'Allowed WebDAV hosts',
+        hostsHint: 'Comma-separated hostnames (no https:// or path). The server only connects to these hosts for OpenCloud / Nextcloud. Google Drive needs none.',
+      },
       title: 'Roles',
       desc: 'A role is a set of permissions. Each user has exactly one role. Changes are saved immediately and apply the next time the user reloads the page.',
       newRole: 'New role name',
@@ -599,7 +607,8 @@ export const en = {
       title: 'External storage',
       desc: 'Choose whether your attachments are kept on this server or moved to your own storage. When on, every sync moves the attachments downloaded from Google Drive to the provider below, as folder / course name / file name; text stays in the database. This setting applies to your account only.',
       hosts: 'Allowed hosts: {{hosts}}',
-      noHosts: 'The administrator has not allowed any storage host yet (OPENCLOUD_ALLOWED_HOSTS).',
+      noHosts: 'The administrator has not allowed any storage host yet (Roles → External Storage).',
+      unavailable: 'The administrator has turned off external storage (Roles → External Storage).',
       enabledDesc: 'Move attachments to this storage during sync: text stays in the database, the files are not kept on the server. The connection is tested on save',
       url: 'WebDAV URL',
       urlHint: {

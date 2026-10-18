@@ -435,6 +435,20 @@ class BackupSetting(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class ExternalStorageSetting(SQLModel, table=True):
+    """Singleton row (id=1): the administrator's switch for per-user external
+    storage, and the hosts a user's WebDAV URL may point at (comma-separated;
+    the server only ever connects to these). Managed under Roles in the WebUI;
+    seeded from OPENCLOUD_ALLOWED_HOSTS on first read.
+    """
+    __tablename__ = "external_storage_settings"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    enabled: bool = Field(default=True)
+    allowed_hosts: str = Field(default="")
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class OpenCloudSetting(SQLModel, table=True):
     """One row per user: the external storage that user's Drive attachments are
     moved to (the table name predates the other providers).

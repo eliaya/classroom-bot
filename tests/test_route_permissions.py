@@ -54,6 +54,8 @@ MATRIX = [
     ("get", "/api/users", "users:view"),
     ("patch", "/api/users/999", "users:use"),
     ("delete", "/api/roles/999", "users:use"),
+    ("get", "/api/roles/external-storage", "users:view"),
+    ("patch", "/api/roles/external-storage", "users:use"),
 ]
 
 

@@ -47,6 +47,7 @@ export function OpenCloudSection() {
   }, [])
 
   const hosts = config?.allowed_hosts ?? []
+  const available = config?.available ?? true
   const provider = config?.provider ?? 'opencloud'
   const webdav = provider !== 'gdrive'
 
@@ -84,6 +85,9 @@ export function OpenCloudSection() {
         <CardDescription>{t('settings.opencloud.desc')}</CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-4'>
+        {!available && (
+          <p className='text-muted-foreground text-sm'>{t('settings.opencloud.unavailable')}</p>
+        )}
         <div className='flex items-center justify-between'>
           <div>
             <Label htmlFor='opencloud-enabled'>{t('settings.enabled')}</Label>
@@ -94,7 +98,8 @@ export function OpenCloudSection() {
           <Switch
             id='opencloud-enabled'
             checked={config?.enabled ?? false}
-            disabled={!config}
+            // Switched off by the admin: it can still be turned off, not on.
+            disabled={!config || (!available && !config.enabled)}
             onCheckedChange={(enabled) => set({ enabled })}
           />
         </div>
@@ -186,7 +191,10 @@ export function OpenCloudSection() {
           <Button
             onClick={() => void handleSave()}
             // WebDAV providers need a host the administrator allows.
-            disabled={saving || !config || !canEdit || (config.enabled && webdav && !hosts.length)}
+            disabled={
+              saving || !config || !canEdit ||
+              (config.enabled && (!available || (webdav && !hosts.length)))
+            }
           >
             {saving ? t('settings.saving') : t('settings.save')}
           </Button>

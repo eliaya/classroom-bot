@@ -84,9 +84,14 @@ BUILD_ARG="--build"
   exit 1
 }
 
+# The host ports come from .env (API_PORT / HTTP_PORT), as in the compose files.
+env_port() { [ -f .env ] && sed -nE "s/^$1=\"?([0-9]+)\"?.*/\1/p" .env | tail -1; }
+API_HOST_PORT="$(env_port API_PORT)"
+WEB_HOST_PORT="$(env_port HTTP_PORT)"
+
 echo -e "${GREEN}All ${RUNTIME} services started.${NC}"
-echo -e "  • API:      http://127.0.0.1:8000"
-echo -e "  • Web (built): http://127.0.0.1:8080"
+echo -e "  • API:      http://127.0.0.1:${API_HOST_PORT:-8000}"
+echo -e "  • Web (built): http://127.0.0.1:${WEB_HOST_PORT:-8080}"
 echo -e "  • View logs: ${COMPOSE[*]} logs -f"
 echo -e "  • Stop:      ${COMPOSE[*]} down\n"
 
