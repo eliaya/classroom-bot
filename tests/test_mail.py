@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 
 import httplib2
 import pytest
@@ -86,16 +87,29 @@ async def test_modify_allows_only_page_labels_and_is_audited(sign_in, google_ser
     assert row.target == "abc123" and "Label_7" in row.detail
 
 
+def _refusal(message: str, reason: str) -> HttpError:
+    body = {"error": {"code": 403, "message": message, "errors": [{"reason": reason}], "status": "PERMISSION_DENIED"}}
+    return HttpError(httplib2.Response({"status": 403}), json.dumps(body).encode())
+
+
 @pytest.mark.asyncio
-async def test_gmail_refusal_asks_to_connect_again(sign_in, google_service, monkeypatch):
+@pytest.mark.parametrize(
+    "message, reason, hint",
+    [
+        ("Request had insufficient authentication scopes.", "insufficientPermissions", "Connect Google again"),
+        ("Gmail API has not been used in project 1 before or it is disabled.", "accessNotConfigured", "Gmail refused"),
+    ],
+)
+async def test_gmail_refusal_names_googles_reason(sign_in, google_service, monkeypatch, message, reason, hint):
     async def refused(*args):
-        raise HttpError(httplib2.Response({"status": 403}), b"insufficient scopes")
+        raise _refusal(message, reason)
 
     _gmail(google_service, monkeypatch, gmail_thread=refused)
     async with _client() as client:
         await sign_in(client, permissions=MAIL)
         res = await client.get("/api/mail/threads/abc123")
-    assert res.status_code == 400 and "Connect Google again" in res.json()["detail"]
+    assert res.status_code == 400
+    assert hint in res.json()["detail"] and message in res.json()["detail"]
 
 
 @pytest.mark.asyncio

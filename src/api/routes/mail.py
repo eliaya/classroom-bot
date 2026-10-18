@@ -8,6 +8,7 @@ module (GET needs ``mail:view``, the rest ``mail:use``).
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Awaitable, List, Optional, TypeVar
 
@@ -21,8 +22,12 @@ from src.google_service import GMAIL_ARCHIVE, GMAIL_CATEGORIES, GMAIL_MAILBOXES,
 from src.repositories import audit_log, google_connections
 
 router = APIRouter(prefix="/mail", tags=["mail"])
+logger = logging.getLogger("classroom_sync.mail")
 
 NOT_GRANTED = "Gmail access is not granted. Connect Google again (Settings → Status) and allow Gmail."
+# Google's reasons for a token that lacks the scope; any other 401/403 (a
+# disabled API, an admin block) is passed on in Google's own words.
+_SCOPE_REASONS = {"insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}
 
 # What the page may add or remove; Gmail's other system labels stay untouched.
 _SYSTEM_LABELS = {"INBOX", "UNREAD", "STARRED", "SPAM", "IMPORTANT"}
@@ -41,8 +46,12 @@ async def _gmail(call: Awaitable[T]) -> T:
         raise HTTPException(status_code=409, detail=NOT_CONNECTED)
     except HttpError as e:
         status = getattr(e.resp, "status", 502)
-        if status in (401, 403):  # scope unticked on the consent screen, or revoked
-            raise HTTPException(status_code=400, detail=NOT_GRANTED)
+        logger.warning("Gmail answered %s: %s %s", status, e.reason, e.error_details)
+        if status in (401, 403):
+            details = e.error_details if isinstance(e.error_details, list) else []
+            reasons = {d.get("reason") for d in details if isinstance(d, dict)}
+            hint = NOT_GRANTED if status == 401 or reasons & _SCOPE_REASONS else "Gmail refused the request."
+            raise HTTPException(status_code=400, detail=f"{hint} Google: {e.reason}")
         if status == 404:
             raise HTTPException(status_code=404, detail="Conversation not found")
         raise HTTPException(status_code=502, detail=f"Gmail answered {status}")
