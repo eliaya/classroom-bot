@@ -1,9 +1,14 @@
 from __future__ import annotations
 import asyncio
+import base64
+import html
 import io
 import logging
 import mimetypes
 import os
+import re
+from email.utils import parseaddr
+from html.parser import HTMLParser
 from typing import Any, Callable, Dict, List, Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -47,9 +52,22 @@ DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
 # per course, with coursework due dates). Like the others, not required.
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 
+# Optional: read and organise the user's Gmail (labels, archive, trash, star,
+# read state) for the Mail page. Nothing is sent and no mail is stored here.
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+
 # Full scope set requested by the OAuth setup flow (Classroom + optional Drive,
-# Calendar + push).
-SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE, DRIVE_FILE_SCOPE, CALENDAR_SCOPE, PUSH_SCOPE]
+# Calendar, Gmail + push).
+SCOPES = REQUIRED_SCOPES + [DRIVE_SCOPE, DRIVE_FILE_SCOPE, CALENDAR_SCOPE, GMAIL_SCOPE, PUSH_SCOPE]
+
+# Mail page: the mailboxes and Gmail categories shown, in order. ARCHIVE is not
+# a Gmail label but a search for mail that left the inbox.
+GMAIL_MAILBOXES = ("INBOX", "DRAFT", "SENT", "SPAM", "TRASH")
+GMAIL_CATEGORIES = ("CATEGORY_SOCIAL", "CATEGORY_UPDATES", "CATEGORY_FORUMS", "CATEGORY_PROMOTIONS")
+GMAIL_ARCHIVE = "ARCHIVE"
+GMAIL_ARCHIVE_QUERY = "-in:inbox -in:spam -in:trash -in:sent -in:drafts"
+GMAIL_PAGE_SIZE = 25
+GMAIL_MAX_TEXT = 200_000  # characters of one message body
 
 CLASSROOM_MAX_PAGE_SIZE = 30
 
@@ -117,6 +135,11 @@ class GoogleClassroomService:
         """Whether the user's Google Calendar may be read. Granted by
         connecting Google again."""
         return self._granted(CALENDAR_SCOPE)
+
+    def has_gmail_scope(self) -> bool:
+        """Whether the user's Gmail may be read and organised. Granted by
+        connecting Google again."""
+        return self._granted(GMAIL_SCOPE)
 
     def _granted(self, scope: str) -> bool:
         creds = self.creds
@@ -274,6 +297,112 @@ class GoogleClassroomService:
             if not self.load_credentials():
                 raise ConnectionError("Google Drive API connection failed: Missing or invalid credentials.")
         return build("drive", "v3", credentials=self.creds)
+
+    def _get_gmail_service(self) -> Any:
+        """Builds and returns the sync Gmail API resource client."""
+        if not self.creds or not self.creds.valid:
+            if not self.load_credentials():
+                raise ConnectionError("Gmail API connection failed: Missing or invalid credentials.")
+        return build("gmail", "v1", credentials=self.creds)
+
+    async def gmail_labels(self) -> List[Dict[str, Any]]:
+        """The mailboxes, Gmail categories and the user's own labels, each with
+        ``count``: the drafts in Drafts, unread conversations elsewhere."""
+        def _sync() -> List[Dict[str, Any]]:
+            svc = self._get_gmail_service()
+            listed = svc.users().labels().list(userId="me").execute().get("labels", [])
+            wanted = [
+                lb["id"] for lb in listed
+                if lb["id"] in GMAIL_MAILBOXES + GMAIL_CATEGORIES or lb.get("type") == "user"
+            ]
+            full: Dict[str, Dict[str, Any]] = {}
+            for i in range(0, len(wanted), 50):  # Gmail asks for at most 50 calls per batch
+                batch = svc.new_batch_http_request()
+                for label_id in wanted[i:i + 50]:
+                    batch.add(
+                        svc.users().labels().get(userId="me", id=label_id),
+                        callback=lambda _rid, resp, exc: exc is None and full.__setitem__(resp["id"], resp),
+                    )
+                batch.execute()
+            return [
+                {
+                    "id": lb["id"],
+                    "name": lb["name"],
+                    "type": lb.get("type", "system"),
+                    "color": (lb.get("color") or {}).get("backgroundColor"),
+                    "count": lb.get("messagesTotal" if lb["id"] == "DRAFT" else "threadsUnread", 0),
+                }
+                for lb in (full[i] for i in wanted if i in full)
+            ]
+        return await asyncio.to_thread(_sync)
+
+    async def gmail_threads(
+        self, label_id: str, query: str = "", unread: bool = False, page_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """One page of conversations in a label (or ``ARCHIVE``), newest first."""
+        def _sync() -> Dict[str, Any]:
+            svc = self._get_gmail_service()
+            q = [query.strip()] if query.strip() else []
+            params: Dict[str, Any] = {"userId": "me", "maxResults": GMAIL_PAGE_SIZE}
+            if label_id == GMAIL_ARCHIVE:
+                q.append(GMAIL_ARCHIVE_QUERY)
+            else:
+                params["labelIds"] = [label_id]
+                params["includeSpamTrash"] = label_id in ("SPAM", "TRASH")
+            if unread:
+                q.append("is:unread")
+            if q:
+                params["q"] = " ".join(q)
+            if page_token:
+                params["pageToken"] = page_token
+            listed = svc.users().threads().list(**params).execute()
+            ids = [t["id"] for t in listed.get("threads", [])]
+            got: Dict[str, Dict[str, Any]] = {}
+            if ids:
+                batch = svc.new_batch_http_request()
+                for thread_id in ids:
+                    batch.add(
+                        svc.users().threads().get(
+                            userId="me", id=thread_id, format="metadata",
+                            metadataHeaders=["From", "Subject", "Date"],
+                        ),
+                        callback=lambda _rid, resp, exc: exc is None and got.__setitem__(resp["id"], resp),
+                    )
+                batch.execute()
+            return {
+                "items": [gmail_thread_summary(got[i]) for i in ids if i in got],
+                "next_page_token": listed.get("nextPageToken"),
+            }
+        return await asyncio.to_thread(_sync)
+
+    async def gmail_thread(self, thread_id: str) -> Dict[str, Any]:
+        """A conversation with every message as plain text, oldest first."""
+        def _sync() -> Dict[str, Any]:
+            svc = self._get_gmail_service()
+            thread = svc.users().threads().get(userId="me", id=thread_id, format="full").execute()
+            messages = thread.get("messages", [])
+            return {
+                "id": thread["id"],
+                "subject": _gmail_header(messages[0], "Subject") if messages else "",
+                "label_ids": sorted({lb for m in messages for lb in m.get("labelIds", [])}),
+                "messages": [gmail_message(m) for m in messages],
+            }
+        return await asyncio.to_thread(_sync)
+
+    async def gmail_modify(self, thread_id: str, add: List[str], remove: List[str]) -> List[str]:
+        """Add and remove labels on every message of a conversation; returns its labels."""
+        def _sync() -> List[str]:
+            body = {"addLabelIds": add, "removeLabelIds": remove}
+            thread = self._get_gmail_service().users().threads().modify(
+                userId="me", id=thread_id, body=body).execute()
+            return sorted({lb for m in thread.get("messages", []) for lb in m.get("labelIds", [])})
+        return await asyncio.to_thread(_sync)
+
+    async def gmail_trash(self, thread_id: str) -> None:
+        """Move a conversation to Trash (Gmail empties it after 30 days)."""
+        def _sync() -> None:
+            self._get_gmail_service().users().threads().trash(userId="me", id=thread_id).execute()
+        await asyncio.to_thread(_sync)
 
     async def my_email(self) -> Optional[str]:
         """Email address of the connected Google account, for display. Best
@@ -683,3 +812,109 @@ class GoogleClassroomService:
         except Exception as e:
             logger.error(f"Failed to create announcement in course '{course_id}': {e}")
             raise e
+
+
+# ── Gmail message parsing (pure, no API calls) ────────────────────────────────
+
+def _gmail_header(message: Dict[str, Any], name: str) -> str:
+    for h in (message.get("payload") or {}).get("headers", []):
+        if h.get("name", "").lower() == name.lower():
+            return h.get("value", "")
+    return ""
+
+
+def _gmail_address(value: str) -> Dict[str, str]:
+    name, addr = parseaddr(value)
+    return {"name": name or addr, "email": addr}
+
+
+def gmail_thread_summary(thread: Dict[str, Any]) -> Dict[str, Any]:
+    """A list row: the last message's sender and time, the first's subject."""
+    messages = thread.get("messages") or [{}]
+    first, last = messages[0], messages[-1]
+    labels = {lb for m in messages for lb in m.get("labelIds", [])}
+    sender = _gmail_address(_gmail_header(last, "From"))
+    return {
+        "id": thread["id"],
+        "from_name": sender["name"],
+        "from_email": sender["email"],
+        "subject": _gmail_header(first, "Subject"),
+        "snippet": html.unescape(last.get("snippet", "")),
+        "date": int(last.get("internalDate", 0) or 0),
+        "count": len(thread.get("messages") or []),
+        "unread": "UNREAD" in labels,
+        "starred": "STARRED" in labels,
+        "label_ids": sorted(labels),
+    }
+
+
+def gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
+    sender = _gmail_address(_gmail_header(message, "From"))
+    return {
+        "id": message.get("id"),
+        "from_name": sender["name"],
+        "from_email": sender["email"],
+        "to": _gmail_header(message, "To"),
+        "reply_to": _gmail_address(_gmail_header(message, "Reply-To"))["email"] or sender["email"],
+        "date": int(message.get("internalDate", 0) or 0),
+        "unread": "UNREAD" in message.get("labelIds", []),
+        "text": gmail_body_text(message.get("payload") or {})[:GMAIL_MAX_TEXT],
+    }
+
+
+def _gmail_parts(part: Dict[str, Any]):
+    yield part
+    for child in part.get("parts", []) or []:
+        yield from _gmail_parts(child)
+
+
+def _gmail_decode(part: Dict[str, Any]) -> str:
+    data = (part.get("body") or {}).get("data")
+    if not data:
+        return ""
+    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8", errors="replace")
+
+
+def gmail_body_text(payload: Dict[str, Any]) -> str:
+    """The message body as plain text: its text/plain part, else its HTML
+    turned into text. HTML is never passed on (no scripts, no tracking images)."""
+    parts = [p for p in _gmail_parts(payload) if not p.get("filename")]
+    for mime, convert in (("text/plain", lambda t: t), ("text/html", html_to_text)):
+        texts = [_gmail_decode(p) for p in parts if p.get("mimeType") == mime]
+        if any(texts):
+            return convert("\n".join(t for t in texts if t)).strip()
+    return ""
+
+
+class _HTMLText(HTMLParser):
+    _BLOCKS = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "table"}
+    _SKIP = {"script", "style", "head", "title"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.out: List[str] = []
+        self.skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._SKIP:
+            self.skip += 1
+        elif tag in self._BLOCKS:
+            self.out.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self._SKIP:
+            self.skip = max(0, self.skip - 1)
+        elif tag in self._BLOCKS:
+            self.out.append("\n")
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.out.append(re.sub(r"[ \t\r\f\v]+", " ", data.replace("\n", " ")))
+
+
+def html_to_text(markup: str) -> str:
+    parser = _HTMLText()
+    parser.feed(markup)
+    text = "".join(parser.out)
+    lines = [line.strip() for line in text.split("\n")]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))

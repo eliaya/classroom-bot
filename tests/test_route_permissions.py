@@ -56,6 +56,10 @@ MATRIX = [
     ("delete", "/api/roles/999", "users:use"),
     ("get", "/api/roles/external-storage", "users:view"),
     ("patch", "/api/roles/external-storage", "users:use"),
+    ("get", "/api/mail/labels", "mail:view"),
+    ("get", "/api/mail/threads/abc", "mail:view"),
+    ("post", "/api/mail/threads/abc/trash", "mail:use"),
+    ("post", "/api/mail/threads/abc/modify", "mail:use"),
 ]
 
 

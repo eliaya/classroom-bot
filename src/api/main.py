@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from src import __version__
 from src.api.deps import require_module
-from src.api.routes import audit, auth, backup, board, bot, bot_commands, bot_messages, courses, discord_meta, health, links, roles, scheduler, search, sync, todos, users
+from src.api.routes import audit, auth, backup, board, bot, bot_commands, bot_messages, courses, discord_meta, health, links, mail, roles, scheduler, search, sync, todos, users
 from src.api.services.scheduler_service import SYNC_TICK_MINUTES, SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
@@ -68,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(backup.router, prefix="/api", dependencies=guard("backup"))
     app.include_router(users.router, prefix="/api", dependencies=guard("users"))
     app.include_router(roles.router, prefix="/api", dependencies=guard("users"))
+    app.include_router(mail.router, prefix="/api", dependencies=guard("mail"))
 
     @app.middleware("http")
     async def audit_requests(request: Request, call_next):

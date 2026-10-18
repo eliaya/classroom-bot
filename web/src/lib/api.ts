@@ -236,6 +236,52 @@ export type OpenCloudSettings = {
   available: boolean
 }
 
+/** A Gmail mailbox, category or the user's own label. */
+export type MailLabel = {
+  id: string
+  name: string
+  type: 'system' | 'user'
+  /** The label's colour in Gmail (user labels only), as hex. */
+  color: string | null
+  /** Drafts in Drafts, unread conversations elsewhere; null for Archive. */
+  count: number | null
+}
+
+export type MailLabels = { granted: boolean; mailboxes: MailLabel[]; labels: MailLabel[] }
+
+export type MailThreadSummary = {
+  id: string
+  from_name: string
+  from_email: string
+  subject: string
+  snippet: string
+  /** Epoch milliseconds of the last message. */
+  date: number
+  count: number
+  unread: boolean
+  starred: boolean
+  label_ids: string[]
+}
+
+export type MailMessage = {
+  id: string
+  from_name: string
+  from_email: string
+  to: string
+  reply_to: string
+  date: number
+  unread: boolean
+  /** Plain text; HTML mail is converted on the server. */
+  text: string
+}
+
+export type MailThread = {
+  id: string
+  subject: string
+  label_ids: string[]
+  messages: MailMessage[]
+}
+
 export type ExternalStorageAdmin = {
   enabled: boolean
 }
@@ -484,6 +530,24 @@ export const api = {
     request<Role>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRole: (id: number) =>
     request<{ id: number; deleted: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
+  listMailLabels: () => request<MailLabels>('/mail/labels'),
+  listMailThreads: (params: { label: string; q?: string; unread?: boolean; page_token?: string }) => {
+    const qs = new URLSearchParams({ label: params.label })
+    if (params.q) qs.set('q', params.q)
+    if (params.unread) qs.set('unread', 'true')
+    if (params.page_token) qs.set('page_token', params.page_token)
+    return request<{ items: MailThreadSummary[]; next_page_token: string | null }>(`/mail/threads?${qs}`)
+  },
+  getMailThread: (id: string) => request<MailThread>(`/mail/threads/${encodeURIComponent(id)}`),
+  modifyMailThread: (id: string, body: { add?: string[]; remove?: string[] }) =>
+    request<{ id: string; label_ids: string[] }>(`/mail/threads/${encodeURIComponent(id)}/modify`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  trashMailThread: (id: string) =>
+    request<{ id: string; trashed: boolean }>(`/mail/threads/${encodeURIComponent(id)}/trash`, {
+      method: 'POST',
+    }),
   getExternalStorage: () => request<ExternalStorageAdmin>('/roles/external-storage'),
   updateExternalStorage: (body: Partial<ExternalStorageAdmin>) =>
     request<ExternalStorageAdmin>('/roles/external-storage', {

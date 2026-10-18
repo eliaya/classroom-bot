@@ -7,9 +7,9 @@ const WILDCARD = '*'
 /**
  * A person's own Classroom data and Discord bot. These are used in the root
  * area only, so the wildcard does not open them: the admin area has no
- * courses, to-dos, sync, OpenCloud or bot pages.
+ * courses, to-dos, sync, OpenCloud, bot or mail pages.
  */
-const USER_MODULES: readonly string[] = ['courses', 'todos', 'sync', 'links', 'bot']
+const USER_MODULES: readonly string[] = ['courses', 'todos', 'sync', 'links', 'bot', 'mail']
 
 /** Does this permission list grant `key` (e.g. `sync:use`)? */
 export function can(permissions: readonly string[], key: string): boolean {
@@ -33,6 +33,8 @@ export const ROUTE_PERMISSIONS: ReadonlyArray<readonly [string, readonly string[
   // Shows the courses' posts.
   ['/calendar', ['courses:view']],
   ['/search', ['search:view']],
+  // The user's own Gmail.
+  ['/mail', ['mail:view']],
   ['/sync', ['sync:view']],
   ['/audit', ['audit:view']],
   // Two tabs: channel links (links) and bot commands (bot).

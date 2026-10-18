@@ -21,6 +21,7 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authenticated/sync/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSearchIndexRouteImport } from './routes/_authenticated/search/index'
+import { Route as AuthenticatedMailIndexRouteImport } from './routes/_authenticated/mail/index'
 import { Route as AuthenticatedCoursesIndexRouteImport } from './routes/_authenticated/courses/index'
 import { Route as AuthenticatedCalendarIndexRouteImport } from './routes/_authenticated/calendar/index'
 import { Route as AuthenticatedBotIndexRouteImport } from './routes/_authenticated/bot/index'
@@ -102,6 +103,11 @@ const AuthenticatedSearchIndexRoute =
     path: '/search/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedMailIndexRoute = AuthenticatedMailIndexRouteImport.update({
+  id: '/mail/',
+  path: '/mail/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCoursesIndexRoute =
   AuthenticatedCoursesIndexRouteImport.update({
     id: '/courses/',
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/bot/': typeof AuthenticatedBotIndexRoute
   '/calendar/': typeof AuthenticatedCalendarIndexRoute
   '/courses/': typeof AuthenticatedCoursesIndexRoute
+  '/mail/': typeof AuthenticatedMailIndexRoute
   '/search/': typeof AuthenticatedSearchIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/sync/': typeof AuthenticatedSyncIndexRoute
@@ -261,6 +268,7 @@ export interface FileRoutesByTo {
   '/bot': typeof AuthenticatedBotIndexRoute
   '/calendar': typeof AuthenticatedCalendarIndexRoute
   '/courses': typeof AuthenticatedCoursesIndexRoute
+  '/mail': typeof AuthenticatedMailIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/sync': typeof AuthenticatedSyncIndexRoute
@@ -294,6 +302,7 @@ export interface FileRoutesById {
   '/_authenticated/bot/': typeof AuthenticatedBotIndexRoute
   '/_authenticated/calendar/': typeof AuthenticatedCalendarIndexRoute
   '/_authenticated/courses/': typeof AuthenticatedCoursesIndexRoute
+  '/_authenticated/mail/': typeof AuthenticatedMailIndexRoute
   '/_authenticated/search/': typeof AuthenticatedSearchIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/sync/': typeof AuthenticatedSyncIndexRoute
@@ -327,6 +336,7 @@ export interface FileRouteTypes {
     | '/bot/'
     | '/calendar/'
     | '/courses/'
+    | '/mail/'
     | '/search/'
     | '/settings/'
     | '/sync/'
@@ -356,6 +366,7 @@ export interface FileRouteTypes {
     | '/bot'
     | '/calendar'
     | '/courses'
+    | '/mail'
     | '/search'
     | '/settings'
     | '/sync'
@@ -388,6 +399,7 @@ export interface FileRouteTypes {
     | '/_authenticated/bot/'
     | '/_authenticated/calendar/'
     | '/_authenticated/courses/'
+    | '/_authenticated/mail/'
     | '/_authenticated/search/'
     | '/_authenticated/settings/'
     | '/_authenticated/sync/'
@@ -491,6 +503,13 @@ declare module '@tanstack/react-router' {
       path: '/search'
       fullPath: '/search/'
       preLoaderRoute: typeof AuthenticatedSearchIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/mail/': {
+      id: '/_authenticated/mail/'
+      path: '/mail'
+      fullPath: '/mail/'
+      preLoaderRoute: typeof AuthenticatedMailIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/courses/': {
@@ -685,6 +704,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBotIndexRoute: typeof AuthenticatedBotIndexRoute
   AuthenticatedCalendarIndexRoute: typeof AuthenticatedCalendarIndexRoute
   AuthenticatedCoursesIndexRoute: typeof AuthenticatedCoursesIndexRoute
+  AuthenticatedMailIndexRoute: typeof AuthenticatedMailIndexRoute
   AuthenticatedSearchIndexRoute: typeof AuthenticatedSearchIndexRoute
   AuthenticatedSyncIndexRoute: typeof AuthenticatedSyncIndexRoute
 }
@@ -699,6 +719,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBotIndexRoute: AuthenticatedBotIndexRoute,
   AuthenticatedCalendarIndexRoute: AuthenticatedCalendarIndexRoute,
   AuthenticatedCoursesIndexRoute: AuthenticatedCoursesIndexRoute,
+  AuthenticatedMailIndexRoute: AuthenticatedMailIndexRoute,
   AuthenticatedSearchIndexRoute: AuthenticatedSearchIndexRoute,
   AuthenticatedSyncIndexRoute: AuthenticatedSyncIndexRoute,
 }

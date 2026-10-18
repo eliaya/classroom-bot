@@ -18,6 +18,9 @@ MODULES: dict[str, tuple[str, ...]] = {
     "audit": ("view", "use"),
     "backup": ("view", "use"),
     "users": ("view", "use"),
+    # The user's own Gmail: read (view) and organise (use). Off by default —
+    # an administrator grants it per role.
+    "mail": ("view", "use"),
 }
 
 ALL_PERMISSIONS: frozenset[str] = frozenset(
