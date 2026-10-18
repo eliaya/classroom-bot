@@ -68,6 +68,7 @@ GMAIL_ARCHIVE = "ARCHIVE"
 GMAIL_ARCHIVE_QUERY = "-in:inbox -in:spam -in:trash -in:sent -in:drafts"
 GMAIL_PAGE_SIZE = 25
 GMAIL_MAX_TEXT = 200_000  # characters of one message body
+GMAIL_FETCH_BATCH = 20  # raw messages per batch call; keeps one response small
 
 CLASSROOM_MAX_PAGE_SIZE = 30
 
@@ -403,6 +404,93 @@ class GoogleClassroomService:
         def _sync() -> None:
             self._get_gmail_service().users().threads().trash(userId="me", id=thread_id).execute()
         await asyncio.to_thread(_sync)
+
+    async def gmail_history_id(self) -> str:
+        """The mailbox's current history id: partial syncs start from here."""
+        def _sync() -> str:
+            return str(self._get_gmail_service().users().getProfile(userId="me").execute()["historyId"])
+        return await asyncio.to_thread(_sync)
+
+    async def gmail_message_ids(self, page_token: Optional[str] = None) -> Dict[str, Any]:
+        """One page of every message id in the mailbox (Spam and Trash too), newest first."""
+        def _sync() -> Dict[str, Any]:
+            params: Dict[str, Any] = {"userId": "me", "maxResults": 500, "includeSpamTrash": True}
+            if page_token:
+                params["pageToken"] = page_token
+            listed = self._get_gmail_service().users().messages().list(**params).execute()
+            return {
+                "ids": [m["id"] for m in listed.get("messages", [])],
+                "next_page_token": listed.get("nextPageToken"),
+            }
+        return await asyncio.to_thread(_sync)
+
+    async def gmail_messages(self, ids: List[str], fmt: str = "raw") -> List[Dict[str, Any]]:
+        """Messages by id, ``raw`` (whole RFC 822, decoded to bytes) or ``minimal``
+        (labels only). A message deleted meanwhile is left out; any other failure
+        raises, so a caller never skips a message it has not saved."""
+        def _sync() -> List[Dict[str, Any]]:
+            svc = self._get_gmail_service()
+            got: Dict[str, Dict[str, Any]] = {}
+            failed: List[Exception] = []
+
+            def done(_rid: str, resp: Dict[str, Any], exc: Optional[Exception]) -> None:
+                if exc is None:
+                    got[resp["id"]] = resp
+                elif getattr(getattr(exc, "resp", None), "status", None) != 404:
+                    failed.append(exc)
+
+            for i in range(0, len(ids), GMAIL_FETCH_BATCH):
+                batch = svc.new_batch_http_request()
+                for message_id in ids[i:i + GMAIL_FETCH_BATCH]:
+                    batch.add(svc.users().messages().get(userId="me", id=message_id, format=fmt), callback=done)
+                batch.execute()
+                if failed:
+                    raise failed[0]
+            return [
+                {
+                    "id": m["id"],
+                    "thread_id": m.get("threadId", ""),
+                    "label_ids": m.get("labelIds", []),
+                    "internal_date": int(m.get("internalDate", 0)),
+                    "size_estimate": int(m.get("sizeEstimate", 0)),
+                    "raw": base64.urlsafe_b64decode(m["raw"] + "=" * (-len(m["raw"]) % 4)) if "raw" in m else None,
+                }
+                for m in (got[i] for i in ids if i in got)
+            ]
+        return await asyncio.to_thread(_sync)
+
+    async def gmail_history(self, start_history_id: str) -> Dict[str, Any]:
+        """What changed since ``start_history_id``: ids added, deleted and
+        relabelled, and the history id to resume from. Raises HttpError 404 when
+        Google no longer keeps history that old (a full pass is needed)."""
+        def _sync() -> Dict[str, Any]:
+            svc = self._get_gmail_service()
+            added: set[str] = set()
+            deleted: set[str] = set()
+            relabelled: set[str] = set()
+            params: Dict[str, Any] = {
+                "userId": "me", "startHistoryId": start_history_id, "maxResults": 500,
+                "historyTypes": ["messageAdded", "messageDeleted", "labelAdded", "labelRemoved"],
+            }
+            latest = start_history_id
+            while True:
+                page = svc.users().history().list(**params).execute()
+                latest = str(page.get("historyId", latest))
+                for record in page.get("history", []):
+                    added.update(r["message"]["id"] for r in record.get("messagesAdded", []))
+                    deleted.update(r["message"]["id"] for r in record.get("messagesDeleted", []))
+                    for key in ("labelsAdded", "labelsRemoved"):
+                        relabelled.update(r["message"]["id"] for r in record.get(key, []))
+                if not page.get("nextPageToken"):
+                    break
+                params["pageToken"] = page["nextPageToken"]
+            return {
+                "history_id": latest,
+                "added": sorted(added - deleted),
+                "deleted": sorted(deleted),
+                "relabelled": sorted(relabelled - added - deleted),
+            }
+        return await asyncio.to_thread(_sync)
 
     async def my_email(self) -> Optional[str]:
         """Email address of the connected Google account, for display. Best

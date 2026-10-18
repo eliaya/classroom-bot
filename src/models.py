@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from typing import Any, Optional
+from sqlalchemy import Column, LargeBinary
 from sqlmodel import Field, SQLModel, UniqueConstraint
 from src.config import now_jst
 
@@ -379,6 +380,39 @@ class GoogleCalendarEvent(SQLModel, table=True):
     synced_at: datetime = Field(default_factory=now_jst)
 
 
+class GmailMessage(SQLModel, table=True):
+    """One message of a user's Gmail, saved whole (raw RFC 822, attachments
+    included) by the background archive. Kept after it is deleted in Gmail."""
+    __tablename__ = "gmail_messages"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "id", name="uq_gmail_message"),
+    )
+
+    db_id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(default=None, index=True, nullable=False)
+    id: str
+    thread_id: str = Field(index=True)
+    label_ids: str = "[]"  # JSON list, kept current by the sync
+    internal_date: int = Field(default=0, index=True)  # ms since epoch, when Gmail received it
+    size_estimate: int = 0
+    raw: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
+    deleted_in_gmail: bool = False
+    synced_at: datetime = Field(default_factory=now_jst)
+
+
+class GmailSyncState(SQLModel, table=True):
+    """Where one user's Gmail archive stands: the first full pass, then the
+    history id partial syncs resume from."""
+    __tablename__ = "gmail_sync_state"
+
+    owner_user_id: int = Field(primary_key=True)
+    history_id: Optional[str] = None
+    backfill_token: Optional[str] = None  # next messages.list page of the full pass
+    backfill_done: bool = False
+    last_synced_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+
 class UserSchedulerSetting(SQLModel, table=True):
     """One user's own sync schedule. A user without a row follows the legacy
     ``SchedulerSetting`` values until they save their own."""
@@ -691,6 +725,7 @@ OWNED_MODELS = (
     ClassroomCourse, ClassroomAnnouncement, ClassroomCoursework, ClassroomTopic,
     ClassroomMaterial, ClassroomAttachment, ClassroomPerson, ClassroomTodo,
     ClassroomSyncChange, ClassroomSyncRun, BotCommand, BotMessage, GoogleCalendarEvent,
+    GmailMessage,
 )
 
 

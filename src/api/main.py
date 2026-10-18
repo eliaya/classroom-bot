@@ -169,6 +169,12 @@ def create_app() -> FastAPI:
 
             await announcement_poller.start()
 
+        # Gmail archive: the whole mailbox into the local database. No-op unless
+        # GMAIL_ARCHIVE_ENABLED.
+        from src.api.services.gmail_archive import gmail_archiver
+
+        await gmail_archiver.start()
+
     @app.on_event("shutdown")
     async def on_shutdown() -> None:
         scheduler_service.shutdown()
@@ -180,6 +186,9 @@ def create_app() -> FastAPI:
             from src.api.services.announcement_poller import announcement_poller
 
             await announcement_poller.stop()
+        from src.api.services.gmail_archive import gmail_archiver
+
+        await gmail_archiver.stop()
 
     return app
 

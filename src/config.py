@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     CLASSROOM_ANNOUNCEMENT_POLL_ENABLED: bool = False
     CLASSROOM_ANNOUNCEMENT_POLL_SECONDS: int = 120
 
+    # Background Gmail archive: saves each permitted user's whole mailbox (raw
+    # messages, attachments included) into the local database, kept for good.
+    GMAIL_ARCHIVE_ENABLED: bool = True
+    GMAIL_ARCHIVE_MINUTES: int = 10
+
     # Classwork attachment content sync (downloads Drive attachments during sync).
     # Requires the optional Drive scope (re-run setup_google_auth.py); when the
     # scope is absent, downloads are skipped and Classroom sync is unaffected.
