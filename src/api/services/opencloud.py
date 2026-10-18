@@ -8,26 +8,16 @@ from urllib.parse import quote
 
 import httpx
 
-from src.models import ExternalStorageSetting, OpenCloudSetting
+from src.models import OpenCloudSetting
 
 _transport: Optional[httpx.AsyncBaseTransport] = None  # swapped by tests
 
 
-def allowed_hosts(external: ExternalStorageSetting) -> list[str]:
-    return sorted({h.strip().lower() for h in external.allowed_hosts.split(",") if h.strip()})
-
-
-def client(setting: OpenCloudSetting, external: ExternalStorageSetting) -> httpx.AsyncClient:
-    """The only place a connection is opened, so the host allowlist holds for
-    the settings check and for every later sync alike. Redirects are not
-    followed (httpx default), so an allowed host cannot bounce us elsewhere."""
-    # Parsed by httpx itself: the host checked is the host connected to.
-    url = httpx.URL(setting.webdav_url)
-    if url.userinfo:
+def client(setting: OpenCloudSetting) -> httpx.AsyncClient:
+    """The only place a connection is opened. Redirects are not followed
+    (httpx default)."""
+    if httpx.URL(setting.webdav_url).userinfo:
         raise ValueError("The WebDAV URL must not contain credentials.")
-    host = url.host.lower()
-    if host not in allowed_hosts(external):
-        raise ValueError(f"Host {host or '(none)'} is not an allowed External Storage host.")
     return httpx.AsyncClient(
         base_url=setting.webdav_url.rstrip("/") + "/",
         auth=(setting.username, setting.app_token),
@@ -36,9 +26,9 @@ def client(setting: OpenCloudSetting, external: ExternalStorageSetting) -> httpx
     )
 
 
-async def check(setting: OpenCloudSetting, external: ExternalStorageSetting) -> None:
+async def check(setting: OpenCloudSetting) -> None:
     """Raise unless the space answers a PROPFIND with these credentials."""
-    async with client(setting, external) as c:
+    async with client(setting) as c:
         (await c.request("PROPFIND", "", headers={"Depth": "0"})).raise_for_status()
 
 

@@ -46,7 +46,6 @@ export function OpenCloudSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const hosts = config?.allowed_hosts ?? []
   const available = config?.available ?? true
   const provider = config?.provider ?? 'opencloud'
   const webdav = provider !== 'gdrive'
@@ -142,10 +141,7 @@ export function OpenCloudSection() {
                       onChange={(e) => set({ webdav_url: e.target.value })}
                     />
                     <p className='text-muted-foreground mt-1 text-xs'>
-                      {t(`settings.opencloud.urlHint.${provider}`)}{' '}
-                      {hosts.length
-                        ? t('settings.opencloud.hosts', { hosts: hosts.join(', ') })
-                        : t('settings.opencloud.noHosts')}
+                      {t(`settings.opencloud.urlHint.${provider}`)}
                     </p>
                   </div>
                   <div>
@@ -190,11 +186,7 @@ export function OpenCloudSection() {
         <div className='flex items-center gap-3'>
           <Button
             onClick={() => void handleSave()}
-            // WebDAV providers need a host the administrator allows.
-            disabled={
-              saving || !config || !canEdit ||
-              (config.enabled && (!available || (webdav && !hosts.length)))
-            }
+            disabled={saving || !config || !canEdit || (config.enabled && !available)}
           >
             {saving ? t('settings.saving') : t('settings.save')}
           </Button>

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-10-18
+
+### Fixed
+- **Settings → External storage could not be saved** while the administrator had allowed no WebDAV host: the Save button stayed disabled.
+
+### Removed
+- **The WebDAV host allow list.** Roles → External Storage keeps only its Enabled / Disabled switch; users' External storage settings no longer need an administrator-approved host, which had left their Save button disabled while the list was empty. `OPENCLOUD_ALLOWED_HOSTS`, the `allowed_hosts` field of `GET`/`PATCH /api/roles/external-storage` and `GET /api/sync/opencloud`, and the `external_storage_settings.allowed_hosts` column (dropped at startup) are gone. The server now connects to whatever WebDAV URL a user saves (URLs with embedded credentials are still refused).
+
 ## [0.22.0] - 2026-10-18
 
 **Upgrade notes.** `OPENCLOUD_ALLOWED_HOSTS` is read once: on the first start its hosts become the External Storage allow list (switched on), and from then on the list is edited in the admin area under Roles → External Storage; the variable is ignored afterwards.

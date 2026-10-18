@@ -245,7 +245,6 @@ def _opencloud_dict(row: OpenCloudSetting, external: ExternalStorageSetting) -> 
         "has_token": bool(row.app_token),
         # What the admin allows (Roles → External Storage).
         "available": external.enabled,
-        "allowed_hosts": opencloud.allowed_hosts(external),
     }
 
 
@@ -282,7 +281,7 @@ async def update_opencloud_settings(
         if not (candidate.webdav_url and candidate.username and candidate.app_token):
             raise HTTPException(status_code=400, detail="WebDAV URL, username and app token are required.")
         try:
-            await opencloud.check(candidate, external)
+            await opencloud.check(candidate)
         except Exception as e:  # noqa: BLE001 — surfaced to the user as-is
             raise HTTPException(status_code=400, detail=f"OpenCloud connection failed: {e}"[:300])
     return _opencloud_dict(await app_settings.update_opencloud_setting(session, **changes), external)

@@ -8,7 +8,6 @@ wildcard ``admin`` role cannot be edited at all.
 from __future__ import annotations
 
 import json
-import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,7 +15,6 @@ from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.deps import Principal, get_db_session, get_principal
-from src.api.services import opencloud
 from src.permissions import ALL_PERMISSIONS, MODULES, WILDCARD
 from src.repositories import app_settings, audit_log, users as repo
 
@@ -37,11 +35,6 @@ class RoleUpdate(BaseModel):
 
 class ExternalStorageUpdate(BaseModel):
     enabled: Optional[bool] = None
-    allowed_hosts: Optional[List[str]] = Field(default=None, max_length=50)
-
-
-# A bare hostname: no scheme, port, path or credentials.
-_HOST = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$")
 
 
 def _serialize(r) -> dict:
@@ -71,7 +64,7 @@ async def list_roles(session: AsyncSession = Depends(get_db_session)) -> dict:
 @router.get("/external-storage")
 async def get_external_storage(session: AsyncSession = Depends(get_db_session)) -> dict:
     row = await app_settings.get_external_storage_setting(session)
-    return {"enabled": row.enabled, "allowed_hosts": opencloud.allowed_hosts(row)}
+    return {"enabled": row.enabled}
 
 
 @router.patch("/external-storage")
@@ -80,20 +73,12 @@ async def update_external_storage(
     session: AsyncSession = Depends(get_db_session),
     principal: Principal = Depends(get_principal),
 ) -> dict:
-    hosts = None
-    if body.allowed_hosts is not None:
-        hosts = sorted({h.strip().lower() for h in body.allowed_hosts if h.strip()})
-        bad = [h for h in hosts if len(h) > 253 or not _HOST.match(h)]
-        if bad:
-            raise HTTPException(status_code=422, detail=f"Not a hostname: {', '.join(bad)}")
-    row = await app_settings.update_external_storage_setting(
-        session, enabled=body.enabled, allowed_hosts=None if hosts is None else ",".join(hosts)
-    )
+    row = await app_settings.update_external_storage_setting(session, enabled=body.enabled)
     await audit_log.record(
         session, category="api", action="external_storage.updated", actor=principal.email,
-        detail={"enabled": row.enabled, "allowed_hosts": opencloud.allowed_hosts(row)},
+        detail={"enabled": row.enabled},
     )
-    return {"enabled": row.enabled, "allowed_hosts": opencloud.allowed_hosts(row)}
+    return {"enabled": row.enabled}
 
 
 @router.post("", status_code=201)

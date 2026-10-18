@@ -234,13 +234,10 @@ export type OpenCloudSettings = {
   has_token: boolean
   /** The administrator's Roles → External Storage switch. */
   available: boolean
-  /** WebDAV hosts the administrator allows. */
-  allowed_hosts: string[]
 }
 
 export type ExternalStorageAdmin = {
   enabled: boolean
-  allowed_hosts: string[]
 }
 
 export type BotStatus = {
@@ -691,7 +688,7 @@ export const api = {
   getOpenCloudSettings: () => request<OpenCloudSettings>('/sync/opencloud'),
   // app_token is write-only: an empty string keeps the stored one.
   updateOpenCloudSettings: (
-    body: Partial<Omit<OpenCloudSettings, 'has_token' | 'available' | 'allowed_hosts'>> & { app_token?: string }
+    body: Partial<Omit<OpenCloudSettings, 'has_token' | 'available'>> & { app_token?: string }
   ) =>
     request<OpenCloudSettings>('/sync/opencloud', {
       method: 'PATCH',

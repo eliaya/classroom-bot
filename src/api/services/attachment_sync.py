@@ -253,8 +253,7 @@ class AttachmentSyncService:
         if oc.provider == "gdrive":
             service = await google_connections.service_for(session)
             return await service.download_drive_path(path)
-        external = await app_settings.get_external_storage_setting(session)
-        async with opencloud.client(oc, external) as client:
+        async with opencloud.client(oc) as client:
             return await opencloud.get(client, path)
 
     @asynccontextmanager
@@ -274,8 +273,7 @@ class AttachmentSyncService:
             yield put
         else:  # opencloud / nextcloud: WebDAV
             made: set[str] = set()
-            external = await app_settings.get_external_storage_setting(session)
-            async with opencloud.client(oc, external) as client:
+            async with opencloud.client(oc) as client:
 
                 async def put(path: str, data: bytes) -> None:
                     await opencloud.put(client, path, data, made)

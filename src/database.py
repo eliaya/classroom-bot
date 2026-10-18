@@ -299,6 +299,9 @@ async def init_db() -> None:
                 await conn.execute(text(
                     "UPDATE bot_commands SET kind = 'template' WHERE kind IS NULL"
                 ))
+            # Its NOT NULL column would fail inserts of the (now host-less) singleton row.
+            if await _has_column(conn, "external_storage_settings", "allowed_hosts"):
+                await conn.execute(text("ALTER TABLE external_storage_settings DROP COLUMN allowed_hosts"))
             # Runs last: the rebuild copies columns the steps above may have just added.
             await _migrate_ownership(conn)
             await _migrate_bot_ownership(conn)

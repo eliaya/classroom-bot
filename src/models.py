@@ -437,15 +437,11 @@ class BackupSetting(SQLModel, table=True):
 
 class ExternalStorageSetting(SQLModel, table=True):
     """Singleton row (id=1): the administrator's switch for per-user external
-    storage, and the hosts a user's WebDAV URL may point at (comma-separated;
-    the server only ever connects to these). Managed under Roles in the WebUI;
-    seeded from OPENCLOUD_ALLOWED_HOSTS on first read.
-    """
+    storage. Managed under Roles in the WebUI."""
     __tablename__ = "external_storage_settings"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     enabled: bool = Field(default=True)
-    allowed_hosts: str = Field(default="")
     updated_at: datetime = Field(default_factory=now_jst)
 
 

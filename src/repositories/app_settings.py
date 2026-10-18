@@ -198,10 +198,7 @@ async def get_external_storage_setting(session: AsyncSession) -> ExternalStorage
     """Return the admin's external-storage setting, seeding it from env on first use."""
     row = await session.get(ExternalStorageSetting, _SINGLETON_ID)
     if row is None:
-        # On: Google Drive storage keeps working as before; WebDAV still needs a host.
-        row = ExternalStorageSetting(
-            id=_SINGLETON_ID, enabled=True, allowed_hosts=settings.OPENCLOUD_ALLOWED_HOSTS
-        )
+        row = ExternalStorageSetting(id=_SINGLETON_ID, enabled=True)
         session.add(row)
         await session.commit()
         await session.refresh(row)
@@ -212,13 +209,10 @@ async def update_external_storage_setting(
     session: AsyncSession,
     *,
     enabled: Optional[bool] = None,
-    allowed_hosts: Optional[str] = None,
 ) -> ExternalStorageSetting:
     row = await get_external_storage_setting(session)
     if enabled is not None:
         row.enabled = enabled
-    if allowed_hosts is not None:
-        row.allowed_hosts = allowed_hosts
     row.updated_at = now_jst()
     session.add(row)
     await session.commit()

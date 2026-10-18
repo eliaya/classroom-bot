@@ -50,7 +50,6 @@ def remote(monkeypatch):
         return httpx.Response(207 if request.method == "PROPFIND" else 201)
 
     monkeypatch.setattr(opencloud, "_transport", httpx.MockTransport(handler))
-    monkeypatch.setattr(config_module.settings, "OPENCLOUD_ALLOWED_HOSTS", "Cloud.Example.com, other.example")
     return state
 
 
@@ -143,17 +142,6 @@ async def test_unreachable_server_does_not_fail_sync(session, remote):
 
 
 @pytest.mark.asyncio
-async def test_host_outside_allowlist_is_never_contacted(session, remote, monkeypatch):
-    await _enable(session)
-    # The admin narrows the list after a user saved their setting.
-    await app_settings.update_external_storage_setting(session, allowed_hosts="")
-    stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
-    assert stats["fetched"] == 3 and "opencloud" not in stats and remote.calls == []
-    [(status, _, detail)] = await _audits()
-    assert status == "error" and "allowed External Storage host" in detail["error"]
-
-
-@pytest.mark.asyncio
 async def test_admin_switch_off_stops_uploads(session, remote):
     await _enable(session)
     await app_settings.update_external_storage_setting(session, enabled=False)
@@ -167,11 +155,9 @@ async def test_settings_route_hides_token_and_checks_connection(remote, sign_in)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await sign_in(client)
-        for bad in ("http://169.254.169.254/x", "https://cloud.example.com@evil.test/x",
-                    "https://evil.test\\@cloud.example.com/x"):
-            res = await client.patch("/api/sync/opencloud", json={
-                "enabled": True, "webdav_url": bad, "username": "u", "app_token": "t"})
-            assert res.status_code == 400 and remote.calls == [], bad
+        res = await client.patch("/api/sync/opencloud", json={
+            "enabled": True, "webdav_url": "https://u:p@cloud.example.com/x", "username": "u", "app_token": "t"})
+        assert res.status_code == 400 and remote.calls == []
         body = {"enabled": True, "webdav_url": BASE, "username": "u", "app_token": "secret"}
 
         remote.down = True
@@ -181,18 +167,14 @@ async def test_settings_route_hides_token_and_checks_connection(remote, sign_in)
         remote.down = False
         saved = (await client.patch("/api/sync/opencloud", json=body)).json()
         assert saved == {"enabled": True, "provider": "opencloud", "webdav_url": BASE, "username": "u",
-                         "folder": "Classroom", "has_token": True, "available": True,
-                         "allowed_hosts": ["cloud.example.com", "other.example"]}
+                         "folder": "Classroom", "has_token": True, "available": True}
         # An empty token keeps the stored one.
         again = await client.patch("/api/sync/opencloud", json={"app_token": "", "folder": "X"})
         assert again.json()["has_token"] is True and again.json()["enabled"] is True
 
-        # Admin: Roles → External Storage. Hosts are normalised; junk is refused.
-        res = await client.patch("/api/roles/external-storage", json={"allowed_hosts": ["https://x/y"]})
-        assert res.status_code == 422
-        res = await client.patch("/api/roles/external-storage",
-                                 json={"enabled": False, "allowed_hosts": [" Cloud.Example.com ", ""]})
-        assert res.json() == {"enabled": False, "allowed_hosts": ["cloud.example.com"]}
+        # Admin: Roles → External Storage.
+        res = await client.patch("/api/roles/external-storage", json={"enabled": False})
+        assert res.json() == {"enabled": False}
         assert (await client.get("/api/sync/opencloud")).json()["available"] is False
         # Switched off: a user cannot turn it on, but can turn it off.
         assert (await client.patch("/api/sync/opencloud", json=body)).status_code == 400

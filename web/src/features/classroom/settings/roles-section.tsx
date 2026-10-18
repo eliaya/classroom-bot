@@ -158,24 +158,17 @@ export function RolesSection() {
 }
 
 /**
- * Whether users may move attachments to external storage, and the WebDAV hosts
- * the server may connect to for them (formerly OPENCLOUD_ALLOWED_HOSTS).
+ * Whether users may move attachments to external storage.
  */
 function ExternalStorageCard({ canEdit }: { canEdit: boolean }) {
   const { t } = useTranslation()
   const [config, setConfig] = useState<ExternalStorageAdmin | null>(null)
-  const [hosts, setHosts] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
-
-  const show = (c: ExternalStorageAdmin) => {
-    setConfig(c)
-    setHosts(c.allowed_hosts.join(', '))
-  }
 
   useEffect(() => {
     api
       .getExternalStorage()
-      .then(show)
+      .then(setConfig)
       .catch((e) => setMsg(e instanceof Error ? e.message : t('common.loadFailed')))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -183,7 +176,7 @@ function ExternalStorageCard({ canEdit }: { canEdit: boolean }) {
   const save = async (body: Partial<ExternalStorageAdmin>) => {
     setMsg(null)
     try {
-      show(await api.updateExternalStorage(body))
+      setConfig(await api.updateExternalStorage(body))
       setMsg(t('common.saved'))
     } catch (e) {
       setMsg(e instanceof Error ? e.message : t('common.saveFailed'))
@@ -208,25 +201,6 @@ function ExternalStorageCard({ canEdit }: { canEdit: boolean }) {
             onCheckedChange={(enabled) => void save({ enabled })}
           />
         </div>
-        <div className='flex flex-wrap items-end gap-3'>
-          <div className='min-w-0 flex-1 space-y-1'>
-            <Label htmlFor='external-storage-hosts'>{t('settings.roles.externalStorage.hosts')}</Label>
-            <Input
-              id='external-storage-hosts'
-              value={hosts}
-              onChange={(e) => setHosts(e.target.value)}
-              placeholder='cloud.example.com, nextcloud.example.org'
-              disabled={!config || !canEdit}
-            />
-          </div>
-          <Button
-            onClick={() => void save({ allowed_hosts: hosts.split(',') })}
-            disabled={!config || !canEdit}
-          >
-            {t('settings.save')}
-          </Button>
-        </div>
-        <p className='text-muted-foreground text-xs'>{t('settings.roles.externalStorage.hostsHint')}</p>
         {msg && <p className='text-muted-foreground text-xs'>{msg}</p>}
       </CardContent>
     </Card>
