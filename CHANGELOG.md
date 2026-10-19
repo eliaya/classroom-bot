@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-20
+
+### Changed
+- **Page titles match the Courses page.** Every page title in the top bar (Dashboard, Mail, Calendar, Settings, Search, Sync, Audit, Bot console) and the course name on a course's page use the Courses title's size and weight (`text-3xl font-medium`).
+
+### Removed
+- **The description under the Courses title** and its `courses.desc` translation.
+
 ## [0.26.0] - 2026-10-19
 
 **Upgrade notes.** The Mail page now shows what the Gmail archive holds. An archive that is new or still on its first pass fills in about 500 messages per run, newest first. Messages saved by 0.23.0–0.25.1 get their list and search columns read in the same slices (until then they show without a subject and are not found by search). New columns `gmail_messages.subject`, `sender`, `snippet`, `has_attachment`, `search_text` and `gmail_sync_state.labels` are added at startup.

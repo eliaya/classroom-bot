@@ -225,7 +225,6 @@ const zhCN: Resources = {
   },
   courses: {
     title: '课程',
-    desc: '查看 Google Classroom 课程的活跃度、课表与最近更新。',
     courseName: '课程名称',
     week: '星期',
     state: '状态',

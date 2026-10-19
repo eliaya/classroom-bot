@@ -224,7 +224,6 @@ export const en = {
   },
   courses: {
     title: 'Courses',
-    desc: 'Track activity, schedule and recent updates of your Google Classroom courses.',
     courseName: 'Course name',
     week: 'Week',
     state: 'State',

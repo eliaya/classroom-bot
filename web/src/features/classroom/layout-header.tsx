@@ -34,14 +34,14 @@ export function ClassroomHeader({ topNav, fixed, title, description }: Classroom
         (description ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <h2 className='me-auto cursor-default text-xl font-bold tracking-tight'>
+              <h2 className='me-auto cursor-default text-3xl font-medium tracking-tight'>
                 {title}
               </h2>
             </TooltipTrigger>
             <TooltipContent>{description}</TooltipContent>
           </Tooltip>
         ) : (
-          <h2 className='me-auto text-xl font-bold tracking-tight'>{title}</h2>
+          <h2 className='me-auto text-3xl font-medium tracking-tight'>{title}</h2>
         ))}
       <Search className={topNav || title ? undefined : 'ms-auto'} />
       <ThemeSwitch />

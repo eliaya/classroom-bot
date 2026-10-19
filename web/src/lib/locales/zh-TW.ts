@@ -225,7 +225,6 @@ const zhTW: Resources = {
   },
   courses: {
     title: '課程',
-    desc: '檢視 Google Classroom 課程的活躍度、課表與最近更新。',
     courseName: '課程名稱',
     week: '星期',
     state: '狀態',

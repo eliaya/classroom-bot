@@ -225,7 +225,6 @@ const ja: Resources = {
   },
   courses: {
     title: 'コース',
-    desc: 'Google Classroom のコースの活動状況・時間割・最近の更新を確認します。',
     courseName: 'コース名',
     week: '曜日',
     state: '状態',

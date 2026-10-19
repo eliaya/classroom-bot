@@ -64,7 +64,7 @@ export function CourseLayout({ courseId }: CourseLayoutProps) {
               {' / '}
               <span className='text-foreground'>{courseName}</span>
             </p>
-            <h2 className='text-2xl font-bold tracking-tight'>{courseName}</h2>
+            <h2 className='text-3xl font-medium tracking-tight'>{courseName}</h2>
           </div>
           {alternateLink && (
             <Button variant='outline' size='sm' asChild>

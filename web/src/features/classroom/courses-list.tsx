@@ -275,10 +275,7 @@ export function CoursesListPage() {
     <>
       <ClassroomHeader fixed />
       <Main fluid className='flex flex-1 flex-col gap-6'>
-        <div>
-          <h1 className='text-3xl font-medium tracking-tight'>{t('courses.title')}</h1>
-          <p className='mt-1 text-sm text-muted-foreground'>{t('courses.desc')}</p>
-        </div>
+        <h1 className='text-3xl font-medium tracking-tight'>{t('courses.title')}</h1>
 
         {error && (
           <p role='alert' className='text-sm text-destructive'>
