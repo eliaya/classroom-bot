@@ -26,11 +26,14 @@ class FakeGmail:
     def install(self, service, monkeypatch):
         monkeypatch.setattr(service, "has_gmail_scope", lambda: True)
         monkeypatch.setattr(service, "load_credentials", lambda: True)
-        for name in ("gmail_history_id", "gmail_message_ids", "gmail_messages", "gmail_history"):
+        for name in ("gmail_history_id", "gmail_message_ids", "gmail_messages", "gmail_history", "gmail_labels"):
             monkeypatch.setattr(service, name, getattr(self, name))
 
     async def gmail_history_id(self):
         return "100"
+
+    async def gmail_labels(self):
+        return [{"id": "INBOX", "name": "INBOX", "type": "system", "color": None, "count": 0}]
 
     async def gmail_message_ids(self, page_token=None):
         ids = sorted(self.box, reverse=True)
@@ -77,6 +80,14 @@ async def test_full_pass_then_history(sign_in, google_service, monkeypatch):
     msgs, state = await _rows(user)
     assert sorted(msgs) == ["m1", "m2", "m3"] and msgs["m3"].raw == b"Subject: m3\r\n\r\nbody"
     assert (state.history_id, state.backfill_done, state.last_error) == ("100", True, None)
+    assert msgs["m3"].subject == "m3" and json.loads(state.labels)[0]["id"] == "INBOX"
+
+    # A message saved before the list columns existed is read on the next run.
+    async with db.owned_session(user) as s:
+        row = await s.get(GmailMessage, msgs["m3"].db_id)
+        row.subject = row.search_text = None
+        s.add(row)
+        await s.commit()
 
     # New mail, a deletion (kept, marked) and a label change.
     gmail.box["m4"] = ["INBOX", "UNREAD"]
@@ -88,6 +99,7 @@ async def test_full_pass_then_history(sign_in, google_service, monkeypatch):
     assert gmail.raw_fetched == ["m4"]
     assert msgs["m1"].deleted_in_gmail and msgs["m1"].raw
     assert json.loads(msgs["m2"].label_ids) == ["STARRED"]
+    assert (msgs["m3"].subject, msgs["m3"].search_text) == ("m3", "\n\nm3\nbody")
     assert state.history_id == "200"
 
 

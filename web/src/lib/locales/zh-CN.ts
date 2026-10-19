@@ -58,6 +58,7 @@ const zhCN: Resources = {
       SPAM: '垃圾邮件',
       TRASH: '已删除',
       ARCHIVE: '归档',
+      DELETED: '已在 Gmail 删除',
     },
     categories: {
       CATEGORY_SOCIAL: '社交',

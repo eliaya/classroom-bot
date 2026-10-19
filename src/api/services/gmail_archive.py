@@ -3,7 +3,7 @@
 
 Per user and tick: first the changes since the last history id (new mail,
 deletions, label changes), then the next slice of the one-time full pass over
-older mail. Runs for active users whose role holds ``mail:view`` and whose
+older mail, then Gmail's labels. The Mail page reads this archive. Runs for active users whose role holds ``mail:view`` and whose
 Google connection was granted Gmail. Gated by ``settings.GMAIL_ARCHIVE_ENABLED``.
 """
 
@@ -101,6 +101,12 @@ async def _archive_user(user_id: int) -> int:
                 state.backfill_done = not state.backfill_token
                 session.add(state)
                 await session.commit()  # progress survives a later failure
+            # Messages saved before the Mail page read the archive get its columns, a slice a tick.
+            for _ in range(PER_TICK // CHUNK):
+                if not await archive.read_unread_rows(session, CHUNK):
+                    break
+                await session.commit()
+            state.labels = json.dumps(await google.gmail_labels())
             state.last_error = None
         except HttpError as e:
             await session.rollback()

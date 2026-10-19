@@ -1,4 +1,4 @@
-import { type LucideIcon, Archive, File, Inbox, OctagonAlert, Send, SquarePen, Trash2 } from 'lucide-react'
+import { type LucideIcon, Archive, ArchiveX, File, Inbox, OctagonAlert, Send, SquarePen, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { MailLabel } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ const MAILBOX_ICONS: Record<string, LucideIcon> = {
   SPAM: OctagonAlert,
   TRASH: Trash2,
   ARCHIVE: Archive,
+  DELETED: ArchiveX,
 }
 
 type MailNavProps = {

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-19
+
+**Upgrade notes.** The Mail page now shows what the Gmail archive holds. An archive that is new or still on its first pass fills in about 500 messages per run, newest first. Messages saved by 0.23.0–0.25.1 get their list and search columns read in the same slices (until then they show without a subject and are not found by search). New columns `gmail_messages.subject`, `sender`, `snippet`, `has_attachment`, `search_text` and `gmail_sync_state.labels` are added at startup.
+
+### Changed
+- **The Mail page reads the local Gmail archive.** Labels, unread counts, conversation lists, conversations and search come from the database, so opening the page makes no Gmail call. The archive stays current through Gmail push and its timed runs, which now also store Gmail's labels. Archive, star, read state, spam and trash still go to Gmail and are mirrored in the archive at once. Search matches sender, recipients, subject and body, plus `is:starred`, `is:unread` and `has:attachment`; other Gmail search operators are not supported. With `GMAIL_ARCHIVE_ENABLED` off, the page reads Gmail live as before.
+
+### Added
+- **Deleted in Gmail** mailbox on the Mail page: conversations Gmail no longer has but the archive keeps (`label=DELETED`). Their messages carry `deleted: true` in `GET /api/mail/threads/{id}`.
+
 ## [0.25.1] - 2026-10-19
 
 ### Fixed

@@ -400,6 +400,12 @@ class GmailMessage(SQLModel, table=True):
     raw: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
     deleted_in_gmail: bool = False
     synced_at: datetime = Field(default_factory=now_jst)
+    # Read from ``raw`` once, for the Mail page's lists and search; NULL search_text = not read yet.
+    subject: Optional[str] = None
+    sender: Optional[str] = None  # the From header
+    snippet: Optional[str] = None
+    has_attachment: bool = Field(default=False, sa_column_kwargs={"server_default": "0"})
+    search_text: Optional[str] = None  # lowercased headers and body
 
 
 class GmailSyncState(SQLModel, table=True):
@@ -413,6 +419,7 @@ class GmailSyncState(SQLModel, table=True):
     backfill_done: bool = False
     last_synced_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    labels: Optional[str] = None  # JSON: Gmail's label list, refreshed every run
 
 
 class UserSchedulerSetting(SQLModel, table=True):

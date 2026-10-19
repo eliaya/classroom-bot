@@ -58,6 +58,7 @@ const ja: Resources = {
       SPAM: '迷惑メール',
       TRASH: 'ゴミ箱',
       ARCHIVE: 'アーカイブ',
+      DELETED: 'Gmail で削除済み',
     },
     categories: {
       CATEGORY_SOCIAL: 'ソーシャル',

@@ -56,6 +56,7 @@ export const en = {
       SPAM: 'Spam',
       TRASH: 'Trash',
       ARCHIVE: 'Archive',
+      DELETED: 'Deleted in Gmail',
     },
     categories: {
       CATEGORY_SOCIAL: 'Social',

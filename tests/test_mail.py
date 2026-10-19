@@ -1,8 +1,9 @@
-"""The Mail page talks to Gmail live with the user's own connection."""
+"""The Mail page reads the local Gmail archive; changes go to Gmail live."""
 from __future__ import annotations
 
 import base64
 import json
+from email.message import EmailMessage
 
 import httplib2
 import pytest
@@ -12,8 +13,10 @@ from sqlmodel import select
 
 import src.database as db
 from src.api.main import app
-from src.google_service import gmail_body_text, gmail_thread_summary
-from src.models import AuditLog
+from src.config import settings
+from src.google_service import gmail_body_text, gmail_raw_message, gmail_thread_summary
+from src.models import AuditLog, GmailSyncState
+from src.repositories import gmail_archive as archive
 
 MAIL = ["mail:view", "mail:use"]
 
@@ -24,6 +27,12 @@ def _client() -> AsyncClient:
 
 def _b64(text: str) -> str:
     return base64.urlsafe_b64encode(text.encode()).decode().rstrip("=")
+
+
+@pytest.fixture
+def live(monkeypatch):
+    """Without the archive the page reads Gmail live."""
+    monkeypatch.setattr(settings, "GMAIL_ARCHIVE_ENABLED", False)
 
 
 def _gmail(google_service, monkeypatch, *, granted=True, **methods) -> None:
@@ -42,7 +51,7 @@ async def test_without_the_scope_labels_say_not_granted(sign_in, google_service,
 
 
 @pytest.mark.asyncio
-async def test_labels_are_grouped_and_archive_is_added(sign_in, google_service, monkeypatch):
+async def test_labels_are_grouped_and_archive_is_added(sign_in, google_service, monkeypatch, live):
     async def labels():
         return [
             {"id": "Label_2", "name": "zeta", "type": "user", "color": None, "count": 0},
@@ -100,7 +109,7 @@ def _refusal(message: str, reason: str) -> HttpError:
         ("Gmail API has not been used in project 1 before or it is disabled.", "accessNotConfigured", "Gmail refused"),
     ],
 )
-async def test_gmail_refusal_names_googles_reason(sign_in, google_service, monkeypatch, message, reason, hint):
+async def test_gmail_refusal_names_googles_reason(sign_in, google_service, monkeypatch, live, message, reason, hint):
     async def refused(*args):
         raise _refusal(message, reason)
 
@@ -113,7 +122,7 @@ async def test_gmail_refusal_names_googles_reason(sign_in, google_service, monke
 
 
 @pytest.mark.asyncio
-async def test_view_only_role_can_read_but_not_organise(sign_in, google_service, monkeypatch):
+async def test_view_only_role_can_read_but_not_organise(sign_in, google_service, monkeypatch, live):
     async def threads(label, q, unread, page_token):
         assert (label, q, unread, page_token) == ("INBOX", "invoice", True, None)
         return {"items": [], "next_page_token": None}
@@ -156,3 +165,87 @@ def test_body_prefers_plain_text_and_strips_html():
         {"mimeType": "text/plain", "filename": "notes.txt", "body": {"data": _b64("not the body")}},
     ]}
     assert gmail_body_text(attachment) == ""
+
+
+def _raw(sender: str, subject: str, body: str, attachment: bool = False) -> bytes:
+    msg = EmailMessage()
+    msg["From"], msg["To"], msg["Subject"] = sender, "me@example.com", subject
+    msg.set_content(body)
+    if attachment:
+        msg.add_attachment(b"%PDF", maintype="application", subtype="pdf", filename="bill.pdf")
+    return msg.as_bytes()
+
+
+def test_raw_message_reads_encoded_headers_html_and_attachments():
+    msg = EmailMessage()
+    msg["From"], msg["Subject"] = "=?utf-8?b?5bGx55Sw?= <yamada@example.jp>", "=?utf-8?b?5LyR6Kyb?="
+    msg.set_content("<p>Hi &amp; bye</p>", subtype="html")
+    msg.add_attachment(b"x", maintype="application", subtype="octet-stream", filename="a.bin")
+    m = gmail_raw_message(msg.as_bytes())
+    assert (m["from_name"], m["from_email"], m["subject"]) == ("山田", "yamada@example.jp", "休講")
+    assert m["text"] == "Hi & bye" and m["has_attachment"] and m["reply_to"] == "yamada@example.jp"
+
+
+@pytest.mark.asyncio
+async def test_page_reads_the_archive_never_gmail(sign_in, google_service, monkeypatch):
+    async def refused(*args):
+        raise AssertionError("Gmail was called")
+
+    async def modify(thread_id, add, remove):
+        return ["INBOX"]
+
+    _gmail(google_service, monkeypatch, gmail_labels=refused, gmail_threads=refused, gmail_thread=refused,
+           gmail_modify=modify)
+    monkeypatch.setattr(archive, "GMAIL_PAGE_SIZE", 1)
+    async with _client() as client:
+        user = await sign_in(client, permissions=MAIL)
+        async with db.owned_session(user) as s:
+            await archive.save_messages(s, [
+                {"id": i, "thread_id": t, "label_ids": labels, "internal_date": date, "size_estimate": 1,
+                 "raw": _raw(*raw)}
+                for i, t, labels, date, raw in [
+                    ("m1", "t1", ["INBOX", "UNREAD"], 1000, ("Ann <ann@example.com>", "Lunch", "see you at noon")),
+                    ("m2", "t1", ["INBOX"], 2000, ("Bob <bob@example.com>", "Re: Lunch", "ok", True)),
+                    ("m3", "t2", [], 1500, ("shop@example.com", "Invoice", "paid")),
+                    ("m6", "t5", ["Label_1"], 500, ("old@example.com", "Old", "older")),
+                    ("m4", "t3", ["TRASH", "INBOX"], 3000, ("x@example.com", "Junk", "bin")),
+                    ("m5", "t4", ["INBOX"], 4000, ("y@example.com", "Gone", "deleted")),
+                ]
+            ])
+            await archive.mark_deleted(s, ["m5"])
+            s.add(GmailSyncState(owner_user_id=user, labels=json.dumps([
+                {"id": "INBOX", "name": "INBOX", "type": "system", "color": None, "count": 9},
+                {"id": "Label_1", "name": "Work", "type": "user", "color": "#fb4c2f", "count": 9},
+            ])))
+            await s.commit()
+
+        async def ids(**params):
+            body = (await client.get("/api/mail/threads", params=params)).json()
+            return [it["id"] for it in body["items"]], body["next_page_token"]
+
+        assert await ids(label="INBOX") == (["t1"], None)
+        assert await ids(label="TRASH") == (["t3"], None)
+        assert await ids(label="DELETED") == (["t4"], None)
+        assert await ids(label="ARCHIVE") == (["t2"], "1")  # one per page here
+        assert await ids(label="ARCHIVE", page_token="1") == (["t5"], None)
+        assert await ids(label="INBOX", q="NOON") == (["t1"], None)
+        assert await ids(label="INBOX", q="has:attachment") == (["t1"], None)
+        assert await ids(label="INBOX", q="invoice") == ([], None)
+
+        row = (await client.get("/api/mail/threads", params={"label": "INBOX"})).json()["items"][0]
+        assert (row["subject"], row["from_name"], row["snippet"], row["count"], row["unread"]) == (
+            "Lunch", "Bob", "ok", 2, True)
+
+        thread = (await client.get("/api/mail/threads/t1")).json()
+        assert thread["subject"] == "Lunch" and [m["text"] for m in thread["messages"]] == ["see you at noon", "ok"]
+        assert (await client.get("/api/mail/threads/t4")).json()["messages"][0]["deleted"] is True
+        assert (await client.get("/api/mail/threads/zzz")).status_code == 404
+
+        labels = (await client.get("/api/mail/labels")).json()
+        assert [(m["id"], m["count"]) for m in labels["mailboxes"]] == [
+            ("INBOX", 1), ("ARCHIVE", None), ("DELETED", None)]
+        assert [(lb["name"], lb["count"]) for lb in labels["labels"]] == [("Work", 0)]
+
+        # A change made in Gmail shows at once, before the archive syncs.
+        await client.post("/api/mail/threads/t1/modify", json={"remove": ["UNREAD"]})
+        assert await ids(label="INBOX", unread="true") == ([], None)

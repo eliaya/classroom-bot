@@ -262,6 +262,11 @@ async def init_db() -> None:
                 "classroom_attachments": [("opencloud_path", "TEXT")],
                 "opencloud_user_settings": [("provider", "TEXT DEFAULT 'opencloud' NOT NULL")],
                 "google_calendar_events": [("description", "TEXT"), ("location", "TEXT")],
+                "gmail_messages": [
+                    ("subject", "TEXT"), ("sender", "TEXT"), ("snippet", "TEXT"),
+                    ("has_attachment", "BOOLEAN DEFAULT 0 NOT NULL"), ("search_text", "TEXT"),
+                ],
+                "gmail_sync_state": [("labels", "TEXT")],
             }
             for table_name, columns in _added_columns.items():
                 # Skip tables that don't exist yet (create_all already made new ones complete).

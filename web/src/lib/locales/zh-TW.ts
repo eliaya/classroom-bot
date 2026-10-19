@@ -58,6 +58,7 @@ const zhTW: Resources = {
       SPAM: '垃圾郵件',
       TRASH: '垃圾桶',
       ARCHIVE: '封存',
+      DELETED: '已在 Gmail 刪除',
     },
     categories: {
       CATEGORY_SOCIAL: '社交網路',

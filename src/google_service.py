@@ -7,6 +7,7 @@ import logging
 import mimetypes
 import os
 import re
+from email import message_from_bytes, policy
 from email.utils import parseaddr
 from html.parser import HTMLParser
 from typing import Any, Callable, Dict, List, Optional
@@ -956,6 +957,33 @@ def gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
         "date": int(message.get("internalDate", 0) or 0),
         "unread": "UNREAD" in message.get("labelIds", []),
         "text": gmail_body_text(message.get("payload") or {})[:GMAIL_MAX_TEXT],
+    }
+
+
+def gmail_raw_message(raw: bytes) -> Dict[str, Any]:
+    """An archived message (raw RFC 822) read the way ``gmail_message`` reads
+    Gmail's parsed one: headers decoded, the body as plain text."""
+    msg = message_from_bytes(raw, policy=policy.default)
+    header = lambda name: str(msg.get(name, "") or "")  # noqa: E731
+    sender = _gmail_address(header("From"))
+    body = msg.get_body(preferencelist=("plain", "html"))
+    text = ""
+    if body is not None:
+        try:
+            text = body.get_content()
+        except (LookupError, ValueError):  # an unknown or wrong charset
+            text = (body.get_payload(decode=True) or b"").decode("utf-8", errors="replace")
+        if body.get_content_type() == "text/html":
+            text = html_to_text(text)
+    return {
+        "from": header("From"),
+        "from_name": sender["name"],
+        "from_email": sender["email"],
+        "to": header("To"),
+        "reply_to": _gmail_address(header("Reply-To"))["email"] or sender["email"],
+        "subject": header("Subject"),
+        "text": text.strip()[:GMAIL_MAX_TEXT],
+        "has_attachment": any(p.get_content_disposition() == "attachment" for p in msg.walk()),
     }
 
 
