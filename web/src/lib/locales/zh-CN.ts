@@ -283,6 +283,8 @@ const zhCN: Resources = {
     openCourse: '打开课程',
     archive: '归档',
     unarchive: '取消归档',
+    archived: '已归档',
+    noArchived: '没有已归档的课程。',
   },
   coursePeople: {
     name: '姓名',

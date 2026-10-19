@@ -34,7 +34,7 @@ import { TodoBoard } from './todo-board'
 
 type Period = '30' | '90' | 'year'
 type Band = 'all' | 'high' | 'mid' | 'low'
-type StatusTab = 'all' | 'today' | 'active' | 'todo'
+type StatusTab = 'today' | 'all' | 'todo' | 'archived'
 type ColumnKey = 'day' | 'name' | 'people' | 'updates' | 'coursework' | 'status' | 'last'
 
 const COLUMNS: { key: ColumnKey; label: string }[] = [
@@ -178,7 +178,9 @@ export function CoursesListPage() {
       }
     }
     return rows
-      .filter((row) => tab === 'all' || row.status === tab)
+      // Archived courses are listed under their own tab only.
+      .filter((row) => (tab === 'archived') === !!row.course.archived)
+      .filter((row) => tab !== 'today' || row.status === 'today')
       .filter(
         (row) =>
           !needle ||
@@ -256,11 +258,17 @@ export function CoursesListPage() {
     }
   }
 
+  const empty = !courses.length
+    ? t('courses.noCourses')
+    : tab === 'archived' && !query && band === 'all'
+      ? t('courses.noArchived')
+      : t('courses.noMatch')
+
   const tabs: { key: StatusTab; label: string }[] = [
-    { key: 'all', label: 'courses.allCourses' },
     { key: 'today', label: 'courses.statusName.today' },
-    { key: 'active', label: 'courses.statusName.active' },
+    { key: 'all', label: 'courses.allCourses' },
     ...(canTodos ? [{ key: 'todo' as const, label: 'courses.todo' }] : []),
+    { key: 'archived', label: 'courses.archived' },
   ]
 
   return (
@@ -419,7 +427,7 @@ export function CoursesListPage() {
                     {!visible.length && (
                       <tr>
                         <td colSpan={shown.length} className='h-24 text-center text-muted-foreground'>
-                          {courses.length ? t('courses.noMatch') : t('courses.noCourses')}
+                          {empty}
                         </td>
                       </tr>
                     )}
@@ -450,7 +458,7 @@ export function CoursesListPage() {
                 ))}
                 {!visible.length && (
                   <li className='rounded-lg border p-6 text-center text-sm text-muted-foreground'>
-                    {courses.length ? t('courses.noMatch') : t('courses.noCourses')}
+                    {empty}
                   </li>
                 )}
               </ul>

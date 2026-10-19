@@ -283,6 +283,8 @@ const zhTW: Resources = {
     openCourse: '開啟課程',
     archive: '封存',
     unarchive: '取消封存',
+    archived: '已封存',
+    noArchived: '沒有已封存的課程。',
   },
   coursePeople: {
     name: '姓名',

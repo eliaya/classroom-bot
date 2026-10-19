@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-19
+
+### Changed
+- **Courses page tabs** are Today / All courses / To-do / Archived (To-do only for users holding `todos:view`); All courses is still the tab the page opens on. Archived courses moved to the new Archived tab, where they still show faded, and are no longer listed under Today or All courses. The tab says when no course is archived.
+
+### Removed
+- **The Active tab** on the Courses page. The Active status badge in the table stays.
+
 ## [0.24.0] - 2026-10-19
 
 **Upgrade notes.** For Gmail push, grant `gmail-api-push@system.gserviceaccount.com` the Pub/Sub Publisher role on `GOOGLE_PUBSUB_TOPIC` (see `docs/push-sync-setup.md`); without it the timed archive loop keeps working as before.

@@ -139,8 +139,8 @@ describe('CoursesListPage', () => {
     const screen = await render(<CoursesListPage />)
     await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Active' }))
-    expect(names()).toEqual(['【AI07】Web Engineering'])
+    await userEvent.click(screen.getByRole('tab', { name: 'Today' }))
+    expect(names()).toEqual(['【AI07】Machine Learning'])
     await userEvent.click(screen.getByRole('tab', { name: 'All courses' }))
 
     await userEvent.fill(screen.getByRole('searchbox'), 'homeroom')
@@ -195,19 +195,26 @@ describe('CoursesListPage', () => {
     expect(document.body.textContent).not.toContain('Course basics')
   })
 
-  it('archives a course from its sheet: the row fades, and restoring brings it back', async () => {
+  it('moves an archived course to the Archived tab, faded, and restoring brings it back', async () => {
     const screen = await render(<CoursesListPage />)
     await userEvent.click(screen.getByRole('button', { name: /Web Engineering/ }))
     const rowOf = () =>
-      [...document.querySelectorAll('tbody tr')].find((tr) => tr.textContent?.includes('Web Engineering'))!
+      [...document.querySelectorAll('tbody tr')].find((tr) => tr.textContent?.includes('Web Engineering'))
 
     await userEvent.click(screen.getByRole('dialog').getByRole('button', { name: 'Archive' }))
     expect(vi.mocked(api.setCourseArchived)).toHaveBeenLastCalledWith('102', true)
-    expect(rowOf().className).toContain('opacity-50')
+    expect(names()).not.toContain('【AI07】Web Engineering')
 
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(screen.getByRole('tab', { name: 'Archived' }))
+    expect(names()).toEqual(['【AI07】Web Engineering'])
+    expect(rowOf()!.className).toContain('opacity-50')
+
+    await userEvent.click(screen.getByRole('button', { name: /Web Engineering/ }))
     await userEvent.click(screen.getByRole('dialog').getByRole('button', { name: 'Unarchive' }))
     expect(vi.mocked(api.setCourseArchived)).toHaveBeenLastCalledWith('102', false)
-    expect(rowOf().className).not.toContain('opacity-50')
+    expect(rowOf()).toBeUndefined()
+    expect(document.body.textContent).toContain('No archived courses.')
   })
 
   it('lists the to-dos under its own tab when the user has them', async () => {
@@ -217,7 +224,7 @@ describe('CoursesListPage', () => {
     })
     const screen = await render(<CoursesListPage />)
     expect(screen.getByRole('tab').elements().map((el) => el.textContent)).toEqual([
-      'All courses', 'Today', 'Active', 'To-do',
+      'Today', 'All courses', 'To-do', 'Archived',
     ])
     await userEvent.click(screen.getByRole('tab', { name: 'To-do' }))
     await expect.element(screen.getByText('Essay draft')).toBeInTheDocument()

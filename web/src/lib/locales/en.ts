@@ -282,6 +282,8 @@ export const en = {
     openCourse: 'Open course',
     archive: 'Archive',
     unarchive: 'Unarchive',
+    archived: 'Archived',
+    noArchived: 'No archived courses.',
   },
   coursePeople: {
     name: 'Name',

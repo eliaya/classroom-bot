@@ -283,6 +283,8 @@ const ja: Resources = {
     openCourse: 'コースを開く',
     archive: 'アーカイブ',
     unarchive: 'アーカイブを解除',
+    archived: 'アーカイブ済み',
+    noArchived: 'アーカイブしたコースはありません。',
   },
   coursePeople: {
     name: '名前',
