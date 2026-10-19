@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { CircleAlert, Star } from 'lucide-react'
+import { Archive, ArchiveRestore, CircleAlert, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, type Course, type Post } from '@/lib/api'
 import { cn, weekdayLabel } from '@/lib/utils'
@@ -91,13 +91,15 @@ type CourseSheetProps = {
   periodLabel: string
   relative: (time: string) => string
   onClose: () => void
+  /** Archive (true) or restore (false) the course: hidden from the dashboard and calendar. */
+  onArchive: (archived: boolean) => void
 }
 
 const TABS = ['general', 'classwork', 'stream', 'people'] as const
 
 /** Wide side sheet with one course's details, classwork, stream and people.
- * Read-only: courses come from Google Classroom. */
-export function CourseSheet({ row, periodLabel, relative, onClose }: CourseSheetProps) {
+ * Read-only but for archiving, which changes this app only: courses come from Google Classroom. */
+export function CourseSheet({ row, periodLabel, relative, onClose, onArchive }: CourseSheetProps) {
   const { t, i18n } = useTranslation()
   // Loaded when the sheet opens, for this course only.
   const courseId = row?.course.id
@@ -202,6 +204,10 @@ export function CourseSheet({ row, periodLabel, relative, onClose }: CourseSheet
                 {t('common.close')}
               </Button>
               <div className='flex gap-2'>
+                <Button variant='outline' onClick={() => onArchive(!row.course.archived)}>
+                  {row.course.archived ? <ArchiveRestore aria-hidden='true' /> : <Archive aria-hidden='true' />}
+                  {t(row.course.archived ? 'courses.unarchive' : 'courses.archive')}
+                </Button>
                 {row.course.alternate_link && (
                   <Button variant='outline' asChild>
                     <a href={row.course.alternate_link} target='_blank' rel='noreferrer'>

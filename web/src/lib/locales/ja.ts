@@ -281,6 +281,8 @@ const ja: Resources = {
     recentDesc: 'お知らせ・課題・資料を新しい順に表示します。',
     noRecent: 'まだ更新がありません。',
     openCourse: 'コースを開く',
+    archive: 'アーカイブ',
+    unarchive: 'アーカイブを解除',
   },
   coursePeople: {
     name: '名前',

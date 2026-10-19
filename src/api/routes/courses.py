@@ -56,6 +56,7 @@ async def list_courses(session: AsyncSession = Depends(get_owned_session)) -> di
                 "alternate_link": c.alternate_link,
                 "synced_at": c.synced_at.isoformat() if c.synced_at else None,
                 "last_update": latest.get(c.id),
+                "archived": c.archived,
             }
             for c in courses
         ],

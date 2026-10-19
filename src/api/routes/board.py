@@ -1,7 +1,9 @@
-"""The signed-in user's dashboard Kanban layout (``DashboardBoard``).
+"""The signed-in user's dashboard Kanban layout (``DashboardBoard``) and the
+courses they archived (hidden from the dashboard and calendar).
 
 The cards are the user's own courses' posts, so the board is theirs to arrange
-with ``courses:view`` alone; saving a layout changes no Classroom data.
+with ``courses:view`` alone; saving a layout or archiving a course changes no
+Classroom data.
 """
 
 from __future__ import annotations
@@ -13,9 +15,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.api.deps import Principal, get_db_session, require_permission
+from src.api.deps import Principal, get_db_session, get_owned_session, require_permission
 from src.config import now_jst
 from src.models import DashboardBoard, dump_json
+from src.repositories import classroom_cache as cache
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -25,6 +28,10 @@ MAX_BOARD_BYTES = 256_000
 
 class BoardIn(BaseModel):
     data: dict[str, Any]
+
+
+class ArchivedIn(BaseModel):
+    archived: bool
 
 
 @router.get("/board")
@@ -53,3 +60,19 @@ async def save_board(
     session.add(row)
     await session.commit()
     return {"data": body.data}
+
+
+@router.put("/courses/{course_id}/archived")
+async def set_course_archived(
+    course_id: str,
+    body: ArchivedIn,
+    _: Principal = Depends(require_permission("courses:view")),
+    session: AsyncSession = Depends(get_owned_session),
+) -> dict:
+    course = await cache.get_cached_course(session, course_id)
+    if not course:
+        raise HTTPException(404, detail="Course not found")
+    course.archived = body.archived
+    session.add(course)
+    await session.commit()
+    return {"id": course_id, "archived": body.archived}

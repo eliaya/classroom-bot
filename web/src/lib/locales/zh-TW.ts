@@ -281,6 +281,8 @@ const zhTW: Resources = {
     recentDesc: '最新的公告、作業與教材，由新到舊。',
     noRecent: '尚無任何更新。',
     openCourse: '開啟課程',
+    archive: '封存',
+    unarchive: '取消封存',
   },
   coursePeople: {
     name: '姓名',

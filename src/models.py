@@ -107,6 +107,8 @@ class ClassroomCourse(SQLModel, table=True):
     state: Optional[str] = None
     alternate_link: Optional[str] = None
     raw_json: Optional[str] = None
+    # Set in this app only (sync never touches it): hidden from the dashboard and calendar.
+    archived: bool = Field(default=False, sa_column_kwargs={"server_default": "0"})
     synced_at: datetime = Field(default_factory=now_jst)
     updated_at: Optional[datetime] = Field(default=None, index=True)
     removed_at: Optional[datetime] = Field(default=None, index=True)

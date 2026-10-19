@@ -138,8 +138,9 @@ export function CalendarPage() {
   const lang = i18n.language
   const [date, setDate] = useState(() => new Date())
   const [view, setView] = useState<View>('day')
-  const [posts, setPosts] = useState<Post[]>([])
+  const [loadedPosts, setPosts] = useState<Post[]>([])
   const [courses, setCourses] = useState<Course[]>([])
+  const [archived, setArchived] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
   const [hiddenCourses, setHiddenCourses] = useState<Set<string>>(() => new Set())
   const [types, setTypes] = useState<Set<Kind>>(() => new Set(KINDS))
@@ -157,7 +158,10 @@ export function CalendarPage() {
   useEffect(() => {
     api
       .listCourses()
-      .then((res) => setCourses(res.items))
+      .then((res) => {
+        setCourses(res.items.filter((c) => !c.archived))
+        setArchived(new Set(res.items.filter((c) => c.archived).map((c) => c.id)))
+      })
       .catch(() => undefined) // columns fall back to the course id
   }, [])
 
@@ -204,6 +208,7 @@ export function CalendarPage() {
     }
   }, [fromTime, toTime])
 
+  const posts = loadedPosts.filter((p) => !archived.has(p.course_id))
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Courses that posted but are missing from the course list still get a column.
   const allCourses: Course[] = [

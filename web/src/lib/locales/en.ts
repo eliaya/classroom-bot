@@ -280,6 +280,8 @@ export const en = {
     recentDesc: 'The latest announcements, coursework and materials, newest first.',
     noRecent: 'Nothing has been updated yet.',
     openCourse: 'Open course',
+    archive: 'Archive',
+    unarchive: 'Unarchive',
   },
   coursePeople: {
     name: 'Name',

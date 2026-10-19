@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Search, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { api, type Course, type CoursePerson, type Post } from '@/lib/api'
 import { useCan } from '@/lib/permissions'
 import { cn, fullTimestamp, humanReadableTime, weekdayLabel } from '@/lib/utils'
@@ -120,6 +121,17 @@ export function CoursesListPage() {
       .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period])
+
+  // Optimistic: the row fades at once and comes back if the save fails.
+  const archive = (id: string, archived: boolean) => {
+    const apply = (value: boolean) =>
+      setCourses((all) => all.map((c) => (c.id === id ? { ...c, archived: value } : c)))
+    apply(archived)
+    api.setCourseArchived(id, archived).catch(() => {
+      apply(!archived)
+      toast.error(t('common.saveFailed'))
+    })
+  }
 
   // Teachers first, as the API orders them within a course ("student" < "teacher").
   const peopleOf = (courseId: string) =>
@@ -390,7 +402,13 @@ export function CoursesListPage() {
                   </thead>
                   <tbody>
                     {visible.map((row) => (
-                      <tr key={row.course.id} className='border-b transition-colors hover:bg-muted/40'>
+                      <tr
+                        key={row.course.id}
+                        className={cn(
+                          'border-b transition-colors hover:bg-muted/40',
+                          row.course.archived && 'opacity-50'
+                        )}
+                      >
                         {shown.map(({ key }) => (
                           <td key={key} className={cn('h-14 px-2 first:ps-3', key === 'name' && 'max-w-80')}>
                             {cell(row, key)}
@@ -412,7 +430,7 @@ export function CoursesListPage() {
               {/* Below md: one card per course. */}
               <ul className='flex flex-col gap-3 md:hidden'>
                 {visible.map((row) => (
-                  <li key={row.course.id} className='rounded-lg border p-4'>
+                  <li key={row.course.id} className={cn('rounded-lg border p-4', row.course.archived && 'opacity-50')}>
                     <span className='text-xs text-muted-foreground tabular-nums'>{row.course.id}</span>
                     <div className='mt-1'>{cell(row, 'name')}</div>
                     <div className='mt-3'>
@@ -446,6 +464,7 @@ export function CoursesListPage() {
         periodLabel={t(period === 'year' ? 'courses.thisYear' : `courses.last${period}`)}
         relative={(time) => humanReadableTime(time, t('common.dash'))}
         onClose={() => setSelectedId(null)}
+        onArchive={(archived) => selectedId && archive(selectedId, archived)}
       />
     </>
   )

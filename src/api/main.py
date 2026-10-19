@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api")
     app.include_router(courses.router, prefix="/api", dependencies=guard("courses"))
     app.include_router(todos.router, prefix="/api", dependencies=guard("todos"))
-    # Guarded per route: saving one's own layout needs only courses:view.
+    # Guarded per route: saving one's own layout or archived courses needs only courses:view.
     app.include_router(board.router, prefix="/api")
     app.include_router(search.router, prefix="/api", dependencies=guard("search"))
     app.include_router(sync.router, prefix="/api", dependencies=guard("sync"))

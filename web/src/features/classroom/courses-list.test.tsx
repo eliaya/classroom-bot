@@ -56,6 +56,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
         return { items, count: items.length }
       }),
       listPeople: vi.fn(async () => ({ items: PEOPLE })),
+      setCourseArchived: vi.fn(async (id: string, archived: boolean) => ({ id, archived })),
       listTodos: vi.fn(async () => ({
         items: [{ item_id: 'w1', course_id: '102', title: 'Essay draft', status: 'new', due_date: null }],
         total: 1,
@@ -192,6 +193,21 @@ describe('CoursesListPage', () => {
     await userEvent.click(sheet.getByRole('tab', { name: 'Stream' }))
     await expect.element(sheet.getByText('Exam moved')).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('Course basics')
+  })
+
+  it('archives a course from its sheet: the row fades, and restoring brings it back', async () => {
+    const screen = await render(<CoursesListPage />)
+    await userEvent.click(screen.getByRole('button', { name: /Web Engineering/ }))
+    const rowOf = () =>
+      [...document.querySelectorAll('tbody tr')].find((tr) => tr.textContent?.includes('Web Engineering'))!
+
+    await userEvent.click(screen.getByRole('dialog').getByRole('button', { name: 'Archive' }))
+    expect(vi.mocked(api.setCourseArchived)).toHaveBeenLastCalledWith('102', true)
+    expect(rowOf().className).toContain('opacity-50')
+
+    await userEvent.click(screen.getByRole('dialog').getByRole('button', { name: 'Unarchive' }))
+    expect(vi.mocked(api.setCourseArchived)).toHaveBeenLastCalledWith('102', false)
+    expect(rowOf().className).not.toContain('opacity-50')
   })
 
   it('lists the to-dos under its own tab when the user has them', async () => {

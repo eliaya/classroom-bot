@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-19
+
+**Upgrade notes.** Connecting Google now also asks for `gmail.modify`; existing accounts get Mail by connecting Google again. The `mail` permissions are off by default: an administrator grants `mail:view` / `mail:use` per role.
+
+### Added
+- **Archive a course.** The course side sheet on the Courses page has an Archive button (Unarchive once archived). An archived course is left out of the dashboard lesson board and the Calendar (its columns and posts), and its row shows faded in the Courses table. Only this app is changed, never Google Classroom; the flag is kept per user and survives syncs. `PUT /api/dashboard/courses/{course_id}/archived` (`courses:view`), `archived` in `GET /api/courses`, and the new `classroom_courses.archived` column (added at startup).
+- **Mail page** (`/mail`): read and organise the signed-in user's Gmail — labels, archive, trash, star and read state. `GET /api/mail/labels`, `GET /api/mail/threads`, `GET /api/mail/threads/{id}` (`mail:view`), `POST /api/mail/threads/{id}/modify` and `/trash` (`mail:use`).
+- **Gmail archive.** A background loop (`GMAIL_ARCHIVE_ENABLED`, default on; every `GMAIL_ARCHIVE_MINUTES`, default 10) reads each permitted user's mailbox once, then follows Gmail history for new mail, label changes and deletions. Messages are kept whole (raw RFC 822, attachments included) in the new `gmail_messages` table and stay after they are deleted in Gmail. It runs only for active users whose role holds `mail:view` and whose Google connection granted Gmail.
+
+### Fixed
+- **Mail errors name Google's reason.** A 401/403 from Gmail no longer always says "Connect Google again": only a missing permission asks to reconnect, and every refusal shows and logs Google's own message.
+
 ## [0.22.1] - 2026-10-18
 
 ### Fixed

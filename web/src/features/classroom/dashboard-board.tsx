@@ -137,7 +137,7 @@ export function DashboardBoard() {
       api.getBoard<Board>(),
     ])
       .then(([coursesRes, postsRes, boardRes]) => {
-        setCourses(coursesRes.items)
+        setCourses(coursesRes.items.filter((c) => !c.archived))
         setPosts(postsRes.items)
         setBoard(toBoard(boardRes.data))
       })

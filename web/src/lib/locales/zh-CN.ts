@@ -281,6 +281,8 @@ const zhCN: Resources = {
     recentDesc: '最新的公告、作业与资料，由新到旧。',
     noRecent: '尚无任何更新。',
     openCourse: '打开课程',
+    archive: '归档',
+    unarchive: '取消归档',
   },
   coursePeople: {
     name: '姓名',

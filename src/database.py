@@ -233,7 +233,7 @@ async def init_db() -> None:
                 # ``week`` = weekday extracted from the section's leading Japanese text.
                 "classroom_courses": [
                     ("updated_at", "DATETIME"), ("removed_at", "DATETIME"),
-                    ("week", "INTEGER"),
+                    ("week", "INTEGER"), ("archived", "BOOLEAN DEFAULT 0 NOT NULL"),
                 ],
                 "classroom_announcements": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],
                 "classroom_topics": [("updated_at", "DATETIME"), ("removed_at", "DATETIME")],

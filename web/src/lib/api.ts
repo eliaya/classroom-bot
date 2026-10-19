@@ -101,6 +101,8 @@ export type Course = {
   synced_at?: string | null
   /** Time of the latest announcement, coursework or material. */
   last_update?: string | null
+  /** Hidden from the dashboard and calendar (this app only). */
+  archived?: boolean
 }
 
 export type StreamItem = {
@@ -617,6 +619,11 @@ export const api = {
   getBoard: <T,>() => request<{ data: T | null }>('/dashboard/board'),
   saveBoard: <T,>(data: T) =>
     request<{ data: T }>('/dashboard/board', { method: 'PUT', body: JSON.stringify({ data }) }),
+  setCourseArchived: (id: string, archived: boolean) =>
+    request<{ id: string; archived: boolean }>(`/dashboard/courses/${encodeURIComponent(id)}/archived`, {
+      method: 'PUT',
+      body: JSON.stringify({ archived }),
+    }),
   search: (q: string, limit = 5) =>
     request<SearchResponse>(
       `/search?q=${encodeURIComponent(q)}&limit=${limit}`
