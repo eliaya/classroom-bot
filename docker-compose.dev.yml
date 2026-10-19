@@ -1,0 +1,24 @@
+# Development override: the containers run the source tree instead of the code
+# baked into the images, so a change applies without rebuilding.
+#   ./scripts/dev.sh --dev
+#   cd web && pnpm exec vite build --watch     # keeps web/dist current
+# Rebuild the images only when requirements.txt or a Dockerfile changes.
+services:
+  api:
+    volumes:
+      - ./src:/app/src:ro
+    environment:
+      # File events may not cross the bind mount: poll for changes instead.
+      - WATCHFILES_FORCE_POLLING=true
+    command: ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src"]
+
+  bot:
+    volumes:
+      - ./src:/app/src:ro
+    environment:
+      - WATCHFILES_FORCE_POLLING=true
+    command: ["watchfiles", "--filter", "python", "python -m src.main", "src"]
+
+  web:
+    volumes:
+      - ./web/dist:/usr/share/nginx/html:ro

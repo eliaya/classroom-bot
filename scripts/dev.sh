@@ -11,6 +11,9 @@
 # Usage:
 #   ./scripts/dev.sh
 #   ./scripts/dev.sh --no-build     # skip image build (faster if you know images are up to date)
+#   ./scripts/dev.sh --dev          # run the source tree (docker-compose.dev.yml): api/bot reload
+#                                   # on change, nginx serves web/dist; then in another terminal:
+#                                   #   cd web && ./node_modules/.bin/vite build --watch
 #
 # Requirements:
 #   - Docker + docker compose (v2+), or Opossum + Apple Container
@@ -68,7 +71,21 @@ if [ -f .env ] && ! grep -Eq '^ADMIN_EMAILS="?[^"[:space:]]' .env; then
 fi
 
 BUILD_ARG="--build"
-[ "${1:-}" = "--no-build" ] && BUILD_ARG="--no-build"
+DEV=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-build) BUILD_ARG="--no-build" ;;
+    --dev) DEV=1 ;;
+  esac
+done
+
+if [ "$DEV" = 1 ]; then
+  # Docker reads only docker-compose.yml by default, so name it beside the override.
+  [ "$RUNTIME" = "Docker" ] && COMPOSE+=(-f docker-compose.yml)
+  COMPOSE+=(-f docker-compose.dev.yml)
+  # nginx serves web/dist from the host: build it once if it is not there yet.
+  [ -f web/dist/index.html ] || (cd web && ./node_modules/.bin/vite build)
+fi
 
 # ── Start all services via the selected container CLI ─────────────────────────
 # We start the full stack (api, bot, web) so the web service (nginx on :8080) is available.
@@ -92,6 +109,10 @@ WEB_HOST_PORT="$(env_port HTTP_PORT)"
 echo -e "${GREEN}All ${RUNTIME} services started.${NC}"
 echo -e "  • API:      http://127.0.0.1:${API_HOST_PORT:-8000}"
 echo -e "  • Web (built): http://127.0.0.1:${WEB_HOST_PORT:-8080}"
+if [ "$DEV" = 1 ]; then
+  echo -e "  • Dev mode: api/bot reload on changes in src/; for the web run"
+  echo -e "      cd web && ./node_modules/.bin/vite build --watch"
+fi
 echo -e "  • View logs: ${COMPOSE[*]} logs -f"
 echo -e "  • Stop:      ${COMPOSE[*]} down\n"
 

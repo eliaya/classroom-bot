@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-19
+
+**Upgrade notes.** For Gmail push, grant `gmail-api-push@system.gserviceaccount.com` the Pub/Sub Publisher role on `GOOGLE_PUBSUB_TOPIC` (see `docs/push-sync-setup.md`); without it the timed archive loop keeps working as before.
+
+### Added
+- **Gmail push.** With `CLASSROOM_PUSH_ENABLED` and `GMAIL_ARCHIVE_ENABLED`, every archive user's mailbox is watched (`users.watch`) on the Classroom push topic, so new mail, label changes and deletions reach the Gmail archive as they happen instead of on the next timed run. Notifications share the Classroom subscription and are debounced per user; the watches are renewed with the Classroom registrations (both expire after 7 days). Archive runs are serialised per user, so the timed loop and a push never overlap.
+- **Development mode without image rebuilds.** `./scripts/dev.sh --dev` adds `docker-compose.dev.yml`: the api and bot containers run `./src` from the host and restart on a change (uvicorn `--reload`, `watchfiles`), and nginx serves `web/dist` from the host, kept current by `cd web && ./node_modules/.bin/vite build --watch`. Images need rebuilding only when `requirements.txt` or a Dockerfile changes.
+
 ## [0.23.0] - 2026-10-19
 
 **Upgrade notes.** Connecting Google now also asks for `gmail.modify`; existing accounts get Mail by connecting Google again. The `mail` permissions are off by default: an administrator grants `mail:view` / `mail:use` per role.
