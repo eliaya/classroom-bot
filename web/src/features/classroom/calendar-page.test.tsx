@@ -41,12 +41,16 @@ const tomorrow = new Date(Date.now() + 86_400_000)
 const EVENTS: CalendarEvent[] = [
   // A class on the timetable calendar, matched to its course by the server.
   { id: 'e1', calendar: 'Timetable', course_id: '102', title: 'Web lesson', all_day: false, start: at(11), end: at(12, 30), link: 'https://calendar.example/e1', location: 'Room 301', description: 'Bring a <b>laptop</b><br>and a charger' },
-  // All-day: a date, with the end exclusive.
+  // Machine Learning's lesson today.
+  { id: 'e5', calendar: 'Timetable', course_id: '101', title: 'ML lesson', all_day: false, start: at(9), end: at(10, 30) },
+  // All-day: a date, with the end exclusive. Shown in its course's column.
   { id: 'e2', calendar: 'Machine Learning', course_id: '101', title: 'Report due', all_day: true, start: localDate(new Date()), end: localDate(tomorrow) },
   // A make-up class of a course held on another weekday: the course gets a column.
   { id: 'e3', calendar: 'Timetable', course_id: '103', title: 'Make-up class', all_day: false, start: at(15), end: at(16) },
   // Of no course.
   { id: 'e4', calendar: 'Holidays', course_id: null, title: 'Sports Day', all_day: true, start: localDate(new Date()), end: localDate(tomorrow) },
+  // A deadline today of a course held on another weekday: no column, listed above the columns.
+  { id: 'e6', calendar: 'Physical Education', course_id: '105', title: 'Fitness log due', all_day: true, start: localDate(new Date()), end: localDate(tomorrow) },
 ]
 
 vi.mock('@/lib/api', async (importOriginal) => {
@@ -201,8 +205,10 @@ describe('CalendarPage', () => {
     await expect.element(page.getByRole('button', { name: /Web lesson/ })).toBeVisible()
     await expect.element(page.getByText('Report due', { exact: true })).toBeVisible()
     await expect.element(page.getByText('English Communication')).toBeVisible()
-    await expect.element(page.getByText('Google Calendar · 1 event')).toBeVisible()
+    await expect.element(page.getByText('Google Calendar · 2 events')).toBeVisible()
     await expect.element(page.getByRole('button', { name: /Sports Day/ })).toBeVisible()
+    await expect.element(page.getByRole('button', { name: /Fitness log due/ })).toBeVisible()
+    expect(document.body.textContent).not.toContain('Physical Education')
     const lesson = page.getByRole('button', { name: /Web lesson/ }).element().getBoundingClientRect()
     const column = page.getByText('Web Engineering').element().getBoundingClientRect()
     expect(Math.abs(lesson.left - column.left)).toBeLessThan(40)
@@ -230,6 +236,20 @@ describe('CalendarPage', () => {
     expect(document.body.textContent).not.toContain('Sports Day')
   })
 
+  it('leaves out an archived course, with its posts and events', async () => {
+    await page.viewport(1280, 900)
+    vi.mocked(api.listCourses).mockResolvedValueOnce({
+      items: COURSES.map((c) => (c.id === '102' ? { ...c, archived: true } : c)),
+      total: COURSES.length,
+    })
+    render(<CalendarPage />)
+    await expect.element(page.getByText('Room change')).toBeVisible()
+    await page.getByRole('button', { name: 'Week', exact: true }).click()
+    await expect.element(page.getByText('Essay draft')).toBeVisible()
+    for (const text of ['Web Engineering', 'Web lesson', 'Slides week 5', 'Late quiz'])
+      expect(document.body.textContent).not.toContain(text)
+  })
+
   it('shows the month, the list and the year, and opens a day from them', async () => {
     await page.viewport(1280, 900)
     render(<CalendarPage />)
@@ -240,9 +260,9 @@ describe('CalendarPage', () => {
     await expect
       .element(page.getByRole('heading', { name: now.toLocaleDateString('en', { year: 'numeric', month: 'long' }) }))
       .toBeVisible()
-    // Seven items today: three show, the rest are behind the link to the day.
+    // Eleven items today: three show, the rest are behind the link to the day.
     await expect.element(page.getByRole('button', { name: /Sports Day/ })).toBeVisible()
-    await expect.element(page.getByRole('button', { name: '+6 more' })).toBeVisible()
+    await expect.element(page.getByRole('button', { name: '+8 more' })).toBeVisible()
 
     await page.getByRole('button', { name: 'List', exact: true }).click()
     await expect.element(page.getByRole('button', { name: /Late quiz/ })).toBeVisible()

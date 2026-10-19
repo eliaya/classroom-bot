@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-10-19
+
+### Fixed
+- **Calendar day view showed courses not held that day.** A course got a day column whenever it had any event that day, including an all-day Classroom deadline, so a course from another weekday appeared as a column. Now only timed (class) events open a column; an all-day deadline shows in its course's column when that course has one, otherwise in the list above the columns.
+- **Archived courses' events still showed in the Calendar.** Their Google Calendar events are now hidden in the day, week and month views, like their columns and posts.
+
 ## [0.25.0] - 2026-10-19
 
 ### Changed

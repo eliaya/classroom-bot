@@ -232,6 +232,7 @@ export function CalendarPage() {
   // An all-day date is a calendar day wherever the viewer is, not UTC midnight.
   // Shown or not, they tell which courses are held on a day.
   const allRangeEvents: TimedEvent[] = events
+    .filter((e) => !archived.has(e.course_id ?? ''))
     .map((e) => {
       const at = (value: string) => new Date(e.all_day ? `${value}T00:00:00` : value)
       const from = at(e.start)
@@ -251,8 +252,10 @@ export function CalendarPage() {
   }
   const dayEvents = eventsOn(date)
 
-  // Day columns: the courses with an event today (a class, a make-up class, a
-  // deadline), in class order (the section starts with the weekday and period).
+  // Day columns: the courses with a class today (a timed event: a lesson or a
+  // make-up class), in class order (the section starts with the weekday and period).
+  // An all-day event (a Classroom deadline) opens no column: a course held on
+  // another day would show up; it sits in its course's column or above the columns.
   // The course's weekday counts only without a timetable: a past term's course
   // keeps its weekday and stays active in Classroom after its last class.
   // ponytail: "timetable" = any timed course event in the loaded week; a week
@@ -265,7 +268,7 @@ export function CalendarPage() {
     .filter(
       (c) =>
         (!timetable && c.week === weekday) ||
-        eventsOn(date, true, allRangeEvents).some((e) => e.course_id === c.id)
+        eventsOn(date, true, allRangeEvents).some((e) => !e.all_day && e.course_id === c.id)
     )
     .sort((a, b) => (a.section ?? '').localeCompare(b.section ?? ''))
   const dayCourses = heldToday.filter((c) => !hiddenCourses.has(c.id))
