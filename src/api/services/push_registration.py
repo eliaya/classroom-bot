@@ -9,7 +9,12 @@ this when push is enabled and the GCP topic is configured. See
 ``docs/push-sync-setup.md``.
 
 Note: Classroom exposes only ``COURSE_WORK_CHANGES`` and roster feeds — there is
-no announcement/stream feed, so stream changes still rely on the scheduler.
+no announcement/stream feed, so stream changes still rely on the announcement
+poller and the scheduler.
+
+Gmail watches (``users.watch``) publish to the same topic, so new mail reaches
+the Gmail archive as it arrives. They also expire after 7 days and are renewed
+alongside the Classroom registrations.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ import logging
 from typing import Any, Dict, List
 
 from src import database
+from src.api.services.gmail_archive import may_archive
 from src.config import settings
 from src.google_service import GoogleClassroomService
 from src.repositories import google_connections
@@ -81,3 +87,37 @@ async def register_all() -> List[Dict[str, Any]]:
             except Exception:  # noqa: BLE001 — per-course best effort
                 logger.exception("Push registration failed for course %s", cid)
     return created
+
+
+async def watch_gmail_all() -> Dict[str, int]:
+    """Watch the mailbox of every user the Gmail archive runs for, so new mail is
+    archived as it arrives. Returns ``{mailbox address (lower case): user id}``,
+    which is how a Gmail notification is traced back to its user.
+
+    Best-effort per user, like ``register_all``; the timed archive loop still
+    covers anyone not watched.
+    """
+    if not (settings.GMAIL_ARCHIVE_ENABLED and settings.GOOGLE_PUBSUB_TOPIC):
+        return {}
+
+    async with database.async_session_factory() as session:
+        candidates = [
+            (user_id, await google_connections.service_for_user(session, user_id))
+            for user_id in await google_connections.connected_user_ids(session)
+            if await may_archive(session, user_id)
+        ]
+
+    watched: Dict[str, int] = {}
+    for user_id, google_service in candidates:
+        if not google_service.has_gmail_scope() or not google_service.load_credentials():
+            continue
+        try:
+            watch = await google_service.gmail_watch(settings.GOOGLE_PUBSUB_TOPIC)
+            watched[watch["email"].lower()] = user_id
+            logger.info(
+                "Watching Gmail for user %s (expires %s)", user_id, watch.get("expiration"),
+                extra={"category": "general"},
+            )
+        except Exception:  # noqa: BLE001 — per-user best effort
+            logger.exception("Gmail watch failed for user %s", user_id)
+    return watched

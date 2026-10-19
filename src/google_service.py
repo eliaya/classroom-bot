@@ -411,6 +411,15 @@ class GoogleClassroomService:
             return str(self._get_gmail_service().users().getProfile(userId="me").execute()["historyId"])
         return await asyncio.to_thread(_sync)
 
+    async def gmail_watch(self, topic: str) -> Dict[str, Any]:
+        """Have Gmail publish this mailbox's changes to a Pub/Sub topic, for 7 days.
+        The watch response, plus ``email``: the address its notifications name."""
+        def _sync() -> Dict[str, Any]:
+            users = self._get_gmail_service().users()
+            email = users.getProfile(userId="me").execute()["emailAddress"]
+            return {**users.watch(userId="me", body={"topicName": topic}).execute(), "email": email}
+        return await asyncio.to_thread(_sync)
+
     async def gmail_message_ids(self, page_token: Optional[str] = None) -> Dict[str, Any]:
         """One page of every message id in the mailbox (Spam and Trash too), newest first."""
         def _sync() -> Dict[str, Any]:

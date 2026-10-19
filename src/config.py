@@ -52,7 +52,8 @@ class Settings(BaseSettings):
     # Event-driven sync via Google Classroom push notifications (Cloud Pub/Sub
     # pull subscription). Disabled by default; requires GCP setup — see
     # docs/push-sync-setup.md. When disabled the system behaves exactly as before
-    # (Scheduler-driven polling only).
+    # (Scheduler-driven polling only). The same subscription also carries Gmail
+    # notifications for the Gmail archive (when GMAIL_ARCHIVE_ENABLED).
     CLASSROOM_PUSH_ENABLED: bool = False
     GOOGLE_PUBSUB_PROJECT: str = ""
     GOOGLE_PUBSUB_TOPIC: str = ""          # projects/<proj>/topics/<topic>

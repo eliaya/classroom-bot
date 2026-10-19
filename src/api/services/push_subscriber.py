@@ -3,8 +3,10 @@
 When ``CLASSROOM_PUSH_ENABLED`` is true and GCP is configured, this background
 task pulls Classroom ``COURSE_WORK_CHANGES`` notifications from a Pub/Sub
 subscription and triggers a targeted ``sync_course`` for the affected course
-(debounced to coalesce bursts). It also periodically renews the per-course
-registrations, which expire after ~7 days.
+(debounced to coalesce bursts). Gmail notifications arrive on the same
+subscription and trigger that user's Gmail archive run. It also periodically
+renews the per-course registrations and the Gmail watches, which expire after
+~7 days.
 
 A pull subscription is used deliberately: it needs no public webhook / domain
 verification, so it works on localhost. The Scheduler remains the fallback
@@ -21,7 +23,7 @@ import asyncio
 import base64
 import json
 import logging
-from typing import Optional, Set
+from typing import Dict, Optional, Set, Tuple
 
 from src.api.services import push_registration
 from src.config import settings
@@ -37,7 +39,9 @@ class PushSubscriber:
         self._pull_task: Optional[asyncio.Task] = None
         self._renew_task: Optional[asyncio.Task] = None
         self._flush_task: Optional[asyncio.Task] = None
-        self._pending: Set[str] = set()
+        # ("course", course id) or ("gmail", user id), waiting out the debounce.
+        self._pending: Set[Tuple[str, object]] = set()
+        self._gmail_users: Dict[str, int] = {}
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
     async def start(self) -> None:
@@ -52,10 +56,7 @@ class PushSubscriber:
             )
             return
         self._running = True
-        try:
-            await push_registration.register_all()
-        except Exception:  # noqa: BLE001
-            logger.exception("Initial push registration failed")
+        await self._register()
         self._pull_task = asyncio.create_task(self._pull_loop())
         self._renew_task = asyncio.create_task(self._renew_loop())
         logger.info("Push subscriber started", extra={"category": "general"})
@@ -91,8 +92,11 @@ class PushSubscriber:
                 ack_ids = []
                 for received in resp.received_messages:
                     course_id = self._extract_course_id(received.message)
+                    user_id = self._gmail_users.get(self._extract_gmail_address(received.message) or "")
                     if course_id:
-                        self._queue(course_id)
+                        self._queue(("course", course_id))
+                    elif user_id:
+                        self._queue(("gmail", user_id))
                     ack_ids.append(received.ack_id)
                 if ack_ids:
                     await asyncio.to_thread(
@@ -125,6 +129,22 @@ class PushSubscriber:
         attrs = dict(getattr(message, "attributes", {}) or {})
         if attrs.get("courseId"):
             return attrs["courseId"]
+        payload = PushSubscriber._payload(message)
+        return (
+            payload.get("courseId")
+            or payload.get("resourceId", {}).get("courseId")
+            or payload.get("courseWorkChangesInfo", {}).get("courseId")
+        )
+
+    @staticmethod
+    def _extract_gmail_address(message) -> Optional[str]:
+        """Gmail's notification body is ``{"emailAddress", "historyId"}``."""
+        address = PushSubscriber._payload(message).get("emailAddress")
+        return address.lower() if isinstance(address, str) else None
+
+    @staticmethod
+    def _payload(message) -> dict:
+        """The JSON in a notification's ``data``; ``{}`` when there is none."""
         try:
             raw = message.data
             if isinstance(raw, (bytes, bytearray)):
@@ -134,30 +154,35 @@ class PushSubscriber:
                 payload = json.loads(raw)
             except Exception:  # noqa: BLE001
                 payload = json.loads(base64.b64decode(raw).decode("utf-8"))
-            return (
-                payload.get("courseId")
-                or payload.get("resourceId", {}).get("courseId")
-                or payload.get("courseWorkChangesInfo", {}).get("courseId")
-            )
+            return payload if isinstance(payload, dict) else {}
         except Exception:  # noqa: BLE001
-            return None
+            return {}
 
     # ── debounce + trigger ────────────────────────────────────────────────────
-    def _queue(self, course_id: str) -> None:
-        self._pending.add(course_id)
+    def _queue(self, item: Tuple[str, object]) -> None:
+        self._pending.add(item)
         if self._flush_task is None or self._flush_task.done():
             self._flush_task = asyncio.create_task(self._flush_after_debounce())
 
     async def _flush_after_debounce(self) -> None:
         await asyncio.sleep(max(1, settings.CLASSROOM_PUSH_DEBOUNCE_SECONDS))
-        courses = list(self._pending)
+        items = list(self._pending)
         self._pending.clear()
         # Lazy import avoids a circular import (routes import services).
         from src import database
         from src.api.routes.sync import _run_course_sync
+        from src.api.services.gmail_archive import archive_user
         from src.repositories import classroom_cache as cache
 
-        for course_id in courses:
+        for kind, key in items:
+            if kind == "gmail":
+                try:
+                    logger.info("Push-triggered Gmail archive for user %s", key, extra={"category": "general"})
+                    await archive_user(key)
+                except Exception:  # noqa: BLE001
+                    logger.exception("Push-triggered Gmail archive failed for user %s", key)
+                continue
+            course_id = key
             # A notification names a course, not a user: sync it for everyone caching it.
             async with database.async_session_factory() as session:
                 owners = await cache.owners_of_course(session, course_id)
@@ -170,6 +195,21 @@ class PushSubscriber:
                     await _run_course_sync(user_id, course_id)
                 except Exception:  # noqa: BLE001
                     logger.exception("Push-triggered sync failed for course %s", course_id)
+        # Notifications queued while this ran found it busy and started no flush of their own.
+        if self._pending and self._running:
+            self._flush_task = asyncio.create_task(self._flush_after_debounce())
+
+    # ── registration ────────────────────────────────────────────────────────--
+    async def _register(self) -> None:
+        """Create/renew the Classroom feeds and the Gmail watches (both last ~7 days)."""
+        try:
+            await push_registration.register_all()
+        except Exception:  # noqa: BLE001
+            logger.exception("Push registration failed")
+        try:
+            self._gmail_users = await push_registration.watch_gmail_all()
+        except Exception:  # noqa: BLE001
+            logger.exception("Gmail watch registration failed")
 
     # ── renewal loop ────────────────────────────────────────────────────────--
     async def _renew_loop(self) -> None:
@@ -178,7 +218,7 @@ class PushSubscriber:
             try:
                 await asyncio.sleep(interval)
                 if self._running:
-                    await push_registration.register_all()
+                    await self._register()
             except asyncio.CancelledError:
                 break
             except Exception:  # noqa: BLE001

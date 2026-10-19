@@ -48,8 +48,17 @@ async def _save_new(session, google, ids: list[str]) -> int:
     return len(new)
 
 
+# One run per user at a time: the timed loop and a push notification can ask together.
+_locks: dict[int, asyncio.Lock] = {}
+
+
 async def archive_user(user_id: int) -> int:
     """One tick for one user; returns how many messages were newly saved."""
+    async with _locks.setdefault(user_id, asyncio.Lock()):
+        return await _archive_user(user_id)
+
+
+async def _archive_user(user_id: int) -> int:
     from src.database import owned_session
 
     saved = 0
