@@ -19,11 +19,11 @@ const COURSES: Course[] = [
   { id: '103', name: 'Statistics', section: 'Mon 3-4', week: today },
   { id: '102', name: 'Web Engineering', section: 'Tue 3-4', week: otherDay },
 ]
-const post = (id: string, course_id: string, type: Post['type'], age: number): Post => ({
-  id, course_id, type, title: `${type} ${id}`, time: ago(age),
+const post = (id: string, course_id: string, type: Post['type'], age: number, creator_user_id?: string): Post => ({
+  id, course_id, type, title: `${type} ${id}`, time: ago(age), creator_user_id,
 })
 const POSTS: Post[] = [
-  post('a1', '101', 'announcement', 60_000),
+  post('a1', '101', 'announcement', 60_000, 't1'),
   post('w1', '101', 'coursework', 120_000),
   post('s1', '103', 'material', 60_000),
 ]
@@ -92,11 +92,12 @@ describe('DashboardBoard', () => {
     await expect.element(screen.getByText('Machine Learning')).toBeInTheDocument()
     expect(columns()).toHaveLength(2)
     const first = columns()[0]
-    expect(first.textContent).toContain('Sato Hana')
-    expect([...first.querySelectorAll('[data-slot="kanban-item"]')].map((c) => c.textContent)).toEqual([
-      expect.stringContaining('announcement a1'),
-      expect.stringContaining('coursework w1'),
-    ])
+    const cards = [...first.querySelectorAll('[data-slot="kanban-item"]')].map((c) => c.textContent)
+    expect(cards).toEqual([expect.stringContaining('announcement a1'), expect.stringContaining('coursework w1')])
+    // A card names who posted it; the column names no teacher.
+    expect(cards[0]).toContain('Sato Hana')
+    expect(cards[1]).not.toContain('Sato Hana')
+    expect(first.textContent?.match(/Sato Hana/g)).toHaveLength(1)
     expect(columns()[1].textContent).toContain('material s1')
     expect(document.body.textContent).not.toContain('Web Engineering')
 

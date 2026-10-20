@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-20
+
+### Changed
+- **Mail shows HTML messages with their images and links.** An HTML message is shown as HTML in a sandboxed frame that runs no script (sandbox and a Content-Security-Policy), with inline `cid:` images from the archive as data URIs; links open in a new tab. Remote images load from their senders, so a sender can tell the message was opened. Plain-text messages show their web addresses as links. `GET /api/mail/threads/{id}` messages carry `html` (null without an HTML body, or above 5,000,000 characters). Without the archive, inline images Gmail sends only as an attachment id are not shown.
+- **Dashboard cards hold only what was posted on the lesson's day** (Today: today; Week: the course's day this week), no longer everything since the previous lesson.
+- **Dashboard cards name who posted them**, with their avatar; the column no longer shows a teacher, an avatar or a date badge. `GET /api/courses/posts` items carry `creator_user_id`.
+- **The Courses title is in the top bar**, like the other pages, and the page opens on the Today tab.
+- **The Sync now button** is an icon with a tooltip, styled like the other top-bar buttons.
+
 ## [0.27.0] - 2026-10-20
 
 ### Changed

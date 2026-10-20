@@ -41,17 +41,13 @@ export function weekStart(ms: number) {
   return addDays(day, -((new Date(day).getDay() + 6) % 7))
 }
 
-/** Start of the posts a board for `now` needs: the week's Monday lesson looks six days back. */
-export const postsSince = (now: number) => addDays(weekStart(now), -6)
-
 function dateKey(ms: number) {
   const d = new Date(ms)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** The tab's lessons: today's courses, or every weekly course on its day of
- * this week. A lesson holds what its course posted from the day after the
- * previous lesson (six days before) up to the end of its own day. */
+ * this week. A lesson holds what its course posted on its own day. */
 export function lessonsOf(courses: Course[], posts: Post[], tab: Tab, now: number): Lesson[] {
   const todayWeek = new Date(now).getDay() || 7
   const monday = weekStart(now)
@@ -59,7 +55,7 @@ export function lessonsOf(courses: Course[], posts: Post[], tab: Tab, now: numbe
     .filter((c) => !!c.week && c.week <= 7 && (tab === 'week' || c.week === todayWeek))
     .map((course) => {
       const day = tab === 'today' ? startOfDay(now) : addDays(monday, course.week! - 1)
-      const [from, to] = [addDays(day, -6), addDays(day, 1)]
+      const [from, to] = [day, addDays(day, 1)]
       return {
         key: `lesson:${course.id}:${dateKey(day)}`,
         course,

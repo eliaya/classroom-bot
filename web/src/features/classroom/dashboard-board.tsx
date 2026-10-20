@@ -55,7 +55,6 @@ import {
   cardKey,
   lessonsOf,
   ordered,
-  postsSince,
   prune,
   reorder,
   startOfDay,
@@ -133,7 +132,7 @@ export function DashboardBoard() {
   useEffect(() => {
     Promise.all([
       api.listCourses(),
-      api.listPosts(new Date(postsSince(now)).toISOString(), new Date(now + DAY).toISOString()),
+      api.listPosts(new Date(weekStart(now)).toISOString(), new Date(now + DAY).toISOString()),
       api.getBoard<Board>(),
     ])
       .then(([coursesRes, postsRes, boardRes]) => {
@@ -142,7 +141,7 @@ export function DashboardBoard() {
         setBoard(toBoard(boardRes.data))
       })
       .catch((e) => setError(e instanceof Error ? e.message : t('common.loadFailed')))
-    // An extra: without it the columns show no teacher.
+    // An extra: without it the cards show no author and the teacher filter is empty.
     api
       .listPeople()
       .then((res) => setPeople(res.items))
@@ -156,6 +155,9 @@ export function DashboardBoard() {
     for (const p of people) if (p.role === 'teacher') map.set(p.course_id, [...(map.get(p.course_id) ?? []), p])
     return map
   }, [people])
+
+  const personOf = useMemo(() => new Map(people.map((p) => [`${p.course_id}:${p.user_id}`, p])), [people])
+  const authorOf = (post: Post) => personOf.get(`${post.course_id}:${post.creator_user_id}`)
 
   const tabLessons = useMemo(() => lessonsOf(courses ?? [], posts, tab, now), [courses, posts, tab, now])
 
@@ -294,7 +296,7 @@ export function DashboardBoard() {
     return {
       lesson,
       posts: (arrangement[lesson.key] ?? []).flatMap((key) => byKey.get(key) ?? []),
-      teacher: teachersOf.get(lesson.course.id)?.[0],
+      authorOf,
       today,
     }
   }
@@ -360,7 +362,7 @@ export function DashboardBoard() {
           </div>
           {createPortal(
             <DragOverlay dropAnimation={reduceMotion() ? null : dropAnimation} className='z-50 cursor-grabbing'>
-              {draggedPost && <PostCard post={draggedPost} overlay />}
+              {draggedPost && <PostCard post={draggedPost} author={authorOf(draggedPost)} overlay />}
               {draggedLesson && <ColumnView {...columnProps(draggedLesson)} />}
             </DragOverlay>,
             document.body
@@ -446,7 +448,7 @@ function TeacherFilter({
 type ColumnProps = {
   lesson: Lesson
   posts: Post[]
-  teacher: CoursePerson | undefined
+  authorOf: (post: Post) => CoursePerson | undefined
   today: number
 }
 
@@ -469,7 +471,7 @@ function SortableColumn({ onOpen, ...props }: ColumnProps & { onOpen: (card?: st
 function ColumnView({
   lesson,
   posts,
-  teacher,
+  authorOf,
   today,
   nodeRef,
   style,
@@ -483,15 +485,15 @@ function ColumnView({
   handle?: React.ComponentProps<'button'> & { ref?: (node: HTMLElement | null) => void }
   onOpen?: (card?: string) => void
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const live = !!onOpen
   const name = lesson.course.name
   const tone: Tone = lesson.day === today ? 'info' : lesson.day < today ? 'neutral' : 'purple'
   const cards = posts.map((post) =>
     live ? (
-      <SortablePost key={cardKey(post)} post={post} onOpen={() => onOpen(cardKey(post))} />
+      <SortablePost key={cardKey(post)} post={post} author={authorOf(post)} onOpen={() => onOpen(cardKey(post))} />
     ) : (
-      <PostCard key={cardKey(post)} post={post} />
+      <PostCard key={cardKey(post)} post={post} author={authorOf(post)} />
     )
   )
   return (
@@ -537,27 +539,6 @@ function ColumnView({
             </div>
           )}
         </div>
-        <div className='flex items-center justify-between gap-2 px-2.5 pt-1'>
-          <div className='flex min-w-0 items-center gap-1.5'>
-            {teacher ? (
-              <TeacherAvatar person={teacher} className='size-5' />
-            ) : (
-              <Avatar className='size-5'>
-                <AvatarFallback className='text-xs text-muted-foreground'>{initials(name)}</AvatarFallback>
-              </Avatar>
-            )}
-            <span className='truncate text-xs text-muted-foreground'>
-              {teacher ? teacher.full_name || teacher.user_id : t('board.noTeacher')}
-            </span>
-          </div>
-          <span className={cn(PILL, BADGE[tone])}>
-            {new Date(lesson.day).toLocaleDateString(i18n.language, {
-              weekday: 'short',
-              month: 'numeric',
-              day: 'numeric',
-            })}
-          </span>
-        </div>
         <div className='flex flex-col gap-2.5 px-2.5 pt-2.5'>
           {!posts.length ? (
             <div className='flex flex-col items-center gap-2 rounded-lg border border-dashed px-3 py-8 text-center'>
@@ -581,7 +562,7 @@ function ColumnView({
   )
 }
 
-function SortablePost({ post, onOpen }: { post: Post; onOpen: () => void }) {
+function SortablePost({ post, author, onOpen }: { post: Post; author?: CoursePerson; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cardKey(post),
     data: { type: 'card' },
@@ -606,14 +587,14 @@ function SortablePost({ post, onOpen }: { post: Post; onOpen: () => void }) {
       }}
     >
       <div data-slot='kanban-item-handle' className={cn('block', isDragging ? 'cursor-grabbing!' : 'cursor-grab!')}>
-        <PostCard post={post} />
+        <PostCard post={post} author={author} />
       </div>
     </div>
   )
 }
 
-/** A classwork or stream post of the lesson. */
-function PostCard({ post, overlay }: { post: Post; overlay?: boolean }) {
+/** A classwork or stream post of the lesson, with who posted it when known. */
+function PostCard({ post, author, overlay }: { post: Post; author?: CoursePerson; overlay?: boolean }) {
   const { t, i18n } = useTranslation()
   const Icon = POST_ICON[post.type]
   return (
@@ -634,6 +615,12 @@ function PostCard({ post, overlay }: { post: Post; overlay?: boolean }) {
           </span>
         </div>
         <span className='line-clamp-2 text-sm font-medium'>{post.title}</span>
+        {author && (
+          <div className='flex min-w-0 items-center gap-1.5'>
+            <TeacherAvatar person={author} className='size-5' />
+            <span className='truncate text-xs text-muted-foreground'>{author.full_name || author.user_id}</span>
+          </div>
+        )}
       </div>
     </div>
   )

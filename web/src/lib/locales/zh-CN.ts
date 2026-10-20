@@ -345,7 +345,6 @@ const zhCN: Resources = {
     reorder: '重新排列 {{name}}',
     columnActions: '{{name}} 栏操作',
     filterTeachers: '按老师筛选',
-    noTeacher: '无老师',
     noRecords: '这节课还没有帖子。',
     openClasswork: '打开课堂作业',
     noLessons: {

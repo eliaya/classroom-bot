@@ -41,13 +41,13 @@ describe('lessonsOf', () => {
     id, course_id, type: 'coursework', title: id, time,
   })
   const posts = [
-    post('w-in', 'wed', at(2026, 10, 8)), // Thursday after last week's lesson
+    post('w-in', 'wed', at(2026, 10, 8)), // after last week's lesson, before this one's day
     post('w-new', 'wed', at(2026, 10, 14, 9)),
     post('w-old', 'wed', at(2026, 10, 7)), // last week's lesson day
     post('m-in', 'mon', at(2026, 10, 12, 8)),
     post('m-prev', 'mon', at(2026, 10, 6)), // Tuesday after the previous Monday
     post('m-late', 'mon', at(2026, 10, 13)), // after this Monday's lesson
-    post('f-in', 'fri', at(2026, 10, 13)),
+    post('f-in', 'fri', at(2026, 10, 13)), // before Friday
   ]
 
   it('finds the week start and steps over days', () => {
@@ -55,18 +55,18 @@ describe('lessonsOf', () => {
     expect(new Date(addDays(weekStart(now), -6))).toEqual(new Date(2026, 9, 6))
   })
 
-  it('holds today’s lessons with what was posted since the previous one', () => {
+  it('holds today’s lessons with what was posted that day', () => {
     const lessons = lessonsOf(courses, posts, 'today', now)
     expect(lessons.map((l) => l.key)).toEqual(['lesson:wed:2026-10-14'])
-    expect(lessons[0].posts.map((p) => p.id)).toEqual(['w-new', 'w-in'])
+    expect(lessons[0].posts.map((p) => p.id)).toEqual(['w-new'])
   })
 
   it('holds every weekly course on its day of this week', () => {
     const lessons = lessonsOf(courses, posts, 'week', now)
     expect(lessons.map((l) => [l.key, l.posts.map((p) => p.id)])).toEqual([
-      ['lesson:mon:2026-10-12', ['m-in', 'm-prev']],
-      ['lesson:wed:2026-10-14', ['w-new', 'w-in']],
-      ['lesson:fri:2026-10-16', ['f-in']],
+      ['lesson:mon:2026-10-12', ['m-in']],
+      ['lesson:wed:2026-10-14', ['w-new']],
+      ['lesson:fri:2026-10-16', []],
     ])
   })
 })

@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import { useCan } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 /** Header button: start a full sync; progress shows in the sync notification. */
 export function SyncButton() {
@@ -28,15 +29,20 @@ export function SyncButton() {
   }
 
   return (
-    <Button
-      variant='outline'
-      size='sm'
-      onClick={sync}
-      disabled={syncing}
-      aria-label={t('sync.syncNow')}
-    >
-      <RefreshCw className={cn(syncing && 'animate-spin')} />
-      <span className='hidden sm:inline'>{t('sync.syncNow')}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant='ghost'
+          size='icon'
+          className='rounded-full'
+          onClick={sync}
+          disabled={syncing}
+          aria-label={t('sync.syncNow')}
+        >
+          <RefreshCw className={cn(syncing && 'animate-spin')} aria-hidden='true' />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{t('sync.syncNow')}</TooltipContent>
+    </Tooltip>
   )
 }

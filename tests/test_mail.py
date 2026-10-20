@@ -14,7 +14,7 @@ from sqlmodel import select
 import src.database as db
 from src.api.main import app
 from src.config import settings
-from src.google_service import gmail_body_text, gmail_raw_message, gmail_thread_summary
+from src.google_service import gmail_body_html, gmail_body_text, gmail_raw_html, gmail_raw_message, gmail_thread_summary
 from src.models import AuditLog, GmailSyncState
 from src.repositories import gmail_archive as archive
 
@@ -165,6 +165,27 @@ def test_body_prefers_plain_text_and_strips_html():
         {"mimeType": "text/plain", "filename": "notes.txt", "body": {"data": _b64("not the body")}},
     ]}
     assert gmail_body_text(attachment) == ""
+
+
+def test_html_body_keeps_links_and_inlines_cid_images():
+    msg = EmailMessage()
+    msg["From"], msg["Subject"] = "a@example.jp", "Pic"
+    msg.set_content("plain")
+    msg.add_alternative("<p><a href='https://x.example'>x</a><img src=\"cid:logo@1\"><img src='cid:gone'></p>",
+                        subtype="html")
+    msg.get_payload()[1].add_related(b"PNG", maintype="image", subtype="png", cid="<logo@1>")
+    html = gmail_raw_html(msg.as_bytes())
+    assert "href='https://x.example'" in html
+    assert 'src="data:image/png;base64,UE5H"' in html and "cid:gone" in html
+    assert gmail_raw_html(_raw("a@example.jp", "Plain", "only text")) is None
+
+    payload = {"mimeType": "multipart/related", "parts": [
+        {"mimeType": "text/html", "body": {"data": _b64("<img src='cid:i1'>")}},
+        {"mimeType": "image/gif", "filename": "i.gif", "headers": [{"name": "Content-ID", "value": "<i1>"}],
+         "body": {"data": _b64("GIF")}},
+    ]}
+    assert gmail_body_html(payload) == "<img src='data:image/gif;base64,R0lG'>"
+    assert gmail_body_html({"mimeType": "text/plain", "body": {"data": _b64("hi")}}) is None
 
 
 def _raw(sender: str, subject: str, body: str, attachment: bool = False) -> bytes:

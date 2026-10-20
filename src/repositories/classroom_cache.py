@@ -1033,6 +1033,8 @@ async def list_posts_between(
                 "title": title or kind.capitalize(),
                 "time": row.update_time or row.creation_time,
                 "alternate_link": row.alternate_link,
+                # Only announcements keep it in a column; the rest in Google's payload.
+                "creator_user_id": json.loads(row.raw_json or "{}").get("creatorUserId"),
             })
     items.sort(key=lambda x: x["time"])
     return items

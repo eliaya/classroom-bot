@@ -14,7 +14,7 @@ from sqlalchemy import func, not_, or_
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst
-from src.google_service import GMAIL_ARCHIVE, GMAIL_PAGE_SIZE, _gmail_address, gmail_raw_message
+from src.google_service import GMAIL_ARCHIVE, GMAIL_PAGE_SIZE, _gmail_address, gmail_raw_html, gmail_raw_message
 from src.models import GmailMessage, GmailSyncState
 from src.repositories.classroom_cache import owned, owner_of
 
@@ -179,7 +179,8 @@ async def get_thread(session: AsyncSession, thread_id: str) -> Optional[Dict[str
         messages.append({
             "id": row.id, "from_name": parsed["from_name"], "from_email": parsed["from_email"],
             "to": parsed["to"], "reply_to": parsed["reply_to"], "date": row.internal_date,
-            "unread": "UNREAD" in labels, "text": parsed["text"], "deleted": row.deleted_in_gmail,
+            "unread": "UNREAD" in labels, "text": parsed["text"], "html": gmail_raw_html(row.raw),
+            "deleted": row.deleted_in_gmail,
         })
     return {
         "id": thread_id,

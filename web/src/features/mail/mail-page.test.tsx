@@ -115,6 +115,33 @@ describe('MailPage', () => {
     await expect.element(screen.getByText('No conversation selected')).toBeVisible()
   })
 
+  it('shows HTML mail in a frame without scripts, and links in plain text', async () => {
+    vi.mocked(api.getMailThread).mockResolvedValueOnce({
+      ...THREAD,
+      messages: [
+        { ...THREAD.messages[0], text: 'Slides: https://example.com/deck.' },
+        {
+          ...THREAD.messages[1],
+          html: "<p>Hi <a href='https://example.com/a'>there</a></p><img src='data:image/gif;base64,R0lGODlhAQABAAAAACw='>",
+        },
+      ],
+    })
+    const screen = await render(<MailPage />)
+    await screen.getByRole('button', { name: /Sarah Johnson/ }).click()
+    const frame = screen.getByTitle('Sarah Johnson')
+    await expect.element(frame).toBeVisible()
+    const el = frame.element() as HTMLIFrameElement
+    expect(el.getAttribute('sandbox')).not.toContain('allow-scripts')
+    await expect.poll(() => el.contentDocument?.querySelector('a')?.getAttribute('target')).toBe('_blank')
+    expect(el.contentDocument?.querySelector('img')).not.toBeNull()
+
+    await screen.getByRole('button', { name: '1 earlier message' }).click()
+    // The full stop after the address is not part of the link.
+    await expect
+      .element(screen.getByRole('link', { name: 'https://example.com/deck' }))
+      .toHaveAttribute('href', 'https://example.com/deck')
+  })
+
   it('reads without organising for a view-only role', async () => {
     signIn(['mail:view'])
     const screen = await render(<MailPage />)

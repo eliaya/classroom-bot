@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Archive,
   ChevronLeft,
@@ -235,7 +235,65 @@ function Message({ message }: { message: MailMessage }) {
           <div className='truncate text-xs text-muted-foreground'>{message.from_email}</div>
         </div>
       </div>
-      <div className='text-sm wrap-anywhere whitespace-pre-wrap text-foreground/80'>{message.text}</div>
+      {message.html ? (
+        <MailHtml html={message.html} title={message.from_name} />
+      ) : (
+        <div className='text-sm wrap-anywhere whitespace-pre-wrap text-foreground/80'>
+          {message.text.split(WEB_ADDRESS).map((part, i) =>
+            i % 2 ? (
+              <a key={i} href={part} target='_blank' rel='noopener noreferrer' className='text-primary underline'>
+                {part}
+              </a>
+            ) : (
+              part
+            )
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+// A web address in plain text, without the punctuation that usually ends a sentence after it.
+const WEB_ADDRESS = /(https?:\/\/[^\s<>"]*[^\s<>".,;:!?)\]'」』。、])/
+
+// Mail is untrusted: no scripts, frames, forms or fetches; images, styles and fonts may load.
+const MAIL_CSP = "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:"
+
+/** An HTML mail in a frame without scripts (sandbox and CSP), sized to its
+ * content; its links open in a new tab. */
+function MailHtml({ html, title }: { html: string; title: string }) {
+  const observer = useRef<ResizeObserver>(undefined)
+  const [height, setHeight] = useState(0)
+  useEffect(() => () => observer.current?.disconnect(), [])
+
+  const onLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    // Reachable because of allow-same-origin, safe because the frame runs no script.
+    const doc = e.currentTarget.contentDocument
+    if (!doc) return
+    for (const a of doc.querySelectorAll('a[href]')) {
+      a.setAttribute('target', '_blank')
+      a.setAttribute('rel', 'noopener noreferrer')
+    }
+    observer.current?.disconnect()
+    observer.current = new ResizeObserver(() => setHeight(doc.documentElement.offsetHeight))
+    observer.current.observe(doc.documentElement)
+  }
+
+  const doc =
+    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<meta http-equiv="Content-Security-Policy" content="${MAIL_CSP}">` +
+    `<meta name="referrer" content="no-referrer"><base target="_blank">` +
+    `<style>html,body{margin:0}body{padding:12px;font:14px/1.5 system-ui,sans-serif;color:#1f2937;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>` +
+    `</head><body>${html}</body></html>`
+  return (
+    <iframe
+      title={title}
+      srcDoc={doc}
+      sandbox='allow-same-origin allow-popups allow-popups-to-escape-sandbox'
+      onLoad={onLoad}
+      className='w-full rounded-md border bg-white'
+      style={{ height: height || 160 }}
+    />
   )
 }

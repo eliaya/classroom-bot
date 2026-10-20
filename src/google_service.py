@@ -69,6 +69,7 @@ GMAIL_ARCHIVE = "ARCHIVE"
 GMAIL_ARCHIVE_QUERY = "-in:inbox -in:spam -in:trash -in:sent -in:drafts"
 GMAIL_PAGE_SIZE = 25
 GMAIL_MAX_TEXT = 200_000  # characters of one message body
+GMAIL_MAX_HTML = 5_000_000  # characters of one HTML body with its inline images; larger shows as text
 GMAIL_FETCH_BATCH = 20  # raw messages per batch call; keeps one response small
 
 CLASSROOM_MAX_PAGE_SIZE = 30
@@ -957,6 +958,7 @@ def gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
         "date": int(message.get("internalDate", 0) or 0),
         "unread": "UNREAD" in message.get("labelIds", []),
         "text": gmail_body_text(message.get("payload") or {})[:GMAIL_MAX_TEXT],
+        "html": gmail_body_html(message.get("payload") or {}),
     }
 
 
@@ -987,6 +989,36 @@ def gmail_raw_message(raw: bytes) -> Dict[str, Any]:
     }
 
 
+def _with_inline_images(markup: str, images: Dict[str, str]) -> Optional[str]:
+    """``markup`` with its ``cid:`` images as data URIs (``images``: Content-ID
+    -> data URI); None when too large to send. Shown in a sandboxed frame
+    without scripts by the page, never inserted into it."""
+    markup = re.sub(r"cid:([^\s\"'<>)]+)", lambda m: images.get(m.group(1), m.group(0)), markup)
+    return markup if markup.strip() and len(markup) <= GMAIL_MAX_HTML else None
+
+
+def _data_uri(mime: str, data: bytes) -> str:
+    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+
+
+def gmail_raw_html(raw: bytes) -> Optional[str]:
+    """An archived message's HTML body, None when it has none."""
+    msg = message_from_bytes(raw, policy=policy.default)
+    body = msg.get_body(preferencelist=("html",))
+    if body is None:
+        return None
+    try:
+        markup = body.get_content()
+    except (LookupError, ValueError):  # an unknown or wrong charset
+        markup = (body.get_payload(decode=True) or b"").decode("utf-8", errors="replace")
+    images = {
+        str(p["Content-ID"]).strip().strip("<>"): _data_uri(p.get_content_type(), p.get_payload(decode=True) or b"")
+        for p in msg.walk()
+        if p["Content-ID"] and p.get_content_maintype() == "image"
+    }
+    return _with_inline_images(markup, images)
+
+
 def _gmail_parts(part: Dict[str, Any]):
     yield part
     for child in part.get("parts", []) or []:
@@ -1009,6 +1041,20 @@ def gmail_body_text(payload: Dict[str, Any]) -> str:
         if any(texts):
             return convert("\n".join(t for t in texts if t)).strip()
     return ""
+
+
+def gmail_body_html(payload: Dict[str, Any]) -> Optional[str]:
+    """The HTML body of a message as Gmail parses it, None when it has none.
+    Inline images Gmail sends only as an attachment id stay unresolved."""
+    parts = list(_gmail_parts(payload))
+    markup = "\n".join(_gmail_decode(p) for p in parts if p.get("mimeType") == "text/html" and not p.get("filename"))
+    images = {}
+    for p in parts:
+        cid = _gmail_header({"payload": p}, "Content-ID").strip().strip("<>")
+        data = (p.get("body") or {}).get("data")
+        if cid and data and str(p.get("mimeType", "")).startswith("image/"):
+            images[cid] = _data_uri(p["mimeType"], base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)))
+    return _with_inline_images(markup, images)
 
 
 class _HTMLText(HTMLParser):

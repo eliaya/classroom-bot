@@ -78,7 +78,7 @@ export function CoursesListPage() {
   const [posts, setPosts] = useState<Partial<Record<Period, Post[]>>>({})
   const [people, setPeople] = useState<CoursePerson[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<StatusTab>('all')
+  const [tab, setTab] = useState<StatusTab>('today')
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<Period>('90')
   const [band, setBand] = useState<Band>('all')
@@ -273,10 +273,8 @@ export function CoursesListPage() {
 
   return (
     <>
-      <ClassroomHeader fixed />
-      <Main fluid className='flex flex-1 flex-col gap-6'>
-        <h1 className='text-3xl font-medium tracking-tight'>{t('courses.title')}</h1>
-
+      <ClassroomHeader fixed title={t('courses.title')} />
+      <Main fluid className='flex flex-1 flex-col gap-4 sm:gap-6'>
         {error && (
           <p role='alert' className='text-sm text-destructive'>
             {error}

@@ -125,6 +125,8 @@ export type Post = {
   /** When it was last updated (ISO-8601 UTC), as the course pages show. */
   time: string
   alternate_link?: string | null
+  /** Who posted it (a `CoursePerson.user_id` of its course). */
+  creator_user_id?: string | null
 }
 
 export type CoursePerson = {
@@ -275,6 +277,8 @@ export type MailMessage = {
   unread: boolean
   /** Plain text; HTML mail is converted on the server. */
   text: string
+  /** The HTML body with inline images as data URIs; shown only in a sandboxed frame. */
+  html?: string | null
 }
 
 export type MailThread = {

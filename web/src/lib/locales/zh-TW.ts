@@ -345,7 +345,6 @@ const zhTW: Resources = {
     reorder: '重新排列 {{name}}',
     columnActions: '{{name}} 欄位操作',
     filterTeachers: '依老師篩選',
-    noTeacher: '無老師',
     noRecords: '這堂課還沒有貼文。',
     openClasswork: '開啟課堂作業',
     noLessons: {

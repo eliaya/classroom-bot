@@ -16,7 +16,8 @@ async def test_list_posts_between_filters_by_update_time():
         await conn.run_sync(SQLModel.metadata.create_all)
     async with db.async_session_factory() as s:
         await cache.upsert_announcements(s, "c1", [
-            {"id": "a1", "text": "Hello\nworld", "creationTime": "2026-10-12T03:00:00.123Z"},
+            {"id": "a1", "text": "Hello\nworld", "creationTime": "2026-10-12T03:00:00.123Z",
+             "creatorUserId": "t1"},
             {"id": "a0", "text": "Too early", "creationTime": "2026-10-11T14:59:59.999Z"},
         ])
         await cache.upsert_coursework(s, "c2", [
@@ -29,7 +30,8 @@ async def test_list_posts_between_filters_by_update_time():
             {"id": "w2", "title": "Too late", "creationTime": "2026-10-12T15:00:00.000Z"},
         ])
         await cache.upsert_materials(s, "c3", [
-            {"id": "m1", "title": "Slides", "creationTime": "2026-10-12T02:00:00.000Z"},
+            {"id": "m1", "title": "Slides", "creationTime": "2026-10-12T02:00:00.000Z",
+             "creatorUserId": "t3"},
         ])
         await s.commit()
 
@@ -40,6 +42,8 @@ async def test_list_posts_between_filters_by_update_time():
         ("material", "c3", "Slides"),
         ("announcement", "c1", "Hello"),
     ]
+    # Who posted it, from Google's payload; None when Google did not say.
+    assert [i["creator_user_id"] for i in items] == [None, "t3", "t1"]
 
     async with db.async_session_factory() as s:
         one = await cache.list_posts_between(s, "2026-10-11T15:00:00.000Z", "2026-10-12T15:00:00.000Z", "c2")

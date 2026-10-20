@@ -81,6 +81,13 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 })
 vi.mock('./layout-header', () => ({ ClassroomHeader: () => null }))
 
+/** The page opens on Today; most tests read every course. */
+async function renderAll() {
+  const screen = await render(<CoursesListPage />)
+  await userEvent.click(screen.getByRole('tab', { name: 'All courses' }))
+  return screen
+}
+
 const names = () =>
   [...document.querySelectorAll('tbody tr td:nth-child(2) > button')].map((el) => el.textContent)
 
@@ -96,7 +103,7 @@ describe('CoursesListPage', () => {
   })
 
   it('lists courses with their activity and status', async () => {
-    const screen = await render(<CoursesListPage />)
+    const screen = await renderAll()
     await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
     // Default order: latest update first.
     expect(names()).toEqual(['【AI07】Machine Learning', '【AI07】Web Engineering', 'Homeroom'])
@@ -115,7 +122,7 @@ describe('CoursesListPage', () => {
   })
 
   it('puts the week first, the course id in a tooltip and the people in avatars', async () => {
-    const screen = await render(<CoursesListPage />)
+    const screen = await renderAll()
     await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
     const heads = [...document.querySelectorAll('thead th')].map((th) => th.textContent)
     expect(heads.slice(0, 3)).toEqual(['Week', 'Course name', 'People'])
@@ -135,11 +142,10 @@ describe('CoursesListPage', () => {
     await expect.element(screen.getByRole('tooltip')).toHaveTextContent('Course ID: 101')
   })
 
-  it('filters by tab, search and activity, and sorts by a column', async () => {
+  it('opens on Today, then filters by tab, search and activity, and sorts by a column', async () => {
     const screen = await render(<CoursesListPage />)
-    await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('tab', { name: 'Today' }))
+    await expect.element(screen.getByRole('button', { name: /Machine Learning/ })).toBeInTheDocument()
+    await expect.element(screen.getByRole('tab', { name: 'Today' })).toHaveAttribute('aria-selected', 'true')
     expect(names()).toEqual(['【AI07】Machine Learning'])
     await userEvent.click(screen.getByRole('tab', { name: 'All courses' }))
 
@@ -154,7 +160,7 @@ describe('CoursesListPage', () => {
   })
 
   it('remembers the sort order', async () => {
-    const first = await render(<CoursesListPage />)
+    const first = await renderAll()
     await expect.element(first.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
     // Descending by name: an order the default (latest update first) never gives.
     await userEvent.click(first.getByRole('button', { name: 'Course name' }))
@@ -162,14 +168,14 @@ describe('CoursesListPage', () => {
     expect(names()).toEqual(['Homeroom', '【AI07】Web Engineering', '【AI07】Machine Learning'])
     await first.unmount()
 
-    const again = await render(<CoursesListPage />)
+    const again = await renderAll()
     await expect.element(again.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
     expect(names()).toEqual(['Homeroom', '【AI07】Web Engineering', '【AI07】Machine Learning'])
     expect(document.querySelector('th[aria-sort="descending"]')?.textContent).toBe('Course name')
   })
 
   it('opens the details sheet from the title and hides a column from Manage Table', async () => {
-    const screen = await render(<CoursesListPage />)
+    const screen = await renderAll()
     await expect.element(screen.getByRole('button', { name: /Web Engineering/ })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Manage Table' }))
@@ -196,7 +202,7 @@ describe('CoursesListPage', () => {
   })
 
   it('moves an archived course to the Archived tab, faded, and restoring brings it back', async () => {
-    const screen = await render(<CoursesListPage />)
+    const screen = await renderAll()
     await userEvent.click(screen.getByRole('button', { name: /Web Engineering/ }))
     const rowOf = () =>
       [...document.querySelectorAll('tbody tr')].find((tr) => tr.textContent?.includes('Web Engineering'))
@@ -234,7 +240,7 @@ describe('CoursesListPage', () => {
 
   it('shows one card per course on a phone', async () => {
     await page.viewport(390, 844)
-    const screen = await render(<CoursesListPage />)
+    const screen = await renderAll()
     await expect.element(screen.getByRole('listitem').first()).toBeInTheDocument()
     expect(document.querySelectorAll('ul > li').length).toBe(3)
   })

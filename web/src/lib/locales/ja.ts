@@ -345,7 +345,6 @@ const ja: Resources = {
     reorder: '{{name}} を並べ替え',
     columnActions: '{{name}} 列の操作',
     filterTeachers: '先生で絞り込み',
-    noTeacher: '先生なし',
     noRecords: 'この授業の投稿はまだありません。',
     openClasswork: '授業を開く',
     noLessons: {

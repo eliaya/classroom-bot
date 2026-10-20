@@ -348,7 +348,6 @@ export const en = {
     reorder: 'Reorder {{name}}',
     columnActions: '{{name}} column actions',
     filterTeachers: 'Filter by teacher',
-    noTeacher: 'No teacher',
     noRecords: 'Nothing posted for this lesson yet.',
     openClasswork: 'Open classwork',
     noLessons: {
