@@ -4,17 +4,20 @@ import { ExternalLink, Layers, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, type Attachment, type Course, type CoursePerson, type Post } from '@/lib/api'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { cn, fullTimestamp, humanReadableTime } from '@/lib/utils'
+import { cn, fullTimestamp } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AttachmentView } from './components/attachment-view'
-import { POST_ICON, cardKey, dashboardLimit, initials } from './board-model'
+import { POST_ICON, cardKey, dashboardLimit, initials, shortAge } from './board-model'
 import { TeacherAvatar } from './dashboard-board'
 
 const DAY = 86_400_000
+// inbox3's avatar: a hairline ring drawn over the photo.
+const AVATAR =
+  'size-8 after:absolute after:inset-0 after:rounded-full after:border after:border-border after:mix-blend-darken dark:after:mix-blend-lighten'
 
 type Detail = { key: string; text?: string; due?: string; attachments?: Attachment[] }
 
@@ -65,7 +68,7 @@ export function DashboardInbox() {
 
   if (error) {
     return (
-      <p role='alert' className='text-sm text-destructive'>
+      <p role='alert' className='p-4 text-sm text-destructive'>
         {error}
       </p>
     )
@@ -76,24 +79,20 @@ export function DashboardInbox() {
   )
 
   return (
-    <div className='flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-background text-foreground'>
+    <div className='inbox3 flex min-h-0 flex-1 overflow-hidden border-t bg-background text-foreground'>
       <section className='flex min-h-0 w-full min-w-0 flex-col border-r md:w-[42.857%] md:max-w-[42.857%]'>
         <header className='flex h-10 shrink-0 items-center justify-between border-b px-4'>
           <div className='flex items-center gap-2'>
             <h2 className='text-lg font-semibold'>{t('dashboard.latest')}</h2>
-            {posts && <span className='text-xs text-muted-foreground tabular-nums'>{items.length}</span>}
           </div>
-          <Button
-            variant='ghost'
-            size='sm'
-            className='size-7 rounded-[min(var(--radius-md),10px)]'
-            aria-label={t('dashboard.display')}
-            asChild
-          >
-            <Link to='/settings/language'>
-              <SlidersHorizontal />
-            </Link>
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button variant='ghost' size='sm' className='size-7 gap-1 rounded-[min(var(--radius-md),10px)] p-0 has-[>svg]:p-0' asChild>
+              <Link to='/settings/language'>
+                <SlidersHorizontal />
+                <span className='sr-only'>{t('dashboard.display')}</span>
+              </Link>
+            </Button>
+          </div>
         </header>
         <ScrollArea className='relative min-h-0 flex-1'>
           {!posts ? (
@@ -126,7 +125,7 @@ export function DashboardInbox() {
 
       {mobile ? (
         <Sheet open={!!current} onOpenChange={(open) => !open && setSelected(null)}>
-          <SheetContent className='w-full gap-0 p-0'>
+          <SheetContent className='inbox3 w-full gap-0 p-0 text-foreground'>
             <SheetTitle className='sr-only'>{current?.title}</SheetTitle>
             <SheetDescription className='sr-only'>{courseOf.get(current?.course_id ?? '')?.name}</SheetDescription>
             {detail}
@@ -152,7 +151,7 @@ function PostRow({
   selected: boolean
   onSelect: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const Icon = POST_ICON[post.type]
   const courseName = course?.name ?? post.course_id
   return (
@@ -170,9 +169,9 @@ function PostRow({
       >
         <div className='shrink-0'>
           {author ? (
-            <TeacherAvatar person={author} className='size-8' />
+            <TeacherAvatar person={author} className={AVATAR} />
           ) : (
-            <Avatar className='size-8'>
+            <Avatar className={AVATAR}>
               <AvatarFallback className='text-xs text-muted-foreground'>{initials(courseName)}</AvatarFallback>
             </Avatar>
           )}
@@ -182,7 +181,10 @@ function PostRow({
             <span className='max-w-[40%] shrink-0 truncate text-sm font-medium text-muted-foreground'>{courseName}</span>
             <h4 className='min-w-0 flex-1 truncate text-sm font-medium text-foreground'>{post.title}</h4>
             <div className='shrink-0'>
-              <Icon className='size-3.5 text-primary' aria-label={t(`courses.${post.type}`)} />
+              <Icon
+                className={cn('size-3.5', selected ? 'text-primary/80' : 'text-primary')}
+                aria-label={t(`courses.${post.type}`)}
+              />
             </div>
           </div>
           <div className='flex items-center justify-between gap-1.5'>
@@ -190,7 +192,7 @@ function PostRow({
               {author?.full_name || t(`courses.${post.type}`)}
             </p>
             <span className='shrink-0 text-xs text-muted-foreground' title={fullTimestamp(post.time)}>
-              {humanReadableTime(post.time)}
+              {shortAge(post.time, i18n.language)}
             </span>
           </div>
         </div>
@@ -231,6 +233,7 @@ function PostDetail({ post, course, author }: { post: Post; course?: Course; aut
   }, [key, post.type, post.id, post.course_id, i18n.language])
 
   const Icon = POST_ICON[post.type]
+  const courseName = course?.name ?? post.course_id
   const loading = detail?.key !== key
   // An announcement's title is its first line: not shown twice.
   const lines = (detail?.text ?? '').trim().split('\n')
@@ -239,8 +242,11 @@ function PostDetail({ post, course, author }: { post: Post; course?: Course; aut
 
   return (
     <div className='flex h-full min-w-0 flex-col'>
-      <header className='flex h-10 shrink-0 items-center justify-between gap-3 border-b px-4 pe-12 md:pe-4'>
-        <span className='truncate text-sm font-medium'>{course?.name ?? post.course_id}</span>
+      {/* pe-12 keeps clear of the sheet's close button on a phone. */}
+      <header className='flex h-10 shrink-0 items-center justify-between border-b px-4 pe-12 md:pe-4'>
+        <div className='flex min-w-0 items-center gap-3'>
+          <span className='truncate text-sm font-medium'>{courseName}</span>
+        </div>
         {post.alternate_link && (
           <Button variant='outline' size='sm' className='h-7 gap-1 rounded-[min(var(--radius-md),10px)] px-2.5' asChild>
             <a href={post.alternate_link} target='_blank' rel='noreferrer'>
@@ -251,20 +257,19 @@ function PostDetail({ post, course, author }: { post: Post; course?: Course; aut
         )}
       </header>
       <ScrollArea className='min-h-0 flex-1'>
-        <div className='mx-auto flex w-full max-w-[760px] flex-col gap-5 px-4 pt-6 pb-10 md:px-8 md:pt-12'>
+        <div className='mx-auto flex w-full max-w-[760px] flex-col gap-5 px-8 pt-12 pb-10'>
           <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
-            <span className='inline-flex items-center gap-1.5 font-medium text-foreground'>
+            <span className='font-medium text-foreground'>{courseName}</span>
+            <span className='text-muted-foreground/60'>·</span>
+            <span className='inline-flex items-center gap-1.5'>
               <Icon className='size-3.5 text-primary/80' aria-hidden='true' />
               {t(`courses.${post.type}`)}
             </span>
-            {author && (
-              <>
-                <span className='text-muted-foreground/60'>·</span>
-                <span>{author.full_name || author.user_id}</span>
-              </>
-            )}
             <span className='text-muted-foreground/60'>·</span>
-            <span title={fullTimestamp(post.time)}>{humanReadableTime(post.time)}</span>
+            <span title={fullTimestamp(post.time)}>
+              {author ? `${author.full_name || author.user_id} · ` : ''}
+              {shortAge(post.time, i18n.language)}
+            </span>
           </div>
           <div className='flex flex-col gap-2.5'>
             <h3 className='text-[1.5rem] leading-tight font-semibold wrap-anywhere text-foreground md:text-[1.625rem]'>
@@ -284,6 +289,7 @@ function PostDetail({ post, course, author }: { post: Post; course?: Course; aut
             <>
               <div className='max-w-[68ch]'>
                 {body ? (
+                  // Classroom text keeps its line breaks and long links.
                   <p className='text-sm leading-6 wrap-anywhere whitespace-pre-wrap text-foreground'>{body}</p>
                 ) : (
                   post.type !== 'announcement' && (
@@ -292,14 +298,16 @@ function PostDetail({ post, course, author }: { post: Post; course?: Course; aut
                 )}
               </div>
               {!!attachments?.length && (
-                <section className='flex max-w-[72ch] flex-col gap-3'>
-                  <h4 className='text-base font-semibold text-foreground'>
-                    {t('classwork.attachments', { count: attachments.length })}
-                  </h4>
-                  {attachments.map((att) => (
-                    <AttachmentView key={att.id} att={att} />
-                  ))}
-                </section>
+                <div className='flex max-w-[72ch] flex-col gap-6'>
+                  <section className='flex flex-col gap-3'>
+                    <h4 className='text-base font-semibold text-foreground'>
+                      {t('classwork.attachments', { count: attachments.length })}
+                    </h4>
+                    {attachments.map((att) => (
+                      <AttachmentView key={att.id} att={att} />
+                    ))}
+                  </section>
+                </div>
               )}
             </>
           )}

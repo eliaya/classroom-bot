@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.29.1] - 2026-10-22
+
+### Fixed
+- **The Dashboard inbox now uses the Inbox 3 design tokens.** It took only the block's classes, so it showed in the app's slate colors and 10px radius, and a hovered row did not change color (`--sidebar` equals the background). The inbox now carries the block's neutral colors, 8px radius and sidebar color, in light and dark, without changing other pages. It spans the content area edge to edge, without a rounded frame. Spacing, the detail meta line (course · type · author · age), the avatar's hairline ring and the icon button's padding follow the block.
+- **Post ages on the Dashboard are short and in the page's language** ("10h", "2d", "1w"; "10 小時" in Chinese), no longer English phrases such as "about 10 hours ago".
+
 ## [0.29.0] - 2026-10-22
 
 ### Changed

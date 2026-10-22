@@ -117,3 +117,17 @@ export function prune(board: Board, since: number): Board {
     cards: Object.fromEntries(Object.entries(board.cards).filter(([key]) => keep(key))),
   }
 }
+
+const AGE_UNITS = [
+  ['year', 525_600],
+  ['week', 10_080],
+  ['day', 1_440],
+  ['hour', 60],
+] as const
+
+/** inbox3's compact age ("10h", "2d", "1w") in the given language. */
+export function shortAge(iso: string, lang: string, now = Date.now()) {
+  const minutes = Math.max(0, (now - Date.parse(iso)) / 60_000)
+  const [unit, size] = AGE_UNITS.find(([, size]) => minutes >= size) ?? ['minute', 1]
+  return new Intl.NumberFormat(lang, { style: 'unit', unit, unitDisplay: 'narrow' }).format(Math.floor(minutes / size))
+}

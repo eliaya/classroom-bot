@@ -5,7 +5,7 @@ import '@/lib/i18n'
 // The detail pane shows or hides by breakpoint: needs the real CSS.
 import '@/styles/index.css'
 import { type ClassworkResponse, type Course, type CoursePerson, type Post } from '@/lib/api'
-import { dashboardLimit, setDashboardLimit } from './board-model'
+import { dashboardLimit, setDashboardLimit, shortAge } from './board-model'
 import { DashboardInbox } from './dashboard-inbox'
 
 const MIN = 60_000
@@ -107,6 +107,33 @@ describe('DashboardInbox', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await userEvent.click(rows()[0])
     await expect.element(screen.getByRole('dialog').getByText('Read chapter 3.')).toBeInTheDocument()
+  })
+
+  it('keeps the inbox3 tokens in light and dark', async () => {
+    const screen = await render(<DashboardInbox />)
+    await expect.poll(() => rows().length).toBe(14)
+    // Off the rows: a hovered row shows the hover color instead. The polls wait out the color transition.
+    await userEvent.hover(screen.getByRole('heading', { level: 3 }))
+    const selected = () => getComputedStyle(rows()[0].firstElementChild!)
+    const button = getComputedStyle(document.querySelector('header a')!)
+    await expect.poll(() => selected().backgroundColor).toBe('oklab(0.97 0 0 / 0.8)')
+    expect(selected().borderRadius).toBe('8px')
+    expect(button.borderRadius).toBe('6px')
+    expect(getComputedStyle(document.querySelector('section')!).borderRightColor).toBe('oklch(0.922 0 0)')
+    document.documentElement.classList.add('dark')
+    await expect.poll(() => selected().backgroundColor).toBe('oklab(0.269 0 0 / 0.8)')
+    document.documentElement.classList.remove('dark')
+  })
+
+  it('shows ages as short as inbox3 does', () => {
+    const now = Date.parse('2026-10-22T12:00:00Z')
+    const at = (minutes: number) => new Date(now - minutes * MIN).toISOString()
+    expect(shortAge(at(5), 'en', now)).toBe('5m')
+    expect(shortAge(at(10 * 60), 'en', now)).toBe('10h')
+    expect(shortAge(at(2 * 1440), 'en', now)).toBe('2d')
+    expect(shortAge(at(8 * 1440), 'en', now)).toBe('1w')
+    expect(shortAge(at(400 * 1440), 'en', now)).toBe('1y')
+    expect(shortAge(at(10 * 60), 'zh-TW', now)).toBe('10 小時')
   })
 
   it('remembers only the offered counts', () => {
