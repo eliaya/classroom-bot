@@ -25,7 +25,7 @@ import {
   type AnimateLayoutChanges,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { BookOpen, ClipboardList, EllipsisVertical, GripVertical, Layers, Megaphone, PanelRightOpen } from 'lucide-react'
+import { EllipsisVertical, GripVertical, Layers, PanelRightOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { api, type Course, type CoursePerson, type Post } from '@/lib/api'
@@ -52,7 +52,9 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  POST_ICON,
   cardKey,
+  initials,
   lessonsOf,
   ordered,
   prune,
@@ -80,7 +82,6 @@ const BADGE: Record<Tone, string> = {
     'bg-violet-600/10 text-violet-600 border-violet-600/30 dark:bg-violet-400/10 dark:text-violet-400 dark:border-violet-400/30',
 }
 
-const POST_ICON = { announcement: Megaphone, coursework: ClipboardList, material: BookOpen }
 const POST_TONE: Record<Post['type'], Tone> = { announcement: 'neutral', coursework: 'info', material: 'purple' }
 
 // The reference design's Card surface (radius × 1.4, 1px foreground/10 ring) and pill badge.
@@ -97,11 +98,6 @@ const dropAnimation: DropAnimation = {
 }
 const measuring = { droppable: { strategy: MeasuringStrategy.Always } }
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-function initials(name: string) {
-  const words = name.replace(/【[^】]*】/g, '').trim().split(/\s+/).filter(Boolean)
-  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? name).slice(0, 2)).toUpperCase()
-}
 
 const columnKey = (key: string) => `col:${key}`
 
@@ -379,7 +375,7 @@ export function DashboardBoard() {
   )
 }
 
-function TeacherAvatar({ person, className }: { person: CoursePerson; className?: string }) {
+export function TeacherAvatar({ person, className }: { person: CoursePerson; className?: string }) {
   const name = person.full_name || person.user_id
   return (
     <Avatar className={className}>

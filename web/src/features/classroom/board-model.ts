@@ -1,6 +1,33 @@
 /** The dashboard Kanban as saved for the user (GET/PUT /api/dashboard/board):
  * one column per lesson, holding the lesson's posts as cards. */
+import { BookOpen, ClipboardList, Megaphone } from 'lucide-react'
 import type { Course, Post } from '@/lib/api'
+
+export const POST_ICON = { announcement: Megaphone, coursework: ClipboardList, material: BookOpen }
+
+export function initials(name: string) {
+  const words = name.replace(/【[^】]*】/g, '').trim().split(/\s+/).filter(Boolean)
+  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? name).slice(0, 2)).toUpperCase()
+}
+
+// Per-device: how many of the latest posts the dashboard lists (Settings → Language).
+const LIMIT_KEY = 'dashboard-limit'
+export const LIMITS = [10, 20, 50, 100] as const
+export const dashboardLimit = (): number => {
+  try {
+    const saved = Number(localStorage.getItem(LIMIT_KEY))
+    return (LIMITS as readonly number[]).includes(saved) ? saved : 20
+  } catch {
+    return 20
+  }
+}
+export const setDashboardLimit = (n: number) => {
+  try {
+    localStorage.setItem(LIMIT_KEY, String(n))
+  } catch {
+    // private mode: keep the default
+  }
+}
 
 /** The user's order: lesson keys (columns), and each lesson's card keys. */
 export type Board = { columns: string[]; cards: Record<string, string[]> }

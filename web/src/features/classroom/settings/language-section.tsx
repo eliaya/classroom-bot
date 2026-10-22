@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Languages } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { setBrowserViewer, usesBrowserViewer } from '../components/pdf-preview'
+import { LIMITS, dashboardLimit, setDashboardLimit } from '../board-model'
 import { useTranslation } from 'react-i18next'
 import {
   Card,
@@ -26,6 +27,7 @@ export function LanguageSection() {
   const { t } = useTranslation()
   const { locale, setLocale } = useLocale()
   const [browserPdf, setBrowserPdf] = useState(usesBrowserViewer)
+  const [limit, setLimit] = useState(dashboardLimit)
 
   return (
     <Card>
@@ -62,6 +64,27 @@ export function LanguageSection() {
             }}
           />
           <Label htmlFor='pdf-browser-viewer'>{t('language.pdfBrowser')}</Label>
+        </div>
+        <div className='mt-4 flex flex-col gap-1.5'>
+          <Label htmlFor='dashboard-limit'>{t('language.dashboardLimit')}</Label>
+          <Select
+            value={String(limit)}
+            onValueChange={(value) => {
+              setDashboardLimit(Number(value))
+              setLimit(Number(value))
+            }}
+          >
+            <SelectTrigger id='dashboard-limit' className='w-full sm:w-64'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LIMITS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardContent>
     </Card>

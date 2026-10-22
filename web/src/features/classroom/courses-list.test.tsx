@@ -57,10 +57,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
       }),
       listPeople: vi.fn(async () => ({ items: PEOPLE })),
       setCourseArchived: vi.fn(async (id: string, archived: boolean) => ({ id, archived })),
-      listTodos: vi.fn(async () => ({
-        items: [{ item_id: 'w1', course_id: '102', title: 'Essay draft', status: 'new', due_date: null }],
-        total: 1,
-      })),
+      getBoard: vi.fn(async () => ({ data: null })),
+      saveBoard: vi.fn(async (data: unknown) => ({ data })),
       getStream: vi.fn(async () => ({
         items: [{ id: 's1', type: 'announcement', title: 'Exam moved', text: 'To Friday', update_time: ago(1) }],
       })),
@@ -223,18 +221,15 @@ describe('CoursesListPage', () => {
     expect(document.body.textContent).toContain('No archived courses.')
   })
 
-  it('lists the to-dos under its own tab when the user has them', async () => {
-    useAuthStore.getState().auth.setUser({
-      id: 1, email: 'user@example.com', name: null, picture_url: null, role: 'user',
-      permissions: ['courses:view', 'todos:view'],
-    })
+  it("shows the lessons' board under the To-do tab", async () => {
     const screen = await render(<CoursesListPage />)
     expect(screen.getByRole('tab').elements().map((el) => el.textContent)).toEqual([
       'Today', 'All courses', 'To-do', 'Archived',
     ])
     await userEvent.click(screen.getByRole('tab', { name: 'To-do' }))
-    await expect.element(screen.getByText('Essay draft')).toBeInTheDocument()
-    // The to-do board stands in for the course table.
+    // Today's lesson (Machine Learning meets today) is a column; the board stands in for the course table.
+    await expect.poll(() => document.querySelectorAll('[data-slot="kanban-column"]').length).toBe(1)
+    expect(document.querySelector('[data-slot="kanban-column"]')?.textContent).toContain('Machine Learning')
     expect(document.querySelector('table')).toBeNull()
   })
 

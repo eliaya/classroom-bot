@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-22
+
+### Changed
+- **The Dashboard is an inbox.** The left pane lists the latest posts of every course (classwork, materials and announcements), newest first, with course, title, type icon, author and time; archived courses are left out. The right pane shows the chosen post: its text or description, due date and attachments, with a link to open it in Classroom. A phone opens a post in a sheet. The layout and styles follow the shadcnblocks Inbox 3 block. Unread state, snoozing and announcement attachments are not shown.
+- **The Courses To-do tab shows the lesson board** that was the Dashboard (Today/Week lessons, teacher filter, drag to reorder). It no longer needs `todos:view`.
+
+### Added
+- **Settings → Language: posts listed on the dashboard** (10, 20, 50 or 100; 20 by default), remembered per device.
+
+### Removed
+- **The to-do Kanban** (Missing / To do / Submitted) on the Courses To-do tab, with its `todo.*` translations and the web client's `listTodos`. `GET /api/todos` is unchanged.
+
 ## [0.28.0] - 2026-10-20
 
 ### Changed

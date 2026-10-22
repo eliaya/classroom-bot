@@ -3,7 +3,6 @@ import { ChevronDown, ChevronUp, Search, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { api, type Course, type CoursePerson, type Post } from '@/lib/api'
-import { useCan } from '@/lib/permissions'
 import { cn, fullTimestamp, humanReadableTime, weekdayLabel } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,7 +29,7 @@ import {
   type CourseRow,
 } from './components/course-sheet'
 import { ClassroomHeader } from './layout-header'
-import { TodoBoard } from './todo-board'
+import { DashboardBoard } from './dashboard-board'
 
 type Period = '30' | '90' | 'year'
 type Band = 'all' | 'high' | 'mid' | 'low'
@@ -87,8 +86,6 @@ export function CoursesListPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Fixed for the page's lifetime so the periods do not shift while it is open.
   const [now] = useState(() => Date.now())
-  // The API would answer 403 otherwise (administrators have no to-dos).
-  const canTodos = useCan('todos:view')
 
   useEffect(() => {
     try {
@@ -267,7 +264,7 @@ export function CoursesListPage() {
   const tabs: { key: StatusTab; label: string }[] = [
     { key: 'today', label: 'courses.statusName.today' },
     { key: 'all', label: 'courses.allCourses' },
-    ...(canTodos ? [{ key: 'todo' as const, label: 'courses.todo' }] : []),
+    { key: 'todo', label: 'courses.todo' },
     { key: 'archived', label: 'courses.archived' },
   ]
 
@@ -303,7 +300,7 @@ export function CoursesListPage() {
           </div>
 
           {tab === 'todo' ? (
-            <TodoBoard />
+            <DashboardBoard />
           ) : (
             <>
               <div className='flex flex-col gap-3 md:flex-row md:items-center'>
