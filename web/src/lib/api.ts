@@ -427,6 +427,16 @@ export type ClassworkResponse = {
   topic_filter?: string | null
 }
 
+export type TodoItem = {
+  item_id: string
+  course_id: string
+  title?: string | null
+  due_date?: string | null
+  status?: string | null
+  course_work_link?: string | null
+  last_updated?: string | null
+}
+
 export type SearchResultKind =
   | 'course'
   | 'coursework'
@@ -602,6 +612,7 @@ export const api = {
     request<{ status: string; run_id: number }>(`/sync/runs/${runId}/clear`, { method: 'POST' }),
   deleteRun: (runId: number) =>
     request<{ status: string; run_id: number }>(`/sync/runs/${runId}`, { method: 'DELETE' }),
+  listTodos: () => request<{ items: TodoItem[]; total: number }>('/todos'),
   /** The dashboard Kanban layout the user saved, or null before the first save. */
   getBoard: <T,>() => request<{ data: T | null }>('/dashboard/board'),
   saveBoard: <T,>(data: T) =>

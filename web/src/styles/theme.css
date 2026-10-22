@@ -60,9 +60,10 @@
   --chart-5: oklch(0.645 0.246 16.439);
 }
 
-/* The dashboard inbox keeps the shadcnblocks inbox3 tokens: neutral, 8px radius.
-   --radius-md is repeated because :root resolves it against its own --radius. */
-.inbox3 {
+/* The dashboard inbox keeps the shadcnblocks inbox7 tokens: neutral, 8px radius.
+   --radius-md and the sidebar colors are repeated because :root resolves them
+   against its own values. */
+.inbox7 {
   --radius: 0.5rem;
   --radius-md: calc(var(--radius) - 2px);
   --background: oklch(1 0 0);
@@ -84,9 +85,13 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
 }
 
-.dark .inbox3 {
+.dark .inbox7 {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -106,6 +111,10 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
 }
 
 @theme inline {

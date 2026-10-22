@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-22
+
+**Upgrade notes.** The web image adds the `vaul` package (drawers): rebuild it with `./scripts/dev.sh`, not `--no-build`.
+
+### Changed
+- **The Dashboard follows the shadcnblocks Inbox 7 block**, replacing the Inbox 3 layout. Four columns: the queues (Inbox, Announcements, Coursework, Materials, Archived, each with its unread count) and the courses; the latest posts (bold while unread, with course, type, age and poster); the chosen post with its poster, time and text; and a details panel (due date, posted time, submission, attachments, Open in Classroom) that can be hidden. Choosing a queue or course opens its newest post. A phone shows the list and opens a post, then its details, in drawers from the bottom. Colors, 8px radius and sizes are the block's. The reply box is shown disabled, as Classroom's API takes no replies; Inbox 7's Unassigned, Assigned, Drafts and Spam queues and its suggested follow-ups have no Classroom counterpart and are left out.
+- **⌘K on the Dashboard searches its posts** and opens the one picked. The app-wide search stays on the header's Search button.
+- **Coursework shows its submission** (Turned in, Assigned, Missing) from `GET /api/todos`, read-only.
+- **Post ages read "6h ago", "2d ago"** ("6 小時前" in Chinese).
+
+### Added
+- **Read state on the Dashboard**, per device: posts updated after the first visit stay unread until opened.
+- **`scripts/setup-push.sh`**, an interactive setup for real-time push sync. It installs and signs in to the Google Cloud CLI if needed, restores the deleted Pub/Sub project or builds the topic, subscription and service account in another project, writes the key and the `.env` settings (keeping backups), recreates the containers and checks the API logs for `Push subscriber started`.
+
 ## [0.29.1] - 2026-10-22
 
 ### Fixed

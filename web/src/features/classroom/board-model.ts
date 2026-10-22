@@ -1,7 +1,7 @@
 /** The dashboard Kanban as saved for the user (GET/PUT /api/dashboard/board):
  * one column per lesson, holding the lesson's posts as cards. */
 import { BookOpen, ClipboardList, Megaphone } from 'lucide-react'
-import type { Course, Post } from '@/lib/api'
+import type { Course, Post, TodoItem } from '@/lib/api'
 
 export const POST_ICON = { announcement: Megaphone, coursework: ClipboardList, material: BookOpen }
 
@@ -125,9 +125,53 @@ const AGE_UNITS = [
   ['hour', 60],
 ] as const
 
-/** inbox3's compact age ("10h", "2d", "1w") in the given language. */
-export function shortAge(iso: string, lang: string, now = Date.now()) {
+/** inbox7's list age ("6h ago", "2d ago") in the given language. */
+export function timeAgo(iso: string, lang: string, now = Date.now()) {
   const minutes = Math.max(0, (now - Date.parse(iso)) / 60_000)
   const [unit, size] = AGE_UNITS.find(([, size]) => minutes >= size) ?? ['minute', 1]
-  return new Intl.NumberFormat(lang, { style: 'unit', unit, unitDisplay: 'narrow' }).format(Math.floor(minutes / size))
+  return new Intl.RelativeTimeFormat(lang, { style: 'narrow' }).format(-Math.floor(minutes / size), unit)
+}
+
+// Per-device read state: posts from before the first visit count as read.
+const SEEN_KEY = 'dashboard-seen'
+export type Seen = { since: string; keys: string[] }
+
+function saveSeen(seen: Seen) {
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify(seen))
+  } catch {
+    // private mode: read state lasts for this visit only
+  }
+}
+
+export function loadSeen(now = new Date().toISOString()): Seen {
+  try {
+    const seen = JSON.parse(localStorage.getItem(SEEN_KEY) ?? 'null') as Partial<Seen> | null
+    if (typeof seen?.since === 'string' && Array.isArray(seen.keys)) return { since: seen.since, keys: seen.keys }
+  } catch {
+    // unreadable: start over
+  }
+  const fresh = { since: now, keys: [] }
+  saveSeen(fresh)
+  return fresh
+}
+
+export const isUnread = (seen: Seen, post: Post) => post.time > seen.since && !seen.keys.includes(cardKey(post))
+
+export function markSeen(seen: Seen, key: string): Seen {
+  if (seen.keys.includes(key)) return seen
+  // shortcut: keeps the last 500 opened posts; an older one updated since the first visit shows unread again.
+  const next = { ...seen, keys: [...seen.keys, key].slice(-500) }
+  saveSeen(next)
+  return next
+}
+
+/** A coursework item's submission, as GET /api/todos groups it. */
+export type Submission = 'turned_in' | 'assigned' | 'missing'
+
+export function submission(todo: TodoItem, now = Date.now()): Submission | undefined {
+  const status = (todo.status ?? '').toLowerCase()
+  if (['turned_in', 'returned', 'reclaimed_by_student'].includes(status)) return 'turned_in'
+  if (!['new', 'created'].includes(status)) return undefined
+  return todo.due_date && todo.due_date < dateKey(now) ? 'missing' : 'assigned'
 }

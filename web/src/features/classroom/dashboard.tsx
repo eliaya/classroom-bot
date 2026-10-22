@@ -12,7 +12,7 @@ export function ClassroomDashboard() {
   return (
     <>
       <ClassroomHeader fixed title={t('dashboard.title')} description={t('dashboard.desc')} />
-      {/* Edge to edge, as the inbox3 block. */}
+      {/* Edge to edge, as the inbox7 block. */}
       <Main fixed className='p-0 sm:px-0 lg:px-0'>
         {canCourses && <DashboardInbox />}
       </Main>
