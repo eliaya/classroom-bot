@@ -61,9 +61,11 @@
 }
 
 /* The dashboard inbox keeps the shadcnblocks inbox7 tokens: neutral, 8px radius.
+   The tag picker keeps tags-multi-1's: the same neutral colors, 10px radius.
    --radius-md and the sidebar colors are repeated because :root resolves them
    against its own values. */
-.inbox7 {
+.inbox7,
+.tags-multi {
   --radius: 0.5rem;
   --radius-md: calc(var(--radius) - 2px);
   --background: oklch(1 0 0);
@@ -91,7 +93,8 @@
   --sidebar-border: oklch(0.922 0 0);
 }
 
-.dark .inbox7 {
+.dark .inbox7,
+.dark .tags-multi {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -115,6 +118,11 @@
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
+}
+
+.tags-multi {
+  --radius: 0.625rem;
+  --radius-md: calc(var(--radius) - 2px);
 }
 
 @theme inline {

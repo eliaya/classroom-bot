@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TagPicker } from '@/features/tags/tag-picker'
 import { CourseClassworkPage } from '../course-classwork'
 import { CoursePeoplePage } from '../course-people'
 import { CourseStreamPage } from '../course-stream'
@@ -123,6 +124,7 @@ export function CourseSheet({ row, periodLabel, relative, onClose, onArchive }: 
             <SheetHeader className='border-b'>
               <SheetTitle className='pe-8 text-xl'>{row.course.name}</SheetTitle>
               <SheetDescription>{row.course.section || t('common.dash')}</SheetDescription>
+              <TagPicker target={`course:${row.course.id}`} className='max-w-md pt-2' />
             </SheetHeader>
             {/* key: every course opens on General. Inactive tabs are unmounted, so
                 each one loads its data only when it is chosen. */}

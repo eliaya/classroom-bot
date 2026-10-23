@@ -446,6 +446,29 @@ class DashboardBoard(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class Tag(SQLModel, table=True):
+    """A user's own tag. Names are unique per user, ignoring case."""
+    __tablename__ = "tags"
+    __table_args__ = (UniqueConstraint("owner_user_id", "name", name="uq_tag_owner_name"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(index=True)
+    name: str
+    created_at: datetime = Field(default_factory=now_jst)
+
+
+class TagAssignment(SQLModel, table=True):
+    """A tag put on something the web UI shows. ``target`` is the web UI's own
+    key for it ("page:/mail", "course:<id>", "post:coursework:<id>", "mail:<thread>",
+    "event:<id>"); the API never reads it."""
+    __tablename__ = "tag_assignments"
+    __table_args__ = (UniqueConstraint("tag_id", "target", name="uq_tag_target"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tag_id: int = Field(foreign_key="tags.id", index=True)
+    target: str = Field(index=True)
+
+
 class AuditRetentionSetting(SQLModel, table=True):
     """Singleton row (id=1) holding the audit-log auto-rotation config.
 

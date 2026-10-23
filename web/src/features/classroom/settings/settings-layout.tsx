@@ -8,6 +8,7 @@ import {
   Languages,
   ScrollText,
   ShieldCheck,
+  Tags,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -23,6 +24,7 @@ type NavItem = { to: string; label: string; icon: LucideIcon; exact?: boolean }
 const navItems: NavItem[] = [
   { to: '/settings', label: 'settings.nav.status', icon: Activity, exact: true },
   { to: '/settings/language', label: 'settings.nav.language', icon: Languages },
+  { to: '/settings/tags', label: 'settings.nav.tags', icon: Tags },
   { to: '/settings/opencloud', label: 'settings.opencloud.title', icon: Cloud },
   { to: '/settings/scheduler', label: 'settings.nav.scheduler', icon: CalendarClock },
   { to: '/settings/audit', label: 'settings.nav.audit', icon: ScrollText },

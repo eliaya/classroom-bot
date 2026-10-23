@@ -56,6 +56,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
 import { gridOffset, layoutColumns, monthGrid } from './calendar-layout'
 import { AttachmentView } from './components/attachment-view'
+import { TagPicker } from '@/features/tags/tag-picker'
+import { cardKey } from './board-model'
 import { ClassroomHeader } from './layout-header'
 
 const HOUR_HEIGHT = 72
@@ -1159,6 +1161,7 @@ export function CalendarPage() {
                         `${openedEvent.from.toLocaleDateString(lang, { dateStyle: 'full' })} · ${eventTime(openedEvent)}`}
                   </span>
                 </div>
+                <TagPicker target={openedPost ? `post:${cardKey(openedPost)}` : `event:${opened.id}`} />
                 {openedEvent?.location && (
                   <div className='flex items-center gap-2'>
                     <MapPin className='size-4 shrink-0 text-muted-foreground' />

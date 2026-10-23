@@ -29,6 +29,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { TagPicker } from '@/features/tags/tag-picker'
 import { LabelManager } from './label-manager'
 import { LabelDot } from './label-dot'
 import { formatMailDate, gmailThreadUrl, initials, labelName } from './mail-utils'
@@ -186,6 +187,7 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
                   <p className='mt-0.5 text-xs text-muted-foreground'>
                     {t('mail.replyTo')} {last.reply_to}
                   </p>
+                  <TagPicker target={`mail:${thread.id}`} className='mt-2 max-w-md' />
                 </div>
               </div>
               <span className='shrink-0 pt-0.5 text-xs text-muted-foreground'>

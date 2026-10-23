@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-23
+
+### Added
+- **Tags.** Each user has their own tags and can put them on every page (the top bar, on wide screens), a course (its pages' top bar and the Courses sheet), a post (the Dashboard details panel and the Calendar sheet, shared between them), a mail conversation and a calendar event. The picker follows the shadcnblocks tags-multi-1 block (Kibo UI Tags) with its neutral tokens and 10px radius: removable pill tags, a searchable list that ticks the chosen ones, and "Create new tag" for a name no tag has. **Settings → Tags** creates, renames and deletes them and shows how many things each is on; deleting a tag takes it off everything. New API: `GET/POST /api/tags`, `PATCH/DELETE /api/tags/{id}`, `GET/PUT /api/tags/assigned`; signing in is enough. The `tags` and `tag_assignments` tables are created at startup.
+
 ## [0.30.0] - 2026-10-22
 
 **Upgrade notes.** The web image adds the `vaul` package (drawers): rebuild it with `./scripts/dev.sh`, not `--no-build`.

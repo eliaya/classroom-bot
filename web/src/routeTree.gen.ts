@@ -27,6 +27,7 @@ import { Route as AuthenticatedCalendarIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedBotIndexRouteImport } from './routes/_authenticated/bot/index'
 import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authenticated/audit/index'
 import { Route as AuthenticatedSettingsUsersRouteImport } from './routes/_authenticated/settings/users'
+import { Route as AuthenticatedSettingsTagsRouteImport } from './routes/_authenticated/settings/tags'
 import { Route as AuthenticatedSettingsSetupRouteImport } from './routes/_authenticated/settings/setup'
 import { Route as AuthenticatedSettingsSchedulerRouteImport } from './routes/_authenticated/settings/scheduler'
 import { Route as AuthenticatedSettingsRolesRouteImport } from './routes/_authenticated/settings/roles'
@@ -136,6 +137,12 @@ const AuthenticatedSettingsUsersRoute =
     path: '/users',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsTagsRoute =
+  AuthenticatedSettingsTagsRouteImport.update({
+    id: '/tags',
+    path: '/tags',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedSettingsSetupRoute =
   AuthenticatedSettingsSetupRouteImport.update({
     id: '/setup',
@@ -233,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
+  '/settings/tags': typeof AuthenticatedSettingsTagsRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/audit/': typeof AuthenticatedAuditIndexRoute
   '/bot/': typeof AuthenticatedBotIndexRoute
@@ -263,6 +271,7 @@ export interface FileRoutesByTo {
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
+  '/settings/tags': typeof AuthenticatedSettingsTagsRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/audit': typeof AuthenticatedAuditIndexRoute
   '/bot': typeof AuthenticatedBotIndexRoute
@@ -297,6 +306,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/_authenticated/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/_authenticated/settings/setup': typeof AuthenticatedSettingsSetupRoute
+  '/_authenticated/settings/tags': typeof AuthenticatedSettingsTagsRoute
   '/_authenticated/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/_authenticated/audit/': typeof AuthenticatedAuditIndexRoute
   '/_authenticated/bot/': typeof AuthenticatedBotIndexRoute
@@ -331,6 +341,7 @@ export interface FileRouteTypes {
     | '/settings/roles'
     | '/settings/scheduler'
     | '/settings/setup'
+    | '/settings/tags'
     | '/settings/users'
     | '/audit/'
     | '/bot/'
@@ -361,6 +372,7 @@ export interface FileRouteTypes {
     | '/settings/roles'
     | '/settings/scheduler'
     | '/settings/setup'
+    | '/settings/tags'
     | '/settings/users'
     | '/audit'
     | '/bot'
@@ -394,6 +406,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/roles'
     | '/_authenticated/settings/scheduler'
     | '/_authenticated/settings/setup'
+    | '/_authenticated/settings/tags'
     | '/_authenticated/settings/users'
     | '/_authenticated/audit/'
     | '/_authenticated/bot/'
@@ -547,6 +560,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsUsersRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/tags': {
+      id: '/_authenticated/settings/tags'
+      path: '/tags'
+      fullPath: '/settings/tags'
+      preLoaderRoute: typeof AuthenticatedSettingsTagsRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/setup': {
       id: '/_authenticated/settings/setup'
       path: '/setup'
@@ -649,6 +669,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsRolesRoute: typeof AuthenticatedSettingsRolesRoute
   AuthenticatedSettingsSchedulerRoute: typeof AuthenticatedSettingsSchedulerRoute
   AuthenticatedSettingsSetupRoute: typeof AuthenticatedSettingsSetupRoute
+  AuthenticatedSettingsTagsRoute: typeof AuthenticatedSettingsTagsRoute
   AuthenticatedSettingsUsersRoute: typeof AuthenticatedSettingsUsersRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -662,6 +683,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsRolesRoute: AuthenticatedSettingsRolesRoute,
     AuthenticatedSettingsSchedulerRoute: AuthenticatedSettingsSchedulerRoute,
     AuthenticatedSettingsSetupRoute: AuthenticatedSettingsSetupRoute,
+    AuthenticatedSettingsTagsRoute: AuthenticatedSettingsTagsRoute,
     AuthenticatedSettingsUsersRoute: AuthenticatedSettingsUsersRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   }

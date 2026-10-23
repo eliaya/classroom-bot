@@ -486,6 +486,9 @@ export type AuditLog = {
   detail?: string | null
 }
 
+/** One of the user's tags; `count` is how many things carry it. */
+export type Tag = { id: number; name: string; count: number }
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
   status: () =>
@@ -536,6 +539,20 @@ export const api = {
     request<Role>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRole: (id: number) =>
     request<{ id: number; deleted: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
+  listTags: () => request<{ items: Tag[]; total: number }>('/tags'),
+  createTag: (name: string) =>
+    request<Tag>('/tags', { method: 'POST', body: JSON.stringify({ name }) }),
+  renameTag: (id: number, name: string) =>
+    request<Tag>(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteTag: (id: number) =>
+    request<{ id: number; deleted: boolean }>(`/tags/${id}`, { method: 'DELETE' }),
+  getAssignedTags: (target: string) =>
+    request<{ target: string; tag_ids: number[] }>(`/tags/assigned?target=${encodeURIComponent(target)}`),
+  setAssignedTags: (target: string, tag_ids: number[]) =>
+    request<{ target: string; tag_ids: number[] }>('/tags/assigned', {
+      method: 'PUT',
+      body: JSON.stringify({ target, tag_ids }),
+    }),
   listMailLabels: () => request<MailLabels>('/mail/labels'),
   listMailThreads: (params: { label: string; q?: string; unread?: boolean; page_token?: string }) => {
     const qs = new URLSearchParams({ label: params.label })

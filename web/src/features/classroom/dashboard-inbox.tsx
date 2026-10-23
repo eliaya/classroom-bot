@@ -42,6 +42,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { TagPicker } from '@/features/tags/tag-picker'
 import { AttachmentView } from './components/attachment-view'
 import {
   POST_ICON,
@@ -688,6 +689,10 @@ function Details({ post, course, author, status, detail }: Shown) {
           {t(`courses.${post.type}`)} · {t('dashboard.posted', { date: fullTimestamp(post.time) })}
         </p>
         {status && <p className={NOTE}>{t(`dashboard.submission.${status}`)}</p>}
+      </div>
+      <div className='flex flex-col gap-3'>
+        <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>{t('tags.label')}</p>
+        <TagPicker target={`post:${cardKey(post)}`} />
       </div>
       <div className='flex flex-col gap-3'>
         {!!attachments.length && (
