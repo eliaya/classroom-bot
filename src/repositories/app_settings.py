@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import now_jst, settings
 from src.database import OWNER_KEY
 from src.models import (
     AuditRetentionSetting, BackupSetting, ClassroomAttachment, ExternalStorageSetting, OpenCloudSetting, SchedulerSetting,
-    UserSchedulerSetting,
+    ThemeSetting, UserSchedulerSetting,
 )
 
 _SINGLETON_ID = 1
@@ -211,8 +211,38 @@ async def update_external_storage_setting(
     enabled: Optional[bool] = None,
 ) -> ExternalStorageSetting:
     row = await get_external_storage_setting(session)
+    if enabled is not None and enabled != row.enabled:
+        # Users with external storage on switch between it and their Drive:
+        # forget what was uploaded (as ``update_opencloud_setting`` does).
+        users = select(OpenCloudSetting.owner_user_id).where(OpenCloudSetting.enabled.is_(True))
+        await session.execute(
+            update(ClassroomAttachment)
+            .where(ClassroomAttachment.owner_user_id.in_(users))
+            .values(opencloud_path=None)
+        )
     if enabled is not None:
         row.enabled = enabled
+    row.updated_at = now_jst()
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+async def get_theme_setting(session: AsyncSession) -> ThemeSetting:
+    """Return the user-panel theme setting (no default theme until the admin picks one)."""
+    row = await session.get(ThemeSetting, _SINGLETON_ID)
+    if row is None:
+        row = ThemeSetting(id=_SINGLETON_ID)
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+    return row
+
+
+async def set_user_default_theme(session: AsyncSession, theme_id: Optional[int]) -> ThemeSetting:
+    row = await get_theme_setting(session)
+    row.user_default_theme_id = theme_id
     row.updated_at = now_jst()
     session.add(row)
     await session.commit()

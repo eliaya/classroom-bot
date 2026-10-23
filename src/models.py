@@ -454,6 +454,8 @@ class Tag(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     owner_user_id: int = Field(index=True)
     name: str
+    # "#rrggbb", or None for the default dot.
+    color: Optional[str] = None
     created_at: datetime = Field(default_factory=now_jst)
 
 
@@ -511,14 +513,39 @@ class ExternalStorageSetting(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class Theme(SQLModel, table=True):
+    """An installed colour theme (from tweakcn.com), shared by everyone.
+
+    ``light`` / ``dark`` are JSON maps of sanitised CSS tokens (``src.themes``).
+    Users pick one for themselves; the admin also picks the user-panel default.
+    """
+    __tablename__ = "themes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(sa_column_kwargs={"unique": True})
+    source: Optional[str] = None  # the tweakcn slug or share id it came from
+    light: str = Field(default="{}")
+    dark: str = Field(default="{}")
+    created_at: datetime = Field(default_factory=now_jst)
+
+
+class ThemeSetting(SQLModel, table=True):
+    """Singleton row (id=1): the theme of a user-panel user who has not picked one."""
+    __tablename__ = "theme_settings"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_default_theme_id: Optional[int] = None
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class OpenCloudSetting(SQLModel, table=True):
     """One row per user: the external storage that user's Drive attachments are
-    moved to (the table name predates the other providers).
+    moved to instead of their own Google Drive (the table name predates the
+    other provider).
 
     ``provider`` is ``opencloud`` or ``nextcloud`` (both WebDAV: ``webdav_url``
     is the space's / user's WebDAV URL and ``app_token`` the app token or app
-    password used for basic auth) or ``gdrive`` (the user's own Google Drive,
-    through their Google connection; only ``folder`` applies).
+    password used for basic auth).
     """
     __tablename__ = "opencloud_user_settings"
 
@@ -713,6 +740,8 @@ class User(SQLModel, table=True):
     is_active: bool = Field(default=True)  # False = sign-in refused, sessions revoked
     created_at: datetime = Field(default_factory=now_jst)
     last_login_at: Optional[datetime] = None
+    # The theme this user picked (Settings → Themes); None = the area's default.
+    theme_id: Optional[int] = None
 
 
 class UserSession(SQLModel, table=True):

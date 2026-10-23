@@ -1,5 +1,5 @@
-"""The signed-in user's Gmail for the Mail page: labels, conversations, and
-organising them (archive, spam, trash, star, read state, labels).
+"""The signed-in user's Gmail for the Dashboard's Mail: labels, conversations,
+and organising them (archive, spam, trash, star, read state, labels).
 
 Reads come from the local Gmail archive (``services.gmail_archive``, kept
 current by its timed runs and Gmail push), including mail Gmail has deleted;
@@ -100,13 +100,15 @@ async def list_threads(
     q: str = Query(default="", max_length=500),
     unread: bool = False,
     page_token: Optional[str] = Query(default=None, max_length=200),
+    # Conversations per page: the Dashboard's per-page count; Gmail's default page without it.
+    limit: Optional[int] = Query(default=None, ge=1, le=100),
     session: AsyncSession = Depends(get_owned_session),
 ) -> dict:
     if settings.GMAIL_ARCHIVE_ENABLED:
         offset = int(page_token) if page_token and page_token.isdigit() else 0
-        return await archive.list_threads(session, label, q, unread, offset)
+        return await archive.list_threads(session, label, q, unread, offset, limit)
     service = await google_connections.service_for(session)
-    return await _gmail(service.gmail_threads(label, q, unread, page_token))
+    return await _gmail(service.gmail_threads(label, q, unread, page_token, limit))
 
 
 @router.get("/threads/{thread_id}")

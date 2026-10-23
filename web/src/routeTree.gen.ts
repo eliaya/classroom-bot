@@ -21,12 +21,13 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedSyncIndexRouteImport } from './routes/_authenticated/sync/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSearchIndexRouteImport } from './routes/_authenticated/search/index'
-import { Route as AuthenticatedMailIndexRouteImport } from './routes/_authenticated/mail/index'
+import { Route as AuthenticatedMaterialsIndexRouteImport } from './routes/_authenticated/materials/index'
 import { Route as AuthenticatedCoursesIndexRouteImport } from './routes/_authenticated/courses/index'
 import { Route as AuthenticatedCalendarIndexRouteImport } from './routes/_authenticated/calendar/index'
 import { Route as AuthenticatedBotIndexRouteImport } from './routes/_authenticated/bot/index'
 import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authenticated/audit/index'
 import { Route as AuthenticatedSettingsUsersRouteImport } from './routes/_authenticated/settings/users'
+import { Route as AuthenticatedSettingsThemesRouteImport } from './routes/_authenticated/settings/themes'
 import { Route as AuthenticatedSettingsTagsRouteImport } from './routes/_authenticated/settings/tags'
 import { Route as AuthenticatedSettingsSetupRouteImport } from './routes/_authenticated/settings/setup'
 import { Route as AuthenticatedSettingsSchedulerRouteImport } from './routes/_authenticated/settings/scheduler'
@@ -35,6 +36,7 @@ import { Route as AuthenticatedSettingsOpencloudRouteImport } from './routes/_au
 import { Route as AuthenticatedSettingsLanguageRouteImport } from './routes/_authenticated/settings/language'
 import { Route as AuthenticatedSettingsBackupRouteImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAuditRouteImport } from './routes/_authenticated/settings/audit'
+import { Route as AuthenticatedMaterialsSplatRouteImport } from './routes/_authenticated/materials/$'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedCoursesCourseIdRouteRouteImport } from './routes/_authenticated/courses/$courseId/route'
 import { Route as AuthenticatedCoursesCourseIdIndexRouteImport } from './routes/_authenticated/courses/$courseId/index'
@@ -104,11 +106,12 @@ const AuthenticatedSearchIndexRoute =
     path: '/search/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedMailIndexRoute = AuthenticatedMailIndexRouteImport.update({
-  id: '/mail/',
-  path: '/mail/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
+const AuthenticatedMaterialsIndexRoute =
+  AuthenticatedMaterialsIndexRouteImport.update({
+    id: '/materials/',
+    path: '/materials/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCoursesIndexRoute =
   AuthenticatedCoursesIndexRouteImport.update({
     id: '/courses/',
@@ -135,6 +138,12 @@ const AuthenticatedSettingsUsersRoute =
   AuthenticatedSettingsUsersRouteImport.update({
     id: '/users',
     path: '/users',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+const AuthenticatedSettingsThemesRoute =
+  AuthenticatedSettingsThemesRouteImport.update({
+    id: '/themes',
+    path: '/themes',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 const AuthenticatedSettingsTagsRoute =
@@ -185,6 +194,12 @@ const AuthenticatedSettingsAuditRoute =
     path: '/audit',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedMaterialsSplatRoute =
+  AuthenticatedMaterialsSplatRouteImport.update({
+    id: '/materials/$',
+    path: '/materials/$',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -233,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/materials/$': typeof AuthenticatedMaterialsSplatRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
@@ -241,12 +257,13 @@ export interface FileRoutesByFullPath {
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
   '/settings/tags': typeof AuthenticatedSettingsTagsRoute
+  '/settings/themes': typeof AuthenticatedSettingsThemesRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/audit/': typeof AuthenticatedAuditIndexRoute
   '/bot/': typeof AuthenticatedBotIndexRoute
   '/calendar/': typeof AuthenticatedCalendarIndexRoute
   '/courses/': typeof AuthenticatedCoursesIndexRoute
-  '/mail/': typeof AuthenticatedMailIndexRoute
+  '/materials/': typeof AuthenticatedMaterialsIndexRoute
   '/search/': typeof AuthenticatedSearchIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/sync/': typeof AuthenticatedSyncIndexRoute
@@ -264,6 +281,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/materials/$': typeof AuthenticatedMaterialsSplatRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
@@ -272,12 +290,13 @@ export interface FileRoutesByTo {
   '/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/settings/setup': typeof AuthenticatedSettingsSetupRoute
   '/settings/tags': typeof AuthenticatedSettingsTagsRoute
+  '/settings/themes': typeof AuthenticatedSettingsThemesRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/audit': typeof AuthenticatedAuditIndexRoute
   '/bot': typeof AuthenticatedBotIndexRoute
   '/calendar': typeof AuthenticatedCalendarIndexRoute
   '/courses': typeof AuthenticatedCoursesIndexRoute
-  '/mail': typeof AuthenticatedMailIndexRoute
+  '/materials': typeof AuthenticatedMaterialsIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/sync': typeof AuthenticatedSyncIndexRoute
@@ -299,6 +318,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/courses/$courseId': typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/_authenticated/materials/$': typeof AuthenticatedMaterialsSplatRoute
   '/_authenticated/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
   '/_authenticated/settings/language': typeof AuthenticatedSettingsLanguageRoute
@@ -307,12 +327,13 @@ export interface FileRoutesById {
   '/_authenticated/settings/scheduler': typeof AuthenticatedSettingsSchedulerRoute
   '/_authenticated/settings/setup': typeof AuthenticatedSettingsSetupRoute
   '/_authenticated/settings/tags': typeof AuthenticatedSettingsTagsRoute
+  '/_authenticated/settings/themes': typeof AuthenticatedSettingsThemesRoute
   '/_authenticated/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/_authenticated/audit/': typeof AuthenticatedAuditIndexRoute
   '/_authenticated/bot/': typeof AuthenticatedBotIndexRoute
   '/_authenticated/calendar/': typeof AuthenticatedCalendarIndexRoute
   '/_authenticated/courses/': typeof AuthenticatedCoursesIndexRoute
-  '/_authenticated/mail/': typeof AuthenticatedMailIndexRoute
+  '/_authenticated/materials/': typeof AuthenticatedMaterialsIndexRoute
   '/_authenticated/search/': typeof AuthenticatedSearchIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/sync/': typeof AuthenticatedSyncIndexRoute
@@ -334,6 +355,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/courses/$courseId'
     | '/errors/$error'
+    | '/materials/$'
     | '/settings/audit'
     | '/settings/backup'
     | '/settings/language'
@@ -342,12 +364,13 @@ export interface FileRouteTypes {
     | '/settings/scheduler'
     | '/settings/setup'
     | '/settings/tags'
+    | '/settings/themes'
     | '/settings/users'
     | '/audit/'
     | '/bot/'
     | '/calendar/'
     | '/courses/'
-    | '/mail/'
+    | '/materials/'
     | '/search/'
     | '/settings/'
     | '/sync/'
@@ -365,6 +388,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/'
     | '/errors/$error'
+    | '/materials/$'
     | '/settings/audit'
     | '/settings/backup'
     | '/settings/language'
@@ -373,12 +397,13 @@ export interface FileRouteTypes {
     | '/settings/scheduler'
     | '/settings/setup'
     | '/settings/tags'
+    | '/settings/themes'
     | '/settings/users'
     | '/audit'
     | '/bot'
     | '/calendar'
     | '/courses'
-    | '/mail'
+    | '/materials'
     | '/search'
     | '/settings'
     | '/sync'
@@ -399,6 +424,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/courses/$courseId'
     | '/_authenticated/errors/$error'
+    | '/_authenticated/materials/$'
     | '/_authenticated/settings/audit'
     | '/_authenticated/settings/backup'
     | '/_authenticated/settings/language'
@@ -407,12 +433,13 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/scheduler'
     | '/_authenticated/settings/setup'
     | '/_authenticated/settings/tags'
+    | '/_authenticated/settings/themes'
     | '/_authenticated/settings/users'
     | '/_authenticated/audit/'
     | '/_authenticated/bot/'
     | '/_authenticated/calendar/'
     | '/_authenticated/courses/'
-    | '/_authenticated/mail/'
+    | '/_authenticated/materials/'
     | '/_authenticated/search/'
     | '/_authenticated/settings/'
     | '/_authenticated/sync/'
@@ -518,11 +545,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSearchIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/mail/': {
-      id: '/_authenticated/mail/'
-      path: '/mail'
-      fullPath: '/mail/'
-      preLoaderRoute: typeof AuthenticatedMailIndexRouteImport
+    '/_authenticated/materials/': {
+      id: '/_authenticated/materials/'
+      path: '/materials'
+      fullPath: '/materials/'
+      preLoaderRoute: typeof AuthenticatedMaterialsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/courses/': {
@@ -558,6 +585,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/settings/users'
       preLoaderRoute: typeof AuthenticatedSettingsUsersRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
+    '/_authenticated/settings/themes': {
+      id: '/_authenticated/settings/themes'
+      path: '/themes'
+      fullPath: '/settings/themes'
+      preLoaderRoute: typeof AuthenticatedSettingsThemesRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
     '/_authenticated/settings/tags': {
@@ -616,6 +650,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsAuditRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/materials/$': {
+      id: '/_authenticated/materials/$'
+      path: '/materials/$'
+      fullPath: '/materials/$'
+      preLoaderRoute: typeof AuthenticatedMaterialsSplatRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -670,6 +711,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsSchedulerRoute: typeof AuthenticatedSettingsSchedulerRoute
   AuthenticatedSettingsSetupRoute: typeof AuthenticatedSettingsSetupRoute
   AuthenticatedSettingsTagsRoute: typeof AuthenticatedSettingsTagsRoute
+  AuthenticatedSettingsThemesRoute: typeof AuthenticatedSettingsThemesRoute
   AuthenticatedSettingsUsersRoute: typeof AuthenticatedSettingsUsersRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -684,6 +726,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsSchedulerRoute: AuthenticatedSettingsSchedulerRoute,
     AuthenticatedSettingsSetupRoute: AuthenticatedSettingsSetupRoute,
     AuthenticatedSettingsTagsRoute: AuthenticatedSettingsTagsRoute,
+    AuthenticatedSettingsThemesRoute: AuthenticatedSettingsThemesRoute,
     AuthenticatedSettingsUsersRoute: AuthenticatedSettingsUsersRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   }
@@ -722,11 +765,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedCoursesCourseIdRouteRoute: typeof AuthenticatedCoursesCourseIdRouteRouteWithChildren
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
+  AuthenticatedMaterialsSplatRoute: typeof AuthenticatedMaterialsSplatRoute
   AuthenticatedAuditIndexRoute: typeof AuthenticatedAuditIndexRoute
   AuthenticatedBotIndexRoute: typeof AuthenticatedBotIndexRoute
   AuthenticatedCalendarIndexRoute: typeof AuthenticatedCalendarIndexRoute
   AuthenticatedCoursesIndexRoute: typeof AuthenticatedCoursesIndexRoute
-  AuthenticatedMailIndexRoute: typeof AuthenticatedMailIndexRoute
+  AuthenticatedMaterialsIndexRoute: typeof AuthenticatedMaterialsIndexRoute
   AuthenticatedSearchIndexRoute: typeof AuthenticatedSearchIndexRoute
   AuthenticatedSyncIndexRoute: typeof AuthenticatedSyncIndexRoute
 }
@@ -737,11 +781,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCoursesCourseIdRouteRoute:
     AuthenticatedCoursesCourseIdRouteRouteWithChildren,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
+  AuthenticatedMaterialsSplatRoute: AuthenticatedMaterialsSplatRoute,
   AuthenticatedAuditIndexRoute: AuthenticatedAuditIndexRoute,
   AuthenticatedBotIndexRoute: AuthenticatedBotIndexRoute,
   AuthenticatedCalendarIndexRoute: AuthenticatedCalendarIndexRoute,
   AuthenticatedCoursesIndexRoute: AuthenticatedCoursesIndexRoute,
-  AuthenticatedMailIndexRoute: AuthenticatedMailIndexRoute,
+  AuthenticatedMaterialsIndexRoute: AuthenticatedMaterialsIndexRoute,
   AuthenticatedSearchIndexRoute: AuthenticatedSearchIndexRoute,
   AuthenticatedSyncIndexRoute: AuthenticatedSyncIndexRoute,
 }

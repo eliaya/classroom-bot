@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link, Outlet } from '@tanstack/react-router'
 import {
   Activity,
@@ -6,6 +7,7 @@ import {
   Cloud,
   DatabaseBackup,
   Languages,
+  Palette,
   ScrollText,
   ShieldCheck,
   Tags,
@@ -15,6 +17,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { buttonVariants } from '@/components/ui/button'
 import { Main } from '@/components/layout/main'
+import { api } from '@/lib/api'
 import { canOpen, usePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { ClassroomHeader } from '../layout-header'
@@ -25,6 +28,7 @@ const navItems: NavItem[] = [
   { to: '/settings', label: 'settings.nav.status', icon: Activity, exact: true },
   { to: '/settings/language', label: 'settings.nav.language', icon: Languages },
   { to: '/settings/tags', label: 'settings.nav.tags', icon: Tags },
+  { to: '/settings/themes', label: 'settings.nav.themes', icon: Palette },
   { to: '/settings/opencloud', label: 'settings.opencloud.title', icon: Cloud },
   { to: '/settings/scheduler', label: 'settings.nav.scheduler', icon: CalendarClock },
   { to: '/settings/audit', label: 'settings.nav.audit', icon: ScrollText },
@@ -38,6 +42,19 @@ const navItems: NavItem[] = [
 export function SettingsLayout() {
   const { t } = useTranslation()
   const permissions = usePermissions()
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    api
+      .version()
+      .then((res) => {
+        if (res.version) setVersion(res.version)
+      })
+      .catch(() => {
+        // silent fail, version display is non-critical
+      })
+  }, [])
+
   return (
     <>
       <ClassroomHeader fixed title={t('settings.title')} description={t('settings.desc')} />
@@ -62,6 +79,10 @@ export function SettingsLayout() {
                 </Link>
               ))}
             </nav>
+            {/* The app's version, moved here from the main sidebar's footer. */}
+            <p className='mt-3 px-4 font-mono text-xs text-muted-foreground select-none lg:mt-4'>
+              {version ? t('sidebar.appVersion', { version }) : t('sidebar.appName')}
+            </p>
           </aside>
           <div className='flex flex-1 flex-col gap-4 sm:gap-6'>
             <Outlet />

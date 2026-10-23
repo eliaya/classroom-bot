@@ -226,7 +226,7 @@ async def delete_sync_run(
 
 class OpenCloudUpdate(BaseModel):
     enabled: Optional[bool] = None
-    provider: Optional[Literal["opencloud", "nextcloud", "gdrive"]] = None
+    provider: Optional[Literal["opencloud", "nextcloud"]] = None
     webdav_url: Optional[str] = Field(default=None, max_length=500, pattern=r"^(https?://\S+)?$")
     username: Optional[str] = Field(default=None, max_length=200)
     # Write-only. Empty/omitted keeps the stored token.
@@ -268,14 +268,7 @@ async def update_opencloud_settings(
     candidate = OpenCloudSetting(**{**row.model_dump(), **changes})
     if candidate.enabled and not external.enabled:
         raise HTTPException(status_code=400, detail="External storage is turned off by the administrator.")
-    if candidate.enabled and candidate.provider == "gdrive":
-        if not (await google_connections.service_for(session)).has_drive_write_scope():
-            raise HTTPException(
-                status_code=400,
-                detail="Google Drive storage needs permission to create files. "
-                       "Connect Google again (Settings → Status) and allow it, then save.",
-            )
-    elif candidate.enabled:
+    if candidate.enabled:
         # Refuse to switch on a destination that doesn't work, rather than
         # letting every later sync fail quietly in the log.
         if not (candidate.webdav_url and candidate.username and candidate.app_token):

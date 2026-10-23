@@ -1,5 +1,16 @@
 import type { TFunction } from 'i18next'
+import { type LucideIcon, Archive, ArchiveX, File, Inbox, OctagonAlert, Send, Trash2 } from 'lucide-react'
 import type { MailLabel } from '@/lib/api'
+
+export const MAILBOX_ICONS: Record<string, LucideIcon> = {
+  INBOX: Inbox,
+  DRAFT: File,
+  SENT: Send,
+  SPAM: OctagonAlert,
+  TRASH: Trash2,
+  ARCHIVE: Archive,
+  DELETED: ArchiveX,
+}
 
 export function labelName(t: TFunction, label: Pick<MailLabel, 'id' | 'name' | 'type'>): string {
   if (label.type === 'user') return label.name

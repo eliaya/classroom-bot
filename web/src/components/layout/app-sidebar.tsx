@@ -1,10 +1,7 @@
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useLayout } from '@/context/layout-provider'
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -14,28 +11,13 @@ import {
 } from '@/components/ui/sidebar'
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
-import { NavUser } from './nav-user'
-import { api } from '@/lib/api'
 import { visibleNav } from '@/lib/permissions'
 import { useAuthStore } from '@/stores/auth-store'
 
 export function AppSidebar() {
-  const { t } = useTranslation()
   const { collapsible, variant } = useLayout()
-  const [version, setVersion] = useState<string | null>(null)
   const team = sidebarData.teams[0]
   const user = useAuthStore((state) => state.auth.user)
-
-  useEffect(() => {
-    api
-      .version()
-      .then((res) => {
-        if (res.version) setVersion(res.version)
-      })
-      .catch(() => {
-        // silent fail, version display is non-critical
-      })
-  }, [])
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
@@ -66,19 +48,6 @@ export function AppSidebar() {
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser
-          user={{
-            name: user?.name || user?.email || '',
-            email: user?.email ?? '',
-            avatar: user?.picture_url ?? '',
-          }}
-        />
-        {/* Version display in admin sidebar */}
-        <div className="px-3 py-1 text-center text-[10px] font-mono text-muted-foreground/70 select-none border-t border-sidebar-border/50 mt-1">
-          {version ? t('sidebar.appVersion', { version }) : t('sidebar.appName')}
-        </div>
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useTagsStore } from '@/stores/tags-store'
 import { api, type Tag } from '@/lib/api'
@@ -15,14 +15,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { TagDot } from '@/features/tags/tag-dot'
+import { TagEditDialog } from '@/features/tags/tag-edit-dialog'
 
-/** The user's tags: create, rename and delete them. They are put on pages,
+/** The user's tags: create, edit (name and dot color) and delete them. They are put on pages,
  *  courses, posts, mail and events from the tag picker on each page. */
 export function TagsSection() {
   const { t } = useTranslation()
   const tags = useTagsStore((s) => s.tags)
   const load = useTagsStore((s) => s.load)
   const [newName, setNewName] = useState('')
+  const [editing, setEditing] = useState<Tag | null>(null)
   const [deleting, setDeleting] = useState<Tag | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -90,17 +93,17 @@ export function TagsSection() {
           <ul className='divide-y rounded-md border'>
             {tags.map((tag) => (
               <TagRow
-                key={`${tag.id}:${tag.name}`}
+                key={tag.id}
                 tag={tag}
-                onRename={(name) =>
-                  void run(() => api.renameTag(tag.id, name), t('common.saved'))
-                }
+                onEdit={() => setEditing(tag)}
                 onDelete={() => setDeleting(tag)}
               />
             ))}
           </ul>
         )}
       </CardContent>
+
+      <TagEditDialog tag={editing} onClose={() => setEditing(null)} />
 
       <ConfirmDialog
         open={deleting !== null}
@@ -121,39 +124,32 @@ export function TagsSection() {
 
 function TagRow({
   tag,
-  onRename,
+  onEdit,
   onDelete,
 }: {
   tag: Tag
-  onRename: (name: string) => void
+  onEdit: () => void
   onDelete: () => void
 }) {
   const { t } = useTranslation()
-  const [name, setName] = useState(tag.name)
-  const changed = name.trim() !== '' && name.trim() !== tag.name
   return (
-    <li className='flex flex-wrap items-center gap-3 p-3'>
-      <form
-        className='flex min-w-0 flex-1 items-center gap-2'
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (changed) onRename(name.trim())
-        }}
-      >
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={64}
-          aria-label={t('settings.tags.name')}
-          className='h-8 max-w-56'
-        />
-        <Button type='submit' size='sm' variant='outline' disabled={!changed}>
-          {t('settings.tags.rename')}
-        </Button>
-      </form>
+    <li className='flex items-center gap-3 p-3'>
+      <TagDot color={tag.color} className='size-2.5' />
+      <span className='min-w-0 flex-1 truncate text-sm font-medium'>
+        {tag.name}
+      </span>
       <Badge variant='secondary' className='rounded-full'>
         {t('settings.tags.count', { count: tag.count })}
       </Badge>
+      <Button
+        size='icon'
+        variant='ghost'
+        className='size-8'
+        onClick={onEdit}
+        aria-label={t('tags.editNamed', { name: tag.name })}
+      >
+        <Pencil className='size-4' />
+      </Button>
       <Button
         size='icon'
         variant='ghost'

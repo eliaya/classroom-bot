@@ -25,6 +25,22 @@ logger = logging.getLogger("classroom_sync.attachments")
 
 T = TypeVar("T")
 
+# Top folder of the user's own Google Drive, the default home of synced files.
+DRIVE_FOLDER = "Classroom"
+
+
+async def storage_kind(session: AsyncSession) -> str:
+    """Where the session owner's synced files go: ``opencloud`` / ``nextcloud``
+    when their external storage is on (and the admin allows it), else
+    ``gdrive`` (their own Google Drive) when Google granted file creation,
+    else ``local`` (kept on this server)."""
+    oc = await app_settings.get_opencloud_setting(session)
+    if oc.enabled and (await app_settings.get_external_storage_setting(session)).enabled:
+        return oc.provider
+    if (await google_connections.service_for(session)).has_drive_write_scope():
+        return "gdrive"
+    return "local"
+
 
 async def _audit_opencloud(
     session: AsyncSession, course_id: str, result: Dict[str, Any], start: float
@@ -158,14 +174,16 @@ class AttachmentSyncService:
         )
         await session.commit()
 
-        # Copy to OpenCloud last and guarded: a remote outage must never fail the sync.
+        # Copy to Drive / external storage last and guarded: a remote outage
+        # must never fail the sync.
         try:
-            oc = await app_settings.get_opencloud_setting(session)
-            if oc.enabled and (await app_settings.get_external_storage_setting(session)).enabled:
+            kind = await storage_kind(session)
+            if kind != "local":
+                oc = await app_settings.get_opencloud_setting(session)
                 start = time.perf_counter()
                 result: Dict[str, Any] = {"uploaded": 0, "failed": 0, "error": None}
                 try:
-                    await self._upload_to_opencloud(session, oc, course_id, result)
+                    await self._upload_to_opencloud(session, oc, kind, course_id, result)
                     stats["opencloud"] = result["uploaded"]
                     if run_id is not None and result["uploaded"]:
                         # Shown to the user as a notification when the run ends.
@@ -190,9 +208,10 @@ class AttachmentSyncService:
         return stats
 
     async def _upload_to_opencloud(
-        self, session: AsyncSession, oc: OpenCloudSetting, course_id: str, result: Dict[str, Any]
+        self, session: AsyncSession, oc: OpenCloudSetting, kind: str, course_id: str,
+        result: Dict[str, Any],
     ) -> None:
-        """Move every fetched file to OpenCloud, at
+        """Move every fetched file to the ``kind`` storage, at
         ``<folder>/<course name>/<file name>``, counting into ``result``
         (uploaded / failed / first error) as it goes so a crash keeps the tally.
 
@@ -205,13 +224,14 @@ class AttachmentSyncService:
             if r.fetch_status == "fetched" and r.local_path
         ]
         course = await cache.get_cached_course(session, course_id)
-        folder = [_safe_name(p) for p in oc.folder.split("/") if p.strip()]
+        top = DRIVE_FOLDER if kind == "gdrive" else oc.folder
+        folder = [_safe_name(p) for p in top.split("/") if p.strip()]
         folder.append(_safe_name((course.name if course else None) or course_id))
         # Remote path -> Drive file already stored there. The same Drive file on
         # two items shares one remote copy; different files never overwrite.
         taken = {r.opencloud_path: r.drive_file_id for r in rows if r.opencloud_path}
         storage_root = Path(settings.ATTACHMENT_STORAGE_DIR)
-        async with self._destination(session, oc) as put:
+        async with self._destination(session, oc, kind) as put:
             for r in rows:
                 full = storage_root / r.local_path
                 if not r.opencloud_path:
@@ -248,23 +268,21 @@ class AttachmentSyncService:
         await session.commit()
 
     async def read_external(self, session: AsyncSession, path: str) -> bytes:
-        """The content of a file moved to the user's external storage."""
-        oc = await app_settings.get_opencloud_setting(session)
-        if oc.provider == "gdrive":
+        """The content of a file moved to the user's Drive or external storage."""
+        # local: put in Drive before the scope was lost, so Drive still has it.
+        if await storage_kind(session) in ("gdrive", "local"):
             service = await google_connections.service_for(session)
             return await service.download_drive_path(path)
-        async with opencloud.client(oc) as client:
+        async with opencloud.client(await app_settings.get_opencloud_setting(session)) as client:
             return await opencloud.get(client, path)
 
     @asynccontextmanager
     async def _destination(
-        self, session: AsyncSession, oc: OpenCloudSetting
+        self, session: AsyncSession, oc: OpenCloudSetting, kind: str
     ) -> AsyncIterator[Callable[[str, bytes], Awaitable[None]]]:
-        """``put(path, data)`` for the user's external storage provider."""
-        if oc.provider == "gdrive":
+        """``put(path, data)`` for the ``kind`` storage."""
+        if kind == "gdrive":
             service = await google_connections.service_for(session)
-            if not service.has_drive_write_scope():
-                raise ValueError("Google Drive storage is not permitted; connect Google again.")
             folders: Dict[str, str] = {}
 
             async def put(path: str, data: bytes) -> None:

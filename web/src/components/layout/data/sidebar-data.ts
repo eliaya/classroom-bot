@@ -1,8 +1,8 @@
 import {
   CalendarDays,
+  FolderOpen,
   GraduationCap,
   LayoutDashboard,
-  Mail,
   RefreshCw,
   ScrollText,
   Settings,
@@ -40,9 +40,9 @@ export const sidebarData: SidebarData = {
           icon: CalendarDays,
         },
         {
-          title: 'nav.mail',
-          url: '/mail',
-          icon: Mail,
+          title: 'nav.materials',
+          url: '/materials',
+          icon: FolderOpen,
         },
         {
           title: 'nav.sync',

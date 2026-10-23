@@ -61,3 +61,25 @@ async def test_tags_crud_assign_and_isolation(sign_in):
 async def test_tags_need_a_session():
     async with _client() as client:
         assert (await client.get("/api/tags")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_tag_color_and_targets(sign_in):
+    async with _client() as alice, _client() as bob:
+        await sign_in(alice, permissions=["courses:view"], email="alice@example.com")
+        await sign_in(bob, permissions=["courses:view"], email="bob@example.com")
+
+        tag = (await alice.post("/api/tags", json={"name": "Exam", "color": "#ef4444"})).json()
+        assert (tag["color"], tag["count"]) == ("#ef4444", 0) and tag["created_at"]
+        assert (await alice.post("/api/tags", json={"name": "Bad", "color": "red"})).status_code == 422
+
+        # Renaming keeps the color; recoloring keeps the name; null clears the color.
+        assert (await alice.patch(f"/api/tags/{tag['id']}", json={"name": "Exams"})).json()["color"] == "#ef4444"
+        assert (await alice.patch(f"/api/tags/{tag['id']}", json={"color": "#3b82f6"})).json()["name"] == "Exams"
+        assert (await alice.patch(f"/api/tags/{tag['id']}", json={"color": None})).json()["color"] is None
+
+        for target in ("post:coursework:1", "mail:t1"):
+            await alice.put("/api/tags/assigned", json={"target": target, "tag_ids": [tag["id"]]})
+        res = (await alice.get(f"/api/tags/{tag['id']}/targets")).json()
+        assert res["targets"] == ["mail:t1", "post:coursework:1"]
+        assert (await bob.get(f"/api/tags/{tag['id']}/targets")).status_code == 404

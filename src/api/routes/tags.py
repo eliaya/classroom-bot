@@ -1,12 +1,14 @@
 """The signed-in user's tags and what they put them on.
 
-Tags are created, renamed and deleted in Settings → Tags, and created and put
-on a page, course, post, mail conversation or calendar event from the tag
-picker on that page. Each user sees only their own; tagging changes no
+Tags are managed in Settings → Tags (create, edit name and dot color, delete),
+edited from the Dashboard's tag list too, and created and put on a page,
+course, post, mail conversation or calendar event from the tag picker there. Each user sees only their own; tagging changes no
 Classroom, Gmail or Calendar data, so being signed in is enough.
 """
 
 from __future__ import annotations
+
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -23,13 +25,34 @@ router = APIRouter(prefix="/tags", tags=["tags"])
 MAX_TARGET = 512
 
 
+# A dot color: "#rrggbb", as the color picker gives it.
+COLOR = r"^#[0-9a-fA-F]{6}$"
+
+
 class TagIn(BaseModel):
     name: str = Field(min_length=1, max_length=64)
+    color: Optional[str] = Field(default=None, pattern=COLOR)
+
+
+class TagUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    # Explicit null clears the color; omitted leaves it unchanged.
+    color: Optional[str] = Field(default=None, pattern=COLOR)
 
 
 class AssignedIn(BaseModel):
     target: str = Field(min_length=1, max_length=MAX_TARGET)
     tag_ids: list[int]
+
+
+def _serialize(tag: Tag, count: int = 0) -> dict:
+    return {
+        "id": tag.id,
+        "name": tag.name,
+        "color": tag.color,
+        "created_at": tag.created_at.isoformat(),
+        "count": count,
+    }
 
 
 async def _mine(session: AsyncSession, principal: Principal) -> list[Tag]:
@@ -72,7 +95,7 @@ async def list_tags(
             )
         ).all()
     )
-    items = [{"id": t.id, "name": t.name, "count": counts.get(t.id, 0)} for t in tags]
+    items = [_serialize(t, counts.get(t.id, 0)) for t in tags]
     return {"items": items, "total": len(items)}
 
 
@@ -82,25 +105,33 @@ async def create_tag(
     principal: Principal = Depends(get_principal),
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    tag = Tag(owner_user_id=principal.user_id, name=await _clean_name(session, principal, body.name))
+    tag = Tag(
+        owner_user_id=principal.user_id,
+        name=await _clean_name(session, principal, body.name),
+        color=body.color,
+    )
     session.add(tag)
     await session.commit()
     await session.refresh(tag)
-    return {"id": tag.id, "name": tag.name, "count": 0}
+    return _serialize(tag)
 
 
 @router.patch("/{tag_id}")
-async def rename_tag(
+async def update_tag(
     tag_id: int,
-    body: TagIn,
+    body: TagUpdate,
     principal: Principal = Depends(get_principal),
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     tag = await _my_tag(session, principal, tag_id)
-    tag.name = await _clean_name(session, principal, body.name, tag_id)
+    fields = body.model_dump(exclude_unset=True)
+    if fields.get("name") is not None:
+        tag.name = await _clean_name(session, principal, fields["name"], tag_id)
+    if "color" in fields:
+        tag.color = fields["color"]
     session.add(tag)
     await session.commit()
-    return {"id": tag.id, "name": tag.name}
+    return _serialize(tag)
 
 
 @router.delete("/{tag_id}")
@@ -115,6 +146,18 @@ async def delete_tag(
     await session.delete(tag)
     await session.commit()
     return {"id": tag_id, "deleted": True}
+
+
+@router.get("/{tag_id}/targets")
+async def list_targets(
+    tag_id: int,
+    principal: Principal = Depends(get_principal),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """What the tag is on, for the Dashboard's tag filter."""
+    await _my_tag(session, principal, tag_id)
+    result = await session.execute(select(TagAssignment.target).where(TagAssignment.tag_id == tag_id))
+    return {"id": tag_id, "targets": sorted(result.scalars().all())}
 
 
 @router.get("/assigned")

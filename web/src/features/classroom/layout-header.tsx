@@ -26,8 +26,8 @@ type ClassroomHeaderProps = {
   title?: string
   /** Shown as a tooltip on the title (the old in-page subtitle). */
   description?: string
-  /** What the header's tags are on; the page itself by default. */
-  tagTarget?: string
+  /** What the header's tags are on; the page itself by default, none for null. */
+  tagTarget?: string | null
 }
 
 export function ClassroomHeader({ topNav, fixed, title, description, tagTarget }: ClassroomHeaderProps) {
@@ -50,10 +50,12 @@ export function ClassroomHeader({ topNav, fixed, title, description, tagTarget }
         ))}
       {/* Wide screens only: the top bar has no room beside the title on a phone.
           Its height is capped so many tags scroll instead of growing the bar. */}
-      <TagPicker
-        target={tagTarget ?? `page:${pathname}`}
-        className='hidden min-w-0 flex-1 lg:block lg:max-w-60 xl:max-w-80 [&_[role=combobox]]:max-h-12 [&_[role=combobox]]:overflow-y-auto'
-      />
+      {tagTarget !== null && (
+        <TagPicker
+          target={tagTarget ?? `page:${pathname}`}
+          className='hidden min-w-0 flex-1 lg:block lg:max-w-60 xl:max-w-80 [&_[role=combobox]]:max-h-12 [&_[role=combobox]]:overflow-y-auto'
+        />
+      )}
       <Search className={topNav || title ? undefined : 'ms-auto'} />
       <ThemeSwitch />
       <ConfigDrawer />

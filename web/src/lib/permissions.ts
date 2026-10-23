@@ -30,11 +30,11 @@ export function isAdmin(permissions: readonly string[]): boolean {
  */
 export const ROUTE_PERMISSIONS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['/courses', ['courses:view']],
+  // Lists the files sync stored for the courses.
+  ['/materials', ['courses:view']],
   // Shows the courses' posts.
   ['/calendar', ['courses:view']],
   ['/search', ['search:view']],
-  // The user's own Gmail.
-  ['/mail', ['mail:view']],
   ['/sync', ['sync:view']],
   ['/audit', ['audit:view']],
   // Two tabs: channel links (links) and bot commands (bot).

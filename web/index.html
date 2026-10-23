@@ -43,6 +43,27 @@
     />
 
     <meta name="theme-color" content="#fff" />
+    <!-- The last theme of this area (src/lib/theme.ts caches it), before React: no flash of the built-in colours. -->
+    <script>
+      try {
+        var area = /^\/admin(\/|$)/.test(location.pathname) ? '/admin' : ''
+        var saved = JSON.parse(localStorage.getItem('theme-css:' + area) || 'null')
+        if (saved && typeof saved.css === 'string') {
+          var style = document.createElement('style')
+          style.id = 'theme-tokens'
+          style.textContent = saved.css
+          document.head.appendChild(style)
+          document.documentElement.setAttribute('data-theme', '')
+          ;(saved.fonts || []).forEach(function (href) {
+            var link = document.createElement('link')
+            link.rel = 'stylesheet'
+            link.href = href
+            link.setAttribute('data-theme-font', '')
+            document.head.appendChild(link)
+          })
+        }
+      } catch (e) {}
+    </script>
   </head>
 
   <body>

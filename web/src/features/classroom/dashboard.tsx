@@ -11,7 +11,8 @@ export function ClassroomDashboard() {
 
   return (
     <>
-      <ClassroomHeader fixed title={t('dashboard.title')} description={t('dashboard.desc')} />
+      {/* The Dashboard tags each post from its own panel instead. */}
+      <ClassroomHeader fixed title={t('dashboard.title')} description={t('dashboard.desc')} tagTarget={null} />
       {/* Edge to edge, as the inbox7 block. */}
       <Main fixed className='p-0 sm:px-0 lg:px-0'>
         {canCourses && <DashboardInbox />}

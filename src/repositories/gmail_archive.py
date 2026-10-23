@@ -135,8 +135,10 @@ def _summary(thread_id: str, rows: List[Any]) -> Dict[str, Any]:
 
 
 async def list_threads(session: AsyncSession, label: str, q: str, unread: bool,
-                       offset: int) -> Dict[str, Any]:
-    """One page of conversations, newest first; the page token is an offset."""
+                       offset: int, limit: Optional[int] = None) -> Dict[str, Any]:
+    """One page of conversations (``limit``, else Gmail's page size), newest first;
+    the page token is an offset."""
+    size = limit or GMAIL_PAGE_SIZE
     matching = owned(session, GmailMessage, GmailMessage.thread_id).where(
         *_in_mailbox(label), *_matching(q, unread))
     # A conversation's other messages count too, except ones Gmail deleted (outside Deleted).
@@ -147,9 +149,9 @@ async def list_threads(session: AsyncSession, label: str, q: str, unread: bool,
     page = (await session.execute(
         owned(session, GmailMessage, GmailMessage.thread_id, last).where(*shown)
         .group_by(GmailMessage.thread_id).order_by(last.desc(), GmailMessage.thread_id)
-        .offset(offset).limit(GMAIL_PAGE_SIZE + 1)
+        .offset(offset).limit(size + 1)
     )).all()
-    ids = [r.thread_id for r in page[:GMAIL_PAGE_SIZE]]
+    ids = [r.thread_id for r in page[:size]]
     rows = (await session.execute(
         owned(session, GmailMessage, *_LIST_COLUMNS).where(*shown, GmailMessage.thread_id.in_(ids))
         .order_by(GmailMessage.internal_date)
@@ -159,7 +161,7 @@ async def list_threads(session: AsyncSession, label: str, q: str, unread: bool,
         by_thread[r.thread_id].append(r)
     return {
         "items": [_summary(i, by_thread[i]) for i in ids],
-        "next_page_token": str(offset + GMAIL_PAGE_SIZE) if len(page) > GMAIL_PAGE_SIZE else None,
+        "next_page_token": str(offset + size) if len(page) > size else None,
     }
 
 

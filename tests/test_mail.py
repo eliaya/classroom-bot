@@ -123,15 +123,16 @@ async def test_gmail_refusal_names_googles_reason(sign_in, google_service, monke
 
 @pytest.mark.asyncio
 async def test_view_only_role_can_read_but_not_organise(sign_in, google_service, monkeypatch, live):
-    async def threads(label, q, unread, page_token):
-        assert (label, q, unread, page_token) == ("INBOX", "invoice", True, None)
+    async def threads(label, q, unread, page_token, limit):
+        assert (label, q, unread, page_token, limit) == ("INBOX", "invoice", True, None, 20)
         return {"items": [], "next_page_token": None}
 
     _gmail(google_service, monkeypatch, gmail_threads=threads)
     async with _client() as client:
         await sign_in(client, permissions=["mail:view"])
-        res = await client.get("/api/mail/threads", params={"q": "invoice", "unread": "true"})
+        res = await client.get("/api/mail/threads", params={"q": "invoice", "unread": "true", "limit": 20})
         assert res.json() == {"items": [], "next_page_token": None}
+        assert (await client.get("/api/mail/threads", params={"limit": 101})).status_code == 422
         assert (await client.post("/api/mail/threads/abc123/trash")).status_code == 403
 
 
@@ -249,6 +250,8 @@ async def test_page_reads_the_archive_never_gmail(sign_in, google_service, monke
         assert await ids(label="DELETED") == (["t4"], None)
         assert await ids(label="ARCHIVE") == (["t2"], "1")  # one per page here
         assert await ids(label="ARCHIVE", page_token="1") == (["t5"], None)
+        # The Dashboard's per-page count overrides the page size.
+        assert await ids(label="ARCHIVE", limit=2) == (["t2", "t5"], None)
         assert await ids(label="INBOX", q="NOON") == (["t1"], None)
         assert await ids(label="INBOX", q="has:attachment") == (["t1"], None)
         assert await ids(label="INBOX", q="invoice") == ([], None)

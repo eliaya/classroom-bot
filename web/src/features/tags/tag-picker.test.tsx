@@ -7,9 +7,15 @@ import '@/lib/i18n'
 import { TagPicker } from './tag-picker'
 
 let TAGS: Tag[] = [
-  { id: 1, name: 'React', count: 1 },
-  { id: 2, name: 'TypeScript', count: 1 },
-  { id: 3, name: 'Next.js', count: 0 },
+  { id: 1, name: 'React', color: null, created_at: '2026-10-21', count: 1 },
+  {
+    id: 2,
+    name: 'TypeScript',
+    color: null,
+    created_at: '2026-10-22',
+    count: 1,
+  },
+  { id: 3, name: 'Next.js', color: null, created_at: '2026-10-23', count: 0 },
 ]
 
 vi.mock('@/lib/api', async (importOriginal) => {
@@ -28,7 +34,13 @@ vi.mock('@/lib/api', async (importOriginal) => {
         tag_ids,
       })),
       createTag: vi.fn(async (name: string) => {
-        const tag = { id: 4, name, count: 0 }
+        const tag = {
+          id: 4,
+          name,
+          color: null,
+          created_at: '2026-10-24',
+          count: 0,
+        }
         TAGS = [...TAGS, tag]
         return tag
       }),

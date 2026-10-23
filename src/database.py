@@ -225,6 +225,8 @@ async def init_db() -> None:
                 ],
                 # Whose sync wrote the change (poller rows have no run to derive it from).
                 "classroom_sync_changes": [(OWNER_KEY, "INTEGER")],
+                "tags": [("color", "TEXT")],
+                "users": [("theme_id", "INTEGER")],
                 # Optional notify role / special target pinged when posting new items.
                 "guild_course_links": [
                     ("notify_role_id", "INTEGER"), ("notify_target", "TEXT"),
@@ -307,6 +309,13 @@ async def init_db() -> None:
             # Its NOT NULL column would fail inserts of the (now host-less) singleton row.
             if await _has_column(conn, "external_storage_settings", "allowed_hosts"):
                 await conn.execute(text("ALTER TABLE external_storage_settings DROP COLUMN allowed_hosts"))
+            # Google Drive is no longer an external storage but the default:
+            # its files stay where they are and are read from Drive.
+            if await _has_column(conn, "opencloud_user_settings", "provider"):
+                await conn.execute(text(
+                    "UPDATE opencloud_user_settings SET provider = 'opencloud', enabled = 0 "
+                    "WHERE provider = 'gdrive'"
+                ))
             # Runs last: the rebuild copies columns the steps above may have just added.
             await _migrate_ownership(conn)
             await _migrate_bot_ownership(conn)

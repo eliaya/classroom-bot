@@ -3,7 +3,7 @@
 
 Per user and tick: first the changes since the last history id (new mail,
 deletions, label changes), then the next slice of the one-time full pass over
-older mail, then Gmail's labels. The Mail page reads this archive. Runs for active users whose role holds ``mail:view`` and whose
+older mail, then Gmail's labels. The Dashboard's Mail reads this archive. Runs for active users whose role holds ``mail:view`` and whose
 Google connection was granted Gmail. Gated by ``settings.GMAIL_ARCHIVE_ENABLED``.
 """
 

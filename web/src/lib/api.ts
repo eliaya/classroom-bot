@@ -226,11 +226,11 @@ export type BackupSettings = {
   max_retention_days: number
 }
 
-export type StorageProvider = 'opencloud' | 'nextcloud' | 'gdrive'
+export type StorageProvider = 'opencloud' | 'nextcloud'
 
 export type OpenCloudSettings = {
   enabled: boolean
-  /** OpenCloud and Nextcloud are WebDAV; Google Drive uses the Google connection. */
+  /** Both WebDAV. Off: files go to the user's own Google Drive. */
   provider: StorageProvider
   webdav_url: string
   username: string
@@ -238,6 +238,27 @@ export type OpenCloudSettings = {
   has_token: boolean
   /** The administrator's Roles → External Storage switch. */
   available: boolean
+}
+
+/** A file or folder in the user's storage, listed by Materials Manager.
+ *  ``path`` is relative to the storage's top folder. */
+export type MaterialItem = {
+  name: string
+  path: string
+  is_folder: boolean
+  size: number | null
+  /** Null when the storage does not report it (many WebDAV servers). */
+  created: string | null
+  modified: string | null
+  content_type: string | null
+}
+
+export type MaterialList = {
+  /** Where sync stores the files; ``local`` = kept on this server. */
+  storage: 'gdrive' | StorageProvider | 'local'
+  path: string
+  items: MaterialItem[]
+  total: number
 }
 
 /** A Gmail mailbox, category or the user's own label. */
@@ -486,8 +507,17 @@ export type AuditLog = {
   detail?: string | null
 }
 
-/** One of the user's tags; `count` is how many things carry it. */
-export type Tag = { id: number; name: string; count: number }
+/** One of the user's tags; `count` is how many things carry it, `color` its
+ *  dot ("#rrggbb", or null for the default). */
+export type Tag = { id: number; name: string; color: string | null; created_at: string; count: number }
+export type Theme = {
+  id: number
+  name: string
+  source: string | null
+  light: Record<string, string>
+  dark: Record<string, string>
+}
+export type ThemeImport = { name: string; light: Record<string, string>; dark: Record<string, string> }
 
 export const api = {
   health: () => request<{ status: string }>('/health'),
@@ -539,11 +569,23 @@ export const api = {
     request<Role>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRole: (id: number) =>
     request<{ id: number; deleted: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
+  listThemes: () => request<{ items: Theme[]; default_id: number | null }>('/themes'),
+  /** `theme_id`: the caller's own pick; `theme`: what their area shows (pick, else the user-panel default). */
+  myTheme: () => request<{ theme_id: number | null; theme: Theme | null }>('/themes/mine'),
+  setMyTheme: (theme_id: number | null) =>
+    request<{ theme_id: number | null }>('/themes/mine', { method: 'PUT', body: JSON.stringify({ theme_id }) }),
+  setDefaultTheme: (theme_id: number | null) =>
+    request<{ default_id: number | null }>('/themes/default', { method: 'PUT', body: JSON.stringify({ theme_id }) }),
+  importTweakcnTheme: (slug: string) => request<ThemeImport>(`/themes/tweakcn/${encodeURIComponent(slug)}`),
+  installTheme: (body: ThemeImport & { source?: string }) =>
+    request<Theme>('/themes', { method: 'POST', body: JSON.stringify(body) }),
+  deleteTheme: (id: number) => request<{ id: number; deleted: boolean }>(`/themes/${id}`, { method: 'DELETE' }),
   listTags: () => request<{ items: Tag[]; total: number }>('/tags'),
   createTag: (name: string) =>
     request<Tag>('/tags', { method: 'POST', body: JSON.stringify({ name }) }),
-  renameTag: (id: number, name: string) =>
-    request<Tag>(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  updateTag: (id: number, body: { name?: string; color?: string | null }) =>
+    request<Tag>(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  listTagTargets: (id: number) => request<{ id: number; targets: string[] }>(`/tags/${id}/targets`),
   deleteTag: (id: number) =>
     request<{ id: number; deleted: boolean }>(`/tags/${id}`, { method: 'DELETE' }),
   getAssignedTags: (target: string) =>
@@ -554,8 +596,9 @@ export const api = {
       body: JSON.stringify({ target, tag_ids }),
     }),
   listMailLabels: () => request<MailLabels>('/mail/labels'),
-  listMailThreads: (params: { label: string; q?: string; unread?: boolean; page_token?: string }) => {
+  listMailThreads: (params: { label: string; q?: string; unread?: boolean; page_token?: string; limit?: number }) => {
     const qs = new URLSearchParams({ label: params.label })
+    if (params.limit) qs.set('limit', String(params.limit))
     if (params.q) qs.set('q', params.q)
     if (params.unread) qs.set('unread', 'true')
     if (params.page_token) qs.set('page_token', params.page_token)
@@ -771,6 +814,8 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  listMaterials: (path: string) =>
+    request<MaterialList>(`/materials?path=${encodeURIComponent(path)}`),
   getOpenCloudSettings: () => request<OpenCloudSettings>('/sync/opencloud'),
   // app_token is write-only: an empty string keeps the stored one.
   updateOpenCloudSettings: (

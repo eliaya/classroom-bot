@@ -23,12 +23,12 @@ import { PasswordInput } from '@/components/password-input'
 import { api, type OpenCloudSettings, type StorageProvider } from '@/lib/api'
 import { useCan } from '@/lib/permissions'
 
-const PROVIDERS: StorageProvider[] = ['opencloud', 'nextcloud', 'gdrive']
+const PROVIDERS: StorageProvider[] = ['opencloud', 'nextcloud']
 
 /**
  * Per-user external storage: when on, attachments are moved to the chosen
- * provider during sync and only text stays on the server. The provider and its
- * settings show only while it is on.
+ * provider during sync instead of the user's Google Drive, and only text stays
+ * on the server. The provider and its settings show only while it is on.
  */
 export function OpenCloudSection() {
   const { t } = useTranslation()
@@ -48,7 +48,6 @@ export function OpenCloudSection() {
 
   const available = config?.available ?? true
   const provider = config?.provider ?? 'opencloud'
-  const webdav = provider !== 'gdrive'
 
   const set = (patch: Partial<OpenCloudSettings>) =>
     config && setConfig({ ...config, ...patch })
@@ -124,53 +123,45 @@ export function OpenCloudSection() {
               </Select>
             </div>
             <div className='grid gap-4 sm:grid-cols-2'>
-              {webdav ? (
-                <>
-                  <div className='sm:col-span-2'>
-                    <Label htmlFor='opencloud-url'>{t('settings.opencloud.url')}</Label>
-                    <Input
-                      id='opencloud-url'
-                      type='url'
-                      className='mt-1'
-                      placeholder={
-                        provider === 'nextcloud'
-                          ? 'https://cloud.example.com/remote.php/dav/files/<username>/'
-                          : 'https://cloud.example.com/remote.php/dav/spaces/<space-id>/'
-                      }
-                      value={config.webdav_url}
-                      onChange={(e) => set({ webdav_url: e.target.value })}
-                    />
-                    <p className='text-muted-foreground mt-1 text-xs'>
-                      {t(`settings.opencloud.urlHint.${provider}`)}
-                    </p>
-                  </div>
-                  <div>
-                    <Label htmlFor='opencloud-username'>{t('settings.opencloud.username')}</Label>
-                    <Input
-                      id='opencloud-username'
-                      className='mt-1'
-                      autoComplete='off'
-                      value={config.username}
-                      onChange={(e) => set({ username: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor='opencloud-token'>{t(`settings.opencloud.token.${provider}`)}</Label>
-                    <PasswordInput
-                      id='opencloud-token'
-                      className='mt-1'
-                      autoComplete='new-password'
-                      placeholder={config.has_token ? t('settings.opencloud.tokenKeep') : ''}
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className='text-muted-foreground text-sm sm:col-span-2'>
-                  {t('settings.opencloud.gdriveNote')}
+              <div className='sm:col-span-2'>
+                <Label htmlFor='opencloud-url'>{t('settings.opencloud.url')}</Label>
+                <Input
+                  id='opencloud-url'
+                  type='url'
+                  className='mt-1'
+                  placeholder={
+                    provider === 'nextcloud'
+                      ? 'https://cloud.example.com/remote.php/dav/files/<username>/'
+                      : 'https://cloud.example.com/remote.php/dav/spaces/<space-id>/'
+                  }
+                  value={config.webdav_url}
+                  onChange={(e) => set({ webdav_url: e.target.value })}
+                />
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  {t(`settings.opencloud.urlHint.${provider}`)}
                 </p>
-              )}
+              </div>
+              <div>
+                <Label htmlFor='opencloud-username'>{t('settings.opencloud.username')}</Label>
+                <Input
+                  id='opencloud-username'
+                  className='mt-1'
+                  autoComplete='off'
+                  value={config.username}
+                  onChange={(e) => set({ username: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor='opencloud-token'>{t(`settings.opencloud.token.${provider}`)}</Label>
+                <PasswordInput
+                  id='opencloud-token'
+                  className='mt-1'
+                  autoComplete='new-password'
+                  placeholder={config.has_token ? t('settings.opencloud.tokenKeep') : ''}
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                />
+              </div>
               <div>
                 <Label htmlFor='opencloud-folder'>{t('settings.opencloud.folder')}</Label>
                 <Input

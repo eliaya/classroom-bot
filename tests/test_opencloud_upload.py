@@ -254,7 +254,7 @@ async def test_failed_upload_keeps_the_local_copy(session, remote, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_google_drive_as_external_storage(session, remote, google_service, monkeypatch, tmp_path):
+async def test_google_drive_is_the_default_storage(session, remote, google_service, monkeypatch, tmp_path):
     uploaded: dict = {}
 
     async def upload(path, data, folders):
@@ -262,7 +262,6 @@ async def test_google_drive_as_external_storage(session, remote, google_service,
 
     monkeypatch.setattr(google_service, "upload_to_drive", upload, raising=False)
     monkeypatch.setattr(google_service, "has_drive_write_scope", lambda: False, raising=False)
-    await app_settings.update_opencloud_setting(session, enabled=True, provider="gdrive")
 
     # Without the write permission nothing is uploaded and the local copies stay.
     stats = await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
@@ -273,22 +272,44 @@ async def test_google_drive_as_external_storage(session, remote, google_service,
     assert stats["opencloud"] == 3 and remote.calls == []  # WebDAV is not involved
     assert uploaded["Classroom/course-1/Report.pdf"] == b"f1  " and _local_files(tmp_path) == []
 
+    # External storage on: the files move there instead.
+    await _enable(session)
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert len(remote.files) == 3
+
+    # The admin turns external storage off: back to Drive on the next sync.
+    uploaded.clear()
+    await app_settings.update_external_storage_setting(session, enabled=False)
+    rows = await cache.list_attachments(session, COURSE_ID)
+    assert all(r.opencloud_path is None for r in rows)
+    await attachment_sync_service.sync_course_attachments(session, COURSE_ID)
+    assert len(uploaded) == 3
+
 
 @pytest.mark.asyncio
-async def test_settings_route_checks_the_chosen_provider(remote, sign_in, google_service, monkeypatch):
+async def test_settings_route_refuses_google_drive(remote, sign_in):
     import src.database as db
     from src.api.main import app
 
     await db.init_db()
-    monkeypatch.setattr(google_service, "has_drive_write_scope", lambda: False, raising=False)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await sign_in(client)
         assert (await client.get("/api/sync/opencloud")).json()["provider"] == "opencloud"
         body = {"enabled": True, "provider": "gdrive", "folder": "Classroom"}
-        refused = await client.patch("/api/sync/opencloud", json=body)
-        assert refused.status_code == 400 and "Connect Google again" in refused.json()["detail"]
-        monkeypatch.setattr(google_service, "has_drive_write_scope", lambda: True, raising=False)
-        saved = (await client.patch("/api/sync/opencloud", json=body)).json()
-        assert saved["enabled"] is True and saved["provider"] == "gdrive"
-        assert remote.calls == []  # no WebDAV check for Google Drive
+        assert (await client.patch("/api/sync/opencloud", json=body)).status_code == 422
         assert (await client.patch("/api/sync/opencloud", json={"provider": "ftp"})).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_migration_turns_google_drive_storage_into_the_default():
+    import src.database as db
+    from src.models import OpenCloudSetting
+
+    await db.init_db()
+    async with db.async_session_factory() as s:
+        s.add(OpenCloudSetting(owner_user_id=1, enabled=True, provider="gdrive"))
+        await s.commit()
+    await db.init_db()
+    async with db.async_session_factory() as s:
+        row = await s.get(OpenCloudSetting, 1)
+        assert (row.provider, row.enabled) == ("opencloud", False)

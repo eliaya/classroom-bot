@@ -340,13 +340,14 @@ class GoogleClassroomService:
         return await asyncio.to_thread(_sync)
 
     async def gmail_threads(
-        self, label_id: str, query: str = "", unread: bool = False, page_token: Optional[str] = None
+        self, label_id: str, query: str = "", unread: bool = False, page_token: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """One page of conversations in a label (or ``ARCHIVE``), newest first."""
+        """One page of conversations (``limit``, else ``GMAIL_PAGE_SIZE``) in a label (or ``ARCHIVE``), newest first."""
         def _sync() -> Dict[str, Any]:
             svc = self._get_gmail_service()
             q = [query.strip()] if query.strip() else []
-            params: Dict[str, Any] = {"userId": "me", "maxResults": GMAIL_PAGE_SIZE}
+            params: Dict[str, Any] = {"userId": "me", "maxResults": limit or GMAIL_PAGE_SIZE}
             if label_id == GMAIL_ARCHIVE:
                 q.append(GMAIL_ARCHIVE_QUERY)
             else:
@@ -643,6 +644,31 @@ class GoogleClassroomService:
             return buffer.getvalue()
 
         return await asyncio.to_thread(_sync_download)
+
+    async def list_drive_folder(self, path: str) -> List[Dict[str, Any]]:
+        """The files and folders directly inside the folder ``upload_to_drive``
+        made at ``path`` (``Folder/Sub``); empty when it does not exist yet."""
+        def _sync_list() -> List[Dict[str, Any]]:
+            service = self._get_drive_service()
+            parent: Optional[str] = "root"
+            for part in path.split("/"):
+                parent = _find(service, part, parent, True)
+                if not parent:
+                    return []
+            files: List[Dict[str, Any]] = []
+            token = None
+            while True:
+                page = service.files().list(
+                    q=f"'{parent}' in parents and trashed = false",
+                    fields="nextPageToken, files(id,name,mimeType,size,createdTime,modifiedTime)",
+                    pageSize=1000, pageToken=token,
+                ).execute()
+                files.extend(page.get("files") or [])
+                token = page.get("nextPageToken")
+                if not token:
+                    return files
+
+        return await asyncio.to_thread(_sync_list)
 
     async def export_drive_file(self, file_id: str, export_mime: str) -> bytes:
         """Export a Google-native file (Docs/Sheets/Slides) to the given MIME type."""

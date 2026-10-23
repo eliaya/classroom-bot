@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Archive,
-  ChevronLeft,
   ChevronsUpDown,
   EllipsisVertical,
   ExternalLink,
@@ -29,14 +28,15 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { TagPicker } from '@/features/tags/tag-picker'
+import { TagColorPicker } from '@/features/tags/tag-color-picker'
+import { DetailHeader, DetailToolbar, IconButton } from './inbox-ui'
 import { LabelManager } from './label-manager'
 import { LabelDot } from './label-dot'
 import { formatMailDate, gmailThreadUrl, initials, labelName } from './mail-utils'
 
 export type MailAction = 'archive' | 'spam' | 'trash' | 'unread'
 
-type MailDisplayProps = {
+export type MailDisplayProps = {
   thread: MailThread | null
   loading: boolean
   /** The category and label list (dot colours, label manager). */
@@ -45,26 +45,10 @@ type MailDisplayProps = {
   onAction: (action: MailAction) => void
   onStar: (on: boolean) => void
   onLabel: (labelId: string, on: boolean) => void
-  /** Phone layout: back to the list. */
-  onBack?: () => void
 }
 
-function IconButton({ label, children, ...props }: React.ComponentProps<typeof Button> & { label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant='ghost' size='icon' {...props}>
-          {children}
-          <span className='sr-only'>{label}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** Right pane: the toolbar, the conversation header and its messages. */
-export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar, onLabel, onBack }: MailDisplayProps) {
+/** The Dashboard's post panel for a mail conversation: the toolbar, its header and its messages. */
+export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar, onLabel }: MailDisplayProps) {
   const { t, i18n } = useTranslation()
   const [expanded, setExpanded] = useState<string | null>(null)
   const messages = thread?.messages ?? []
@@ -93,12 +77,9 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
 
   return (
     <div className='flex h-full min-h-0 flex-col bg-background'>
-      <div className='flex items-center gap-1 p-1 max-lg:justify-end lg:p-3'>
-        {onBack && (
-          <Button variant='ghost' size='icon' className='me-auto' onClick={onBack} aria-label={t('mail.back')}>
-            <ChevronLeft />
-          </Button>
-        )}
+      <DetailToolbar>
+        {/* Tags as on a post: by colour, from the toolbar. */}
+        {thread && <TagColorPicker target={`mail:${thread.id}`} />}
         <div className='hidden items-center lg:flex'>
           <IconButton label={t('mail.archive')} disabled={off} onClick={() => onAction('archive')}>
             <Archive />
@@ -125,7 +106,7 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
             ))}
           </div>
         </div>
-        <div className='flex shrink-0 items-center gap-0.5'>
+        <div className='ms-auto flex shrink-0 items-center gap-0.5'>
           {link(t('mail.reply'), <Reply />)}
           {link(t('mail.replyAll'), <ReplyAll />)}
           {link(t('mail.forward'), <Forward />)}
@@ -163,8 +144,7 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
-      <Separator />
+      </DetailToolbar>
       {loading ? (
         <div className='flex flex-col gap-3 p-3'>
           <Skeleton className='h-5 w-2/3' />
@@ -173,30 +153,23 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
         </div>
       ) : thread && last ? (
         <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
-          <div className='border-b border-border p-3'>
-            <div className='flex items-start justify-between gap-4'>
-              <div className='flex min-w-0 flex-1 items-start gap-3'>
-                <Avatar className='shrink-0 max-md:hidden'>
-                  <AvatarFallback>{initials(messages[0].from_name)}</AvatarFallback>
-                </Avatar>
-                <div className='min-w-0 flex-1'>
-                  <h2 className='line-clamp-2 text-base leading-snug font-medium tracking-tight text-foreground md:font-semibold'>
-                    {thread.subject || t('mail.noSubject')}
-                  </h2>
-                  <p className='mt-1 text-sm font-medium text-foreground'>{last.from_name}</p>
-                  <p className='mt-0.5 text-xs text-muted-foreground'>
-                    {t('mail.replyTo')} {last.reply_to}
-                  </p>
-                  <TagPicker target={`mail:${thread.id}`} className='mt-2 max-w-md' />
-                </div>
-              </div>
-              <span className='shrink-0 pt-0.5 text-xs text-muted-foreground'>
-                {formatMailDate(last.date, i18n.language)}
-              </span>
-            </div>
-          </div>
-          <div className='flex-1 overflow-auto p-3'>
-            <div className='flex flex-col gap-5'>
+          <DetailHeader
+            avatar={
+              <Avatar>
+                <AvatarFallback>{initials(messages[0].from_name)}</AvatarFallback>
+              </Avatar>
+            }
+            title={thread.subject || t('mail.noSubject')}
+            aside={formatMailDate(last.date, i18n.language)}
+          >
+            <p className='mt-1 text-sm font-medium text-foreground'>{last.from_name}</p>
+            <p className='mt-0.5 text-xs text-muted-foreground'>
+              {t('mail.replyTo')} {last.reply_to}
+            </p>
+          </DetailHeader>
+          {/* The post panel's body padding. */}
+          <div className='min-h-0 flex-1 overflow-auto p-3'>
+            <div className='flex flex-col gap-5 px-3 pt-2'>
               {messages.length > 1 && (
                 <button
                   type='button'
@@ -208,8 +181,9 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
                   {showAll ? t('mail.collapse') : t('mail.earlier', { count: messages.length - 1 })}
                 </button>
               )}
-              {shown.map((m) => (
-                <Message key={m.id} message={m} />
+              {shown.map((m, i) => (
+                // The header above names the latest; earlier ones, when shown, are set apart by a rule.
+                <Message key={m.id} message={m} className={i ? 'border-t pt-5' : undefined} />
               ))}
             </div>
           </div>
@@ -221,26 +195,13 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
   )
 }
 
-function Message({ message }: { message: MailMessage }) {
-  const { i18n } = useTranslation()
+function Message({ message, className }: { message: MailMessage; className?: string }) {
   return (
-    <div className='px-3'>
-      <div className='mb-4 flex items-start gap-3'>
-        <Avatar className='size-9 shrink-0'>
-          <AvatarFallback>{initials(message.from_name)}</AvatarFallback>
-        </Avatar>
-        <div className='min-w-0 flex-1'>
-          <div className='flex items-center justify-between gap-2'>
-            <span className='truncate text-sm font-semibold'>{message.from_name}</span>
-            <span className='shrink-0 text-xs text-muted-foreground'>{formatMailDate(message.date, i18n.language)}</span>
-          </div>
-          <div className='truncate text-xs text-muted-foreground'>{message.from_email}</div>
-        </div>
-      </div>
+    <div className={className}>
       {message.html ? (
         <MailHtml html={message.html} title={message.from_name} />
       ) : (
-        <div className='text-sm wrap-anywhere whitespace-pre-wrap text-foreground/80'>
+        <div className='text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap text-foreground/80'>
           {message.text.split(WEB_ADDRESS).map((part, i) =>
             i % 2 ? (
               <a key={i} href={part} target='_blank' rel='noopener noreferrer' className='text-primary underline'>

@@ -3,12 +3,21 @@ app token (https://docs.opencloud.eu/docs/user/admin/web-dav)."""
 
 from __future__ import annotations
 
-from typing import Optional
-from urllib.parse import quote
+from email.utils import parsedate_to_datetime
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote, unquote
+from xml.etree import ElementTree
 
 import httpx
 
 from src.models import OpenCloudSetting
+
+_DAV = "{DAV:}"
+_PROPS = (
+    '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/>'
+    "<d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:getcontenttype/>"
+    "</d:prop></d:propfind>"
+)
 
 _transport: Optional[httpx.AsyncBaseTransport] = None  # swapped by tests
 
@@ -52,3 +61,38 @@ async def put(c: httpx.AsyncClient, path: str, data: bytes, made: set[str]) -> N
             r.raise_for_status()
         made.add(folder)
     (await c.put("/".join(parts), content=data)).raise_for_status()
+
+
+async def list_folder(c: httpx.AsyncClient, path: str) -> List[Dict[str, Any]]:
+    """The files and folders directly inside the folder ``path`` (relative to
+    the space); empty when it does not exist yet."""
+    r = await c.request(
+        "PROPFIND", "/".join(quote(p, safe="") for p in path.split("/")) + "/",
+        headers={"Depth": "1", "Content-Type": "application/xml"}, content=_PROPS,
+    )
+    if r.status_code == 404:
+        return []
+    r.raise_for_status()
+    if b"<!DOCTYPE" in r.content:  # no entity tricks from the server
+        raise ValueError("Unexpected WebDAV response.")
+    me = unquote(r.request.url.path).rstrip("/")
+    items = []
+    for resp in ElementTree.fromstring(r.content).iter(f"{_DAV}response"):
+        href = unquote(resp.findtext(f"{_DAV}href", "")).rstrip("/")
+        if not href or href.endswith(me):
+            continue  # the folder itself
+        prop = resp.find(f"{_DAV}propstat/{_DAV}prop")
+        if prop is None:
+            continue
+        modified = prop.findtext(f"{_DAV}getlastmodified")
+        size = prop.findtext(f"{_DAV}getcontentlength")
+        items.append({
+            "name": href.rsplit("/", 1)[-1],
+            "is_folder": prop.find(f"{_DAV}resourcetype/{_DAV}collection") is not None,
+            "size": int(size) if size and size.isdigit() else None,
+            # ISO 8601 (RFC 4918); many servers do not report it.
+            "created": prop.findtext(f"{_DAV}creationdate") or None,
+            "modified": parsedate_to_datetime(modified).isoformat() if modified else None,
+            "content_type": prop.findtext(f"{_DAV}getcontenttype"),
+        })
+    return items

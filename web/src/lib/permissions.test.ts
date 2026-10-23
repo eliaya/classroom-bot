@@ -54,6 +54,11 @@ describe('canOpen', () => {
     expect(canOpen(['courses:view'], '/bot')).toBe(false)
   })
 
+  it('opens Materials Manager with courses:view', () => {
+    expect(canOpen(['courses:view'], '/materials')).toBe(true)
+    expect(canOpen(['sync:view'], '/materials')).toBe(false)
+  })
+
   it('does not treat :use as :view', () => {
     expect(canOpen(['sync:use'], '/sync')).toBe(false)
   })

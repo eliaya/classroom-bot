@@ -1,7 +1,10 @@
+import { useEffect } from 'react'
 import { Outlet } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
+import { api } from '@/lib/api'
 import { getCookie } from '@/lib/cookies'
 import { useCan } from '@/lib/permissions'
+import { applyTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
@@ -19,6 +22,13 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
   const canSeeSync = useCan('sync:view')
   const user = useAuthStore((state) => state.auth.user)
+  useEffect(() => {
+    // The theme this user's area shows; index.html already painted the last one from the cache.
+    api
+      .myTheme()
+      .then((res) => applyTheme(res.theme))
+      .catch(() => undefined)
+  }, [])
   // Signed in but no role yet: nothing in the app is reachable.
   if (user && user.permissions.length === 0) {
     return <PendingApproval email={user.email} />
