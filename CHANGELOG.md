@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-10-24
+
+**Upgrade notes.** Rebuild the web image (`./scripts/dev.sh`): `index.html` and `public/images` change. If saving the site logo or favicon answers "Internal Server Error" and the API log shows `database disk image is malformed`, the SQLite file is damaged, not the upload: stop the api and bot, keep a copy of `classroom_sync.db`, rebuild it with `sqlite3 classroom_sync.db "VACUUM INTO 'repaired.db'"`, check `pragma integrity_check` answers `ok`, swap it in and start them again (then restart web so nginx finds the api's new address).
+
+### Changed
+- **No built-in SVG stands in for the site logo or favicon.** Without an uploaded logo, the sidebar header and the sign-in page show the name alone (the Command icon box and the shadcn-admin mark are gone), and so does the Settings → Branding preview. The SVG favicons (`/images/favicon.svg`, `/images/favicon_light.svg`) are removed; without an uploaded favicon the browser tab keeps the PNG ones. The X on an upload in use reads "Remove the uploaded image".
+
 ## [0.34.0] - 2026-10-24
 
 **Upgrade notes.** The table `site_branding` is added at startup. The web image vendors diceui's FileUpload (`src/components/diceui/file-upload.tsx`) on packages already installed; no new package.

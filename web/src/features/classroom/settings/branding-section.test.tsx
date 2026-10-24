@@ -44,9 +44,11 @@ describe('BrandingSection', () => {
     // The browser-tab preview switches to the picked file before anything is saved.
     await expect.poll(() => screen.container.querySelectorAll('img[src^="blob:"]').length).toBeGreaterThanOrEqual(2)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Go back to the built-in image' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove the uploaded image' }))
     expect(document.body.textContent).not.toContain('In use')
     expect(screen.container.querySelectorAll('img[src="/api/site/logo?v=1"]')).toHaveLength(0)
+    // No built-in SVG logo stands in for the removed one.
+    expect(screen.container.querySelectorAll('svg#shadcn-admin-logo, svg.lucide-command')).toHaveLength(0)
 
     await userEvent.click(save)
     await expect.element(screen.getByText('Saved')).toBeInTheDocument()

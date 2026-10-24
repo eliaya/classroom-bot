@@ -3,7 +3,6 @@ import { AppWindow, ImageIcon, X, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, fileUrl, type SiteBranding } from '@/lib/api'
 import { useBrandingStore } from '@/stores/branding-store'
-import { Logo } from '@/assets/logo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -46,7 +45,7 @@ export function BrandingSection() {
   const [msg, setMsg] = useState<string | null>(null)
 
   const picked = { logo: usePreviewUrl(files.logo[0]), favicon: usePreviewUrl(files.favicon[0]) }
-  // What the site will show once saved: the new file, else the upload in use, else the built-in one.
+  // What the site will show once saved: the new file, else the upload in use, else nothing.
   const shown = (kind: Kind) => picked[kind] ?? (!removed[kind] && saved[kind] ? fileUrl(saved[kind]) : null)
   const dirty = FIELDS.some(({ kind }) => files[kind].length || (removed[kind] && saved[kind]))
 
@@ -179,8 +178,8 @@ export function BrandingSection() {
                   <img src={favicon} alt='' className='size-4 shrink-0 object-contain' />
                 ) : (
                   <>
-                    <img src='/images/favicon.svg' alt='' className='size-4 shrink-0 dark:hidden' />
-                    <img src='/images/favicon_light.svg' alt='' className='hidden size-4 shrink-0 dark:block' />
+                    <img src='/images/favicon.png' alt='' className='size-4 shrink-0 dark:hidden' />
+                    <img src='/images/favicon_light.png' alt='' className='hidden size-4 shrink-0 dark:block' />
                   </>
                 )}
                 <span className='truncate'>{document.title || team.name}</span>
@@ -188,13 +187,7 @@ export function BrandingSection() {
             </div>
             {/* Sidebar header, as AppSidebar draws it */}
             <div className='flex items-center gap-2 border-b bg-sidebar p-3 text-sidebar-foreground'>
-              {logo ? (
-                <img src={logo} alt='' className='aspect-square size-8 shrink-0 rounded-lg object-contain' />
-              ) : (
-                <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
-                  <team.logo className='size-4' />
-                </div>
-              )}
+              {logo && <img src={logo} alt='' className='aspect-square size-8 shrink-0 rounded-lg object-contain' />}
               <div className='grid flex-1 text-sm leading-tight'>
                 <span className='truncate font-semibold'>{team.name}</span>
                 <span className='truncate text-xs'>{team.plan}</span>
@@ -202,7 +195,7 @@ export function BrandingSection() {
             </div>
             {/* Sign-in page heading, as AuthLayout draws it */}
             <div className='flex items-center justify-center bg-background py-8 text-foreground'>
-              {logo ? <img src={logo} alt='' className='me-2 size-6 object-contain' /> : <Logo className='me-2' />}
+              {logo && <img src={logo} alt='' className='me-2 size-6 object-contain' />}
               <span className='text-xl font-medium'>{t('auth.appName')}</span>
             </div>
           </div>

@@ -661,7 +661,7 @@ const ja: Resources = {
       faviconHint: 'ICO、PNG、SVG、WEBP、GIF、JPG、256 KB まで。32×32 以上の正方形。',
       inUse: '使用中',
       remove: 'ファイルを削除',
-      restore: '既定の画像に戻す',
+      restore: 'アップロードした画像を削除',
       tooLarge: '{{name}} は大きすぎます。',
       wrongType: '{{name}} は対応していない画像です。',
       oneFile: '別のファイルを選ぶ前に、選択中のファイルを削除してください。',

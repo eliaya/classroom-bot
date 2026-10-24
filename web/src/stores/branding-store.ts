@@ -20,7 +20,7 @@ export function applyFavicon(path: string | null): void {
     link.dataset.href ??= link.getAttribute('href') ?? ''
     link.dataset.type ??= link.getAttribute('type') ?? ''
     link.href = path ? fileUrl(path) : link.dataset.href
-    // The built-in links name their type; an uploaded .ico or .png is neither svg nor png.
+    // The built-in links say image/png; an upload may be an .ico, .svg or other type.
     if (path) link.removeAttribute('type')
     else if (link.dataset.type) link.type = link.dataset.type
   })

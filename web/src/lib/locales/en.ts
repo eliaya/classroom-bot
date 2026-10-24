@@ -667,7 +667,7 @@ export const en = {
       faviconHint: 'ICO, PNG, SVG, WEBP, GIF or JPG, up to 256 KB. Square, 32×32 or larger.',
       inUse: 'In use',
       remove: 'Remove file',
-      restore: 'Go back to the built-in image',
+      restore: 'Remove the uploaded image',
       tooLarge: '{{name}} is too large.',
       wrongType: '{{name}} is not a supported image.',
       oneFile: 'Remove the chosen file before picking another.',

@@ -39,7 +39,7 @@ async def _row(session: AsyncSession) -> SiteBranding:
 
 @router.get("/branding")
 async def get_branding(session: AsyncSession = Depends(get_db_session)) -> dict:
-    """Where to fetch each image, or null for the built-in one."""
+    """Where to fetch each image, or null when none is uploaded."""
     row = await _row(session)
     v = int(row.updated_at.timestamp())  # a new upload gets a new URL past any cache
     return {

@@ -541,8 +541,8 @@ class ThemeSetting(SQLModel, table=True):
 class SiteBranding(SQLModel, table=True):
     """Singleton row (id=1): the site logo and favicon the admin uploaded.
 
-    Kept in the database, not on disk, so backups carry them. A null image
-    means the built-in one.
+    Kept in the database, not on disk, so backups carry them. A null logo
+    shows none; a null favicon leaves index.html's PNG.
     """
     __tablename__ = "site_branding"
 

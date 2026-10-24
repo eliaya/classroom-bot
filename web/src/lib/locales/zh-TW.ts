@@ -661,7 +661,7 @@ const zhTW: Resources = {
       faviconHint: 'ICO、PNG、SVG、WEBP、GIF 或 JPG，最大 256 KB。正方形，32×32 以上。',
       inUse: '使用中',
       remove: '移除檔案',
-      restore: '恢復內建圖片',
+      restore: '移除已上傳的圖片',
       tooLarge: '{{name}} 太大。',
       wrongType: '{{name}} 不是支援的圖片格式。',
       oneFile: '請先移除已選檔案，再選擇其他檔案。',

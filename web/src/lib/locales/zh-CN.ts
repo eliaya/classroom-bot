@@ -661,7 +661,7 @@ const zhCN: Resources = {
       faviconHint: 'ICO、PNG、SVG、WEBP、GIF 或 JPG，最大 256 KB。正方形，32×32 以上。',
       inUse: '使用中',
       remove: '移除文件',
-      restore: '恢复内置图片',
+      restore: '移除已上传的图片',
       tooLarge: '{{name}} 太大。',
       wrongType: '{{name}} 不是支持的图片格式。',
       oneFile: '请先移除已选文件，再选择其他文件。',
