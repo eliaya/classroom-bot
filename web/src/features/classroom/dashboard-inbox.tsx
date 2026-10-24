@@ -18,14 +18,17 @@ import { useTranslation } from 'react-i18next'
 import { useDefaultLayout } from 'react-resizable-panels'
 import {
   api,
+  fileUrl,
   type Attachment,
   type Course,
   type CoursePerson,
   type MailLabel,
+  type MailThreadSummary,
   type Post,
   type Tag,
   type TodoItem,
 } from '@/lib/api'
+import { GoogleClassroomIcon } from '@/assets/custom/icon-google-classroom'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useCan } from '@/lib/permissions'
 import { cn, fullTimestamp } from '@/lib/utils'
@@ -59,6 +62,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { DetailHeader, DetailToolbar, IconButton, InboxItem, ListHeader, Pager } from '@/features/mail/inbox-ui'
 import { LabelDot } from '@/features/mail/label-dot'
 import { MailDisplay } from '@/features/mail/mail-display'
+import { MailItem } from '@/features/mail/mail-item'
 import { MailList } from '@/features/mail/mail-list'
 import { GMAIL_COMPOSE_URL, MAILBOX_ICONS, labelName } from '@/features/mail/mail-utils'
 import { useMail } from '@/features/mail/use-mail'
@@ -114,6 +118,10 @@ const DOT: Record<Submission, string> = {
 }
 
 type Detail = { key: string; text?: string; due?: string; attachments?: Attachment[] }
+/** A row of the list: a post, or (in the Inbox) a Gmail conversation. */
+type Entry = { key: string; time: number; post?: Post; mail?: MailThreadSummary }
+// shortcut: the Inbox merges at most the newest 100 conversations (the API's page cap); follow Gmail's page tokens past that if inboxes get deep.
+const MAIL_CAP = 100
 
 /** Dashboard: the shadcnblocks inbox7 layout over the courses' posts and the
  * user's Gmail — queues, mailboxes and tags, the list, and the chosen post or conversation. */
@@ -135,7 +143,10 @@ export function DashboardInbox() {
   // As in the main sidebar: no Mail for a role the API would answer 403.
   const canMail = useCan('mail:view')
   const mailbox = queue.startsWith('mail:') ? queue.slice(5) : null
-  const mail = useMail(canMail, mailbox, limit)
+  // The Inbox shows the Gmail inbox among the posts: as many of its newest conversations as the pages up to this one hold.
+  const inboxMail = queue === 'all' && canMail
+  const mailLimit = mailbox ? limit : Math.min(MAIL_CAP, (pageIndex + 1) * limit)
+  const mail = useMail(canMail, mailbox ?? (inboxMail ? 'INBOX' : null), mailLimit)
   const mailLabels = mail.labels?.granted ? [...mail.labels.mailboxes, ...mail.labels.labels] : []
   const tags = useTagsStore((s) => s.tags)
   const ensureTags = useTagsStore((s) => s.ensure)
@@ -215,10 +226,19 @@ export function DashboardInbox() {
     return q === 'all' || q === post.type
   }
   const inList = sorted.filter((post) => inQueue(queue, post))
+  const withMail = inboxMail && !!mail.labels?.granted
+  // Until the inbox's conversations are in, the Inbox shows as loading rather than posts alone.
+  const mailPending = inboxMail && (mail.labels ? mail.labels.granted && mail.list.loading : !mail.labelsError)
+  const entries: Entry[] = [
+    ...inList.map((post) => ({ key: cardKey(post), time: Date.parse(post.time), post })),
+    ...(withMail ? mail.list.items.map((m) => ({ key: `mail:${m.id}`, time: m.date, mail: m })) : []),
+  ].sort((a, b) => b.time - a.time)
+  // Gmail gives no total: while it has more, the Inbox has a next page and shows its range alone.
+  const moreMail = withMail && !!mail.list.onNext && mailLimit < MAIL_CAP
   // The saved count is the page size.
-  const pages = Math.max(1, Math.ceil(inList.length / limit))
+  const pages = Math.max(1, Math.ceil(entries.length / limit))
   const pageAt = Math.min(pageIndex, pages - 1)
-  const items = inList.slice(pageAt * limit, (pageAt + 1) * limit)
+  const items = entries.slice(pageAt * limit, (pageAt + 1) * limit)
   const unreadIn = (q: Queue) => sorted.filter((post) => inQueue(q, post) && isUnread(seen, post)).length
   const buckets = listTags(tags, tagPrefs)
   const mailLabel = (id: string) => {
@@ -239,8 +259,24 @@ export function DashboardInbox() {
   }
 
   // A wide screen always shows one; a phone opens one in a drawer.
-  const current = sorted.find((post) => cardKey(post) === selected) ?? (mobile ? undefined : items[0])
+  const chosenPost = sorted.find((post) => cardKey(post) === selected)
+  const chosenMail = entries.find((e) => e.mail && e.key === selected)
+  const head: Entry | undefined = chosenPost
+    ? { key: cardKey(chosenPost), time: 0, post: chosenPost }
+    : (chosenMail ?? (mobile ? undefined : items[0]))
+  const current = head?.post
   const detail = usePostDetail(current)
+  // The conversation to show: in a mailbox the one chosen, else its newest; in the Inbox the row shown.
+  const shownMail = mailbox
+    ? (mail.list.items.find((m) => m.id === mail.selectedId) ?? (mobile ? undefined : mail.list.items[0]))
+    : head?.mail
+  const mailOpen = mailbox ? !!mail.labels?.granted : !!shownMail
+
+  useEffect(() => {
+    // Opening it fetches it, and reads it as Gmail does.
+    if (shownMail && shownMail.id !== mail.selectedId) mail.list.onSelect(shownMail)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownMail?.id])
 
   const pickQueue = (q: Queue) => {
     setQueue(q)
@@ -254,11 +290,16 @@ export function DashboardInbox() {
     setSeen((s) => markSeen(s, cardKey(post)))
     if (mobile) setPostDrawer(true)
   }
+  const openEntry = (entry: Entry) => {
+    if (entry.post) return open(entry.post)
+    setSelected(entry.key)
+    if (mobile) setPostDrawer(true)
+  }
   const pick = (post: Post) => {
     const q = courseOf.get(post.course_id)?.archived ? 'archived' : 'all'
     setPalette(false)
     setQueue(q)
-    // The page the post is on.
+    // shortcut: the page the post is on among the posts alone; in the Inbox, newer mail can push it a page further.
     setPageIndex(Math.floor(sorted.filter((p) => inQueue(q, p)).indexOf(post) / limit))
     open(post)
   }
@@ -314,24 +355,24 @@ export function DashboardInbox() {
       ) : (
       <>
       <ListHeader title={queueLabel(queue)}>
-        {!!inList.length && (
+        {!!entries.length && !mailPending && (
           <Pager
-            range={t('dashboard.range', {
+            range={t(moreMail ? 'dashboard.rangeOpen' : 'dashboard.range', {
               from: pageAt * limit + 1,
               to: pageAt * limit + items.length,
-              total: inList.length,
+              total: entries.length,
             })}
             onPrev={pageAt > 0 ? () => (setPageIndex(pageAt - 1), setSelected(null)) : undefined}
-            onNext={pageAt < pages - 1 ? () => (setPageIndex(pageAt + 1), setSelected(null)) : undefined}
+            onNext={pageAt < pages - 1 || moreMail ? () => (setPageIndex(pageAt + 1), setSelected(null)) : undefined}
           />
         )}
       </ListHeader>
       <ScrollArea className='relative min-h-0 flex-1'>
         <div className='flex flex-col p-3'>
-        {!posts ? (
+        {!posts || mailPending ? (
           [...Array(6)].map((_, i) => (
             <div key={i} className='flex gap-3 p-3'>
-              <Skeleton className='size-10 rounded-full' />
+              <Skeleton className='size-6 rounded-md' />
               <div className='flex flex-1 flex-col gap-2'>
                 <Skeleton className='h-4 w-1/2' />
                 <Skeleton className='h-3 w-3/4' />
@@ -342,17 +383,27 @@ export function DashboardInbox() {
         ) : !items.length ? (
           <p className='p-6 text-center text-sm text-muted-foreground'>{t('dashboard.empty')}</p>
         ) : (
-          items.map((post) => (
-            <PostRow
-              key={cardKey(post)}
-              post={post}
-              course={courseOf.get(post.course_id)}
-              author={authorOf(post)}
-              unread={isUnread(seen, post)}
-              selected={post === current}
-              onSelect={() => open(post)}
-            />
-          ))
+          items.map((entry) =>
+            entry.post ? (
+              <PostRow
+                key={entry.key}
+                post={entry.post}
+                course={courseOf.get(entry.post.course_id)}
+                author={authorOf(entry.post)}
+                unread={isUnread(seen, entry.post)}
+                selected={entry.key === head?.key}
+                onSelect={() => openEntry(entry)}
+              />
+            ) : (
+              <MailItem
+                key={entry.key}
+                item={entry.mail!}
+                labels={mail.list.labels}
+                selected={entry.key === head?.key}
+                onSelect={() => openEntry(entry)}
+              />
+            )
+          )
         )}
         </div>
       </ScrollArea>
@@ -530,7 +581,7 @@ export function DashboardInbox() {
                       <NavButton
                         icon={q.icon}
                         label={queueLabel(q.key)}
-                        count={unreadIn(q.key)}
+                        count={unreadIn(q.key) + (q.key === 'all' ? (mailLabels.find((l) => l.id === 'INBOX')?.count ?? 0) : 0)}
                         active={queue === q.key}
                         onClick={() => pickQueue(q.key)}
                       />
@@ -557,12 +608,13 @@ export function DashboardInbox() {
             </aside>
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel id='list' defaultSize={288} minSize={240} className='flex flex-col bg-background'>
+          <ResizablePanel id='list' defaultSize={288} minSize={220} className='flex flex-col bg-background'>
             {listing}
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel id='post' minSize={320} className='flex flex-col'>
-            {mailbox ? mail.labels?.granted && <MailDisplay {...mail.display} /> : shown && <Conversation {...shown} />}
+          {/* Wide enough for the mail toolbar, which keeps every action out at the right. */}
+          <ResizablePanel id='post' minSize={360} className='flex flex-col'>
+            {mailOpen ? <MailDisplay {...mail.display} /> : shown && <Conversation {...shown} />}
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
@@ -605,13 +657,13 @@ export function DashboardInbox() {
         </CommandList>
       </CommandDialog>
 
-      <Drawer open={mobile && postDrawer && (mailbox ? !!mail.selectedId : !!shown)} onOpenChange={setPostDrawer}>
+      <Drawer open={mobile && postDrawer && (mailOpen ? !!mail.selectedId : !!shown)} onOpenChange={setPostDrawer}>
         <DrawerContent className='h-[90vh] bg-background text-sm text-foreground'>
           <DrawerHeader className='sr-only'>
             <DrawerTitle>{t('dashboard.post')}</DrawerTitle>
-            <DrawerDescription>{current?.title}</DrawerDescription>
+            <DrawerDescription>{current?.title ?? shownMail?.subject}</DrawerDescription>
           </DrawerHeader>
-          {mailbox ? (
+          {mailOpen ? (
             <div className='flex h-full min-h-0 flex-col'>
               <MailDisplay {...mail.display} />
             </div>
@@ -769,7 +821,7 @@ function TagSortMenu({ prefs, onChange }: { prefs: TagListPrefs; onChange: (next
   )
 }
 
-/** A post in the list, drawn as a mail conversation is: who, when, its title and course. */
+/** A post in the list, drawn as a mail conversation is: Classroom's mark, who, when, its title and course. */
 function PostRow({
   post,
   course,
@@ -785,18 +837,16 @@ function PostRow({
   selected: boolean
   onSelect: () => void
 }) {
-  const { t, i18n } = useTranslation()
-  const Icon = POST_ICON[post.type]
+  const { i18n } = useTranslation()
   const courseName = course?.name ?? post.course_id
   return (
     <InboxItem
-      avatar={<PersonAvatar author={author} courseName={courseName} className='size-10 shrink-0' />}
+      avatar={<GoogleClassroomIcon className='size-6 shrink-0' />}
       name={author ? author.full_name || author.user_id : courseName}
-      badges={<Icon className='size-3.5 shrink-0 text-muted-foreground' aria-label={t(`courses.${post.type}`)} />}
       time={timeAgo(post.time, i18n.language)}
       timeTitle={fullTimestamp(post.time)}
       subject={post.title}
-      snippet={`${courseName} · ${t(`courses.${post.type}`)}`}
+      snippet={courseName}
       unread={unread}
       selected={selected}
       onSelect={onSelect}
@@ -822,8 +872,9 @@ function PersonAvatar({ author, courseName, className }: { author?: CoursePerson
   )
 }
 
-/** The post panel, in the Mail UI's layout: a toolbar with the tag button (and the
- *  attachments icon when it has some), who posted it, and its text and attachments. */
+/** The post panel, in the Mail UI's layout: a toolbar with the Open in Classroom icon,
+ *  the tag button (and the attachments icon when it has some), who posted it, and its
+ *  text and attachments. */
 function Conversation({ post, course, author, status, detail }: Shown) {
   const { t, i18n } = useTranslation()
   const attachmentsRef = useRef<HTMLDivElement>(null)
@@ -839,6 +890,18 @@ function Conversation({ post, course, author, status, detail }: Shown) {
   return (
     <div className='flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background'>
       <DetailToolbar>
+        {post.alternate_link && (
+          <a
+            href={post.alternate_link}
+            target='_blank'
+            rel='noreferrer'
+            aria-label={t('courses.openInClassroom')}
+            title={t('courses.openInClassroom')}
+            className='inline-flex h-9 shrink-0 items-center rounded-full px-2.5 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50'
+          >
+            <ExternalLink className='size-4' aria-hidden='true' />
+          </a>
+        )}
         <TagColorPicker target={`post:${cardKey(post)}`} />
         {!!attachments.length && (
           <IconButton
@@ -907,22 +970,32 @@ function Conversation({ post, course, author, status, detail }: Shown) {
             ) : (
               <p className='text-sm text-muted-foreground'>{t('classwork.noDescription')}</p>
             )}
-            {(!!attachments.length || post.alternate_link) && (
+            {!!attachments.length && (
               <div
                 ref={attachmentsRef}
                 className='flex scroll-mt-3 flex-col gap-3 border-t pt-5'
-                aria-label={attachments.length ? t('classwork.attachments', { count: attachments.length }) : undefined}
+                aria-label={t('classwork.attachments', { count: attachments.length })}
               >
-                {attachments.map((att) => (
-                  <AttachmentView key={att.id} att={att} />
-                ))}
-                {post.alternate_link && (
-                  <Button variant='outline' className='h-9 w-fit gap-2 px-2.5' asChild>
-                    <a href={post.alternate_link} target='_blank' rel='noreferrer'>
-                      <ExternalLink className='size-4' />
-                      {t('courses.openInClassroom')}
+                {attachments.map((att) =>
+                  // Photos and images show in place; the rest keep their file row.
+                  att.download_url && att.content_type?.startsWith('image/') ? (
+                    <a
+                      key={att.id}
+                      href={fileUrl(att.download_url)}
+                      target='_blank'
+                      rel='noreferrer'
+                      className='block w-fit max-w-full overflow-hidden rounded-lg border'
+                    >
+                      <img
+                        src={fileUrl(att.download_url)}
+                        alt={att.title ?? ''}
+                        loading='lazy'
+                        className='max-h-96 max-w-full object-contain'
+                      />
                     </a>
-                  </Button>
+                  ) : (
+                    <AttachmentView key={att.id} att={att} />
+                  )
                 )}
               </div>
             )}
@@ -948,9 +1021,11 @@ function usePostDetail(post?: Post): Detail | null {
     let live = true
     const load =
       type === 'announcement'
-        ? api
-            .getStream(courseId, 1000)
-            .then((res) => ({ key, text: res.items.find((i) => i.type === 'announcement' && i.id === id)?.text }))
+        ? Promise.all([api.getStream(courseId, 1000), api.getAttachments(courseId, id)]).then(([res, att]) => ({
+            key,
+            text: res.items.find((i) => i.type === 'announcement' && i.id === id)?.text,
+            attachments: att.items,
+          }))
         : api.getClasswork(courseId).then((res) => {
             const item = [...res.coursework, ...res.materials].find((i) => i.id === id)
             const due = item?.due_date as { year: number; month: number; day: number } | null | undefined

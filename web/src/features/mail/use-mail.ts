@@ -61,7 +61,7 @@ export function useMail(enabled: boolean, labelId: string | null, limit: number)
   const next = current ? page.next : null
   const turn = (to: string[]) => {
     setTrail({ label: labelId, tokens: to })
-    reset()
+    close()
   }
 
   const setItems = (update: (items: MailThreadSummary[]) => MailThreadSummary[]) =>
@@ -94,11 +94,15 @@ export function useMail(enabled: boolean, labelId: string | null, limit: number)
       .finally(() => opening.current === item.id && setThreadLoading(false))
   }
 
-  /** Close the open conversation, as choosing another mailbox does. */
-  const reset = () => {
+  const close = () => {
     opening.current = null
     setSelectedId(null)
     setThread(null)
+  }
+  /** Close the open conversation and go back to the first page, as choosing a queue does. */
+  const reset = () => {
+    close()
+    setTrail({ label: null, tokens: [] })
   }
 
   // Archive, spam and trash take the conversation out of the list.
@@ -108,19 +112,14 @@ export function useMail(enabled: boolean, labelId: string | null, limit: number)
     try {
       if (action === 'trash') await api.trashMailThread(id)
       else if (action === 'archive') await api.modifyMailThread(id, { remove: ['INBOX'] })
-      else if (action === 'spam') await api.modifyMailThread(id, { add: ['SPAM'], remove: ['INBOX'] })
-      else await api.modifyMailThread(id, { add: ['UNREAD'] })
+      else await api.modifyMailThread(id, { add: ['SPAM'], remove: ['INBOX'] })
     } catch (e) {
       toast.error(message(e, t('mail.actionFailed')))
       return
     }
-    if (action === 'unread') {
-      patchItem(id, { unread: true })
-    } else {
-      setItems((prev) => prev.filter((it) => it.id !== id))
-      toast.success(t(`mail.done.${action}`))
-    }
-    reset()
+    setItems((prev) => prev.filter((it) => it.id !== id))
+    toast.success(t(`mail.done.${action}`))
+    close()
     void loadLabels()
   }
 

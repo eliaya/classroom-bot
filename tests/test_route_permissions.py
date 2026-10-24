@@ -21,6 +21,9 @@ PUBLIC = {
     ("get", "/api/auth/login/start"),
     ("post", "/api/auth/login/password"),
     ("get", "/api/auth/google/callback"),
+    # The sign-in page and the browser tab show the site logo and favicon.
+    ("get", "/api/site/branding"),
+    ("get", "/api/site/{kind}"),
 }
 
 # (method, url, permission key that must be held)
@@ -57,6 +60,8 @@ MATRIX = [
     ("delete", "/api/roles/999", "users:use"),
     ("get", "/api/roles/external-storage", "users:view"),
     ("patch", "/api/roles/external-storage", "users:use"),
+    ("put", "/api/site/logo", "users:use"),
+    ("delete", "/api/site/favicon", "users:use"),
     ("get", "/api/mail/labels", "mail:view"),
     ("get", "/api/mail/threads/abc", "mail:view"),
     ("post", "/api/mail/threads/abc/trash", "mail:use"),

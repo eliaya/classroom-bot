@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-10-24
+
+**Upgrade notes.** The table `site_branding` is added at startup. The web image vendors diceui's FileUpload (`src/components/diceui/file-upload.tsx`) on packages already installed; no new package.
+
+### Added
+- **Site logo and favicon (Settings → Branding, administrators only).** The upload form follows the shadcnblocks file-upload-form-4 block (diceui FileUpload): a drop zone with a browse link, the chosen file's row and a hint per field, and one Save button. A live preview beside it shows the browser tab, the sidebar header and the sign-in heading in the current theme as files are picked; nothing changes for others until saving. The upload in use shows as a row whose X goes back to the built-in image on save. Once saved, the sidebar, the sign-in page and every page's browser tab show them at once. Logo: PNG, JPG, WEBP, GIF or SVG up to 1 MB; favicon: the same or ICO, up to 256 KB. API: `GET /api/site/branding` and `GET /api/site/{logo|favicon}` are public (the sign-in page needs them) and not audited; `PUT` (the raw image as the body, its type in `Content-Type`; 415 wrong type, 413 too large, 422 empty) and `DELETE /api/site/{logo|favicon}` need `users:use`. The images are kept in the database, so backups carry them, and served with a sandboxing CSP and `nosniff` so an SVG cannot run script.
+
+### Changed
+- **An announcement's photos and attachments show in the Dashboard's right column.** Opening an announcement fetches its synced attachments (`GET /api/courses/{id}/attachments?item_id=`): downloaded images show in place under the text (up to 384px tall; a click opens the full size), other files keep their row, and the toolbar's attachments icon appears for it too. Coursework and material posts show their images in place the same way.
+- **Open in Classroom is an icon button left of Tags** in the post toolbar, with the Tags pill's tokens, instead of an outline button under the attachments.
+- **The Dashboard's Inbox also lists the Gmail inbox.** For a role holding `mail:view` with Gmail access, the Inbox shows the Gmail inbox's conversations among the posts, newest first, and counts its unread conversations; choosing one opens it in the right column (on a phone, in the drawer). While Gmail has more, the pager shows the range alone ("1–20") and the next page fetches more conversations. Up to the newest 100 conversations are merged; older ones are in Mail.
+- **List rows show where they come from.** A post shows Google Classroom's mark and a conversation Gmail's, in place of the avatar; the post type icon and the type name after the course are gone.
+- **Mail opens on its newest conversation.** Choosing Mail, or a mailbox or label under it, opens the newest conversation in the right column on a wide screen, as Gmail's reading pane does (which marks it read); after archiving, spam or trash the next newest opens. A phone still opens one only when tapped. Choosing a queue starts a mailbox on its first page.
+- **The mail toolbar keeps Tags alone at the left.** Archive, spam, trash, labels, star, the applied labels, and reply, reply all and forward are all at the right. The More menu is gone, and with it Mark as unread and Open in Gmail (reply and forward still open the conversation in Gmail). For the toolbar to fit, the post column is at least 360px and the list at least 220px.
+- **The tag picker's input bar is at the foot of its card.** Opening the tag button on a post or a mail conversation shows the card of tags with the "Add or find a tag…" bar under them, instead of a bar sliding out to the button's right. The bar has no border, only a muted fill; when there are many tags they scroll above it while it stays in place.
+
 ## [0.33.0] - 2026-10-24
 
 ### Changed

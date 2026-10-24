@@ -7,8 +7,8 @@ import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
-  // Vendored shadcn and reui components, kept as their registries ship them.
-  { ignores: ['dist', 'src/components/ui', 'src/components/reui'] },
+  // Vendored shadcn, reui and diceui components, kept as their registries ship them.
+  { ignores: ['dist', 'src/components/ui', 'src/components/reui', 'src/components/diceui'] },
   {
     extends: [
       js.configs.recommended,

@@ -123,6 +123,19 @@ vi.mock('@/lib/api', async (importOriginal) => {
         items: [{ id: 'a1', type: 'announcement', course_id: '101', text: 'Exam moved\nTo Friday, room 3.' }],
         count: 1,
       })),
+      getAttachments: vi.fn(async () => ({
+        items: [
+          {
+            id: 5,
+            source: 'drive',
+            title: 'room3.jpg',
+            content_type: 'image/jpeg',
+            fetch_status: 'fetched',
+            download_url: '/courses/101/attachments/5/download',
+          },
+        ],
+        total: 1,
+      })),
     },
   }
 })
@@ -192,6 +205,8 @@ describe('DashboardInbox', () => {
     await expect.element(screen.getByRole('heading', { level: 2, name: 'Announcements' })).toBeInTheDocument()
     await expect.poll(() => rows().length).toBe(1)
     await expect.element(screen.getByText('To Friday, room 3.')).toBeInTheDocument()
+    // The announcement's photo shows in place.
+    await expect.element(screen.getByRole('img', { name: 'room3.jpg' })).toBeInTheDocument()
     await userEvent.click(nav('Archived'))
     await expect.poll(() => rows().length).toBe(1)
     expect(rows()[0].textContent).toContain('coursework x1')
@@ -259,7 +274,7 @@ describe('DashboardInbox', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await userEvent.click(rows()[0])
     await expect.element(screen.getByRole('dialog').getByText('Read chapter 3.')).toBeInTheDocument()
-    await expect.element(screen.getByRole('dialog').getByText('Open in Classroom')).toBeInTheDocument()
+    await expect.element(screen.getByRole('dialog').getByRole('link', { name: 'Open in Classroom' })).toBeInTheDocument()
   })
 
   it('keeps the column widths the user set after a reload', async () => {
@@ -300,13 +315,18 @@ describe('DashboardInbox', () => {
     const pill = screen.getByRole('button', { name: 'Tags', exact: true })
     await userEvent.click(pill)
     await expect.element(pill).toHaveAttribute('aria-expanded', 'true')
-    // The input bar slides out to the pill's right, the card of tags opens under it.
+    // The card of tags opens under the pill, its input bar at the foot under the tags, borderless on a fill.
     const input = screen.getByRole('combobox', { name: 'Add or find a tag…' })
     await expect.element(input).toHaveFocus()
     const card = screen.getByRole('listbox', { name: 'Tags' })
     await expect.element(card.getByRole('option', { name: 'Review' })).toHaveAttribute('aria-selected', 'false')
-    await expect.poll(() => input.element().getBoundingClientRect().left > pill.element().getBoundingClientRect().right).toBe(true)
     await expect.poll(() => card.element().getBoundingClientRect().top > pill.element().getBoundingClientRect().bottom).toBe(true)
+    await expect.poll(() => input.element().getBoundingClientRect().top >= card.element().getBoundingClientRect().bottom).toBe(true)
+    expect(card.element().parentElement!.contains(input.element())).toBe(true)
+    const bar = getComputedStyle(input.element().parentElement!)
+    expect(bar.borderTopWidth).toBe('0px')
+    expect(bar.boxShadow).toBe('none')
+    expect(bar.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
 
     // Typing completes the first tag it starts; Tab takes it, Enter puts it on.
     await userEvent.type(input, 're')
@@ -340,6 +360,7 @@ describe('DashboardInbox', () => {
     useTagsStore.setState({ tags: [], loaded: false })
 
     // An announcement without attachments has no attachments icon.
+    vi.mocked(api.getAttachments).mockResolvedValueOnce({ items: [], total: 0 })
     await userEvent.click(rows()[1])
     await expect.element(screen.getByText('To Friday, room 3.')).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('Attachments (')
@@ -407,11 +428,23 @@ describe('DashboardInbox mail', () => {
     expect(nav('Projects')?.textContent).toBe('Projects2')
     expect(document.querySelectorAll('aside a[href^="https://mail.google.com"]')).toHaveLength(1)
 
-    await screen.getByRole('button', { name: /Sarah Johnson/ }).click()
+    // The newest conversation opens by itself, and is read.
     await expect.element(screen.getByText(/Thanks for the feedback\./)).toBeVisible()
+    expect(api.getMailThread).toHaveBeenLastCalledWith('t1')
     expect(api.modifyMailThread).toHaveBeenCalledWith('t1', { remove: ['UNREAD'] })
     // Tagged from the toolbar as a post is; the header is the post panel's, the message has none of its own.
-    await expect.element(screen.getByRole('button', { name: 'Tags', exact: true })).toBeVisible()
+    const tags = screen.getByRole('button', { name: 'Tags', exact: true })
+    await expect.element(tags).toBeVisible()
+    // Tags alone at the left; every other action at the right, with no More menu.
+    const left = (role: 'button' | 'link', name: string) =>
+      page.getByRole(role, { name, exact: true }).last().element().getBoundingClientRect().left
+    const order = [
+      ...['Archive', 'Move to spam', 'Move to trash', 'Star'].map((name) => left('button', name)),
+      ...['Reply in Gmail', 'Reply all in Gmail', 'Forward in Gmail'].map((name) => left('link', name)),
+    ]
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+    expect(order[0] - tags.element().getBoundingClientRect().right).toBeGreaterThan(40)
+    expect(screen.getByRole('button', { name: 'More', exact: true }).elements()).toHaveLength(0)
     expect(document.body.textContent).not.toContain('Select a tag')
     // The sender's own line (name, address, time) above the message is gone.
     expect(screen.getByText('sarah@example.com', { exact: true }).elements()).toHaveLength(0)
@@ -423,12 +456,52 @@ describe('DashboardInbox mail', () => {
     await toolbarArchive().click()
     expect(api.modifyMailThread).toHaveBeenLastCalledWith('t1', { remove: ['INBOX'] })
     await expect.element(screen.getByRole('button', { name: /Sarah Johnson/ })).not.toBeInTheDocument()
-    await expect.element(screen.getByText('No conversation selected')).toBeVisible()
+    // The next newest opens in its place.
+    await expect.poll(() => vi.mocked(api.getMailThread).mock.lastCall?.[0]).toBe('t2')
 
-    // Back to the posts.
+    // Back to the posts, with the conversation left in the inbox among them.
     await userEvent.click(nav('Inbox'))
-    await expect.poll(() => rows().length).toBe(15)
+    await expect.poll(() => rows().length).toBe(16)
     expect(nav('Sent')).toBeUndefined()
+  })
+
+  it("lists the Gmail inbox among the posts in the Inbox, each row by its source's mark", async () => {
+    vi.mocked(api.getMailThread).mockClear()
+    const screen = await render(<DashboardInbox />)
+    await expect.poll(() => rows().length).toBe(17)
+    await expect.element(screen.getByText('1–17 of 17')).toBeVisible()
+    expect(api.listMailThreads).toHaveBeenLastCalledWith({ label: 'INBOX', page_token: undefined, limit: 20 })
+    // Newest first: the conversations, two and five hours old, come after every post.
+    expect(rows()[15].textContent).toContain('Sarah Johnson')
+    expect(rows()[16].textContent).toContain('Michael Chen')
+    // Its unread conversation counts in the Inbox.
+    expect(nav('Inbox').textContent).toBe('Inbox1')
+    // A conversation by Gmail's mark, a post by Classroom's; no avatar, post type icon or type name.
+    expect(rows()[15].querySelector('svg title')?.textContent).toBe('Gmail')
+    expect(rows()[1].querySelector('svg[viewBox="0 0 333333 287879"]')).not.toBeNull()
+    expect(rows()[1].querySelector('[data-slot="avatar"], [aria-label="Announcement"]')).toBeNull()
+    expect(rows()[1].textContent).toContain('Sato Hana')
+    expect(rows()[1].textContent).not.toContain('Announcement')
+    // The newest post shows; nothing is fetched from Gmail until a conversation is chosen.
+    await expect.element(screen.getByText('Read chapter 3.')).toBeVisible()
+    expect(api.getMailThread).not.toHaveBeenCalled()
+    await userEvent.click(rows()[15])
+    await expect.element(screen.getByText(/Thanks for the feedback\./)).toBeVisible()
+    expect(rows()[15].getAttribute('aria-current')).toBe('true')
+  })
+
+  it('pages the Inbox past the conversations it holds while Gmail has more', async () => {
+    setDashboardLimit(10)
+    vi.mocked(api.listMailThreads).mockResolvedValue({ items: THREADS, next_page_token: 'p2' })
+    const screen = await render(<DashboardInbox />)
+    await expect.poll(() => rows().length).toBe(10)
+    // Gmail gives no total: the range alone.
+    await expect.element(screen.getByText('1–10', { exact: true })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    // The next page asks for as many of the newest conversations as two pages hold.
+    await expect.poll(() => vi.mocked(api.listMailThreads).mock.lastCall?.[0]).toEqual({ label: 'INBOX', page_token: undefined, limit: 20 })
+    await expect.element(screen.getByText('11–17', { exact: true })).toBeVisible()
+    vi.mocked(api.listMailThreads).mockImplementation(async () => ({ items: THREADS, next_page_token: null }))
   })
 
   it('shows HTML mail in a frame without scripts, and links in plain text', async () => {
@@ -442,8 +515,8 @@ describe('DashboardInbox mail', () => {
         },
       ],
     })
+    // Opened by itself, as the newest.
     const screen = await openMail()
-    await screen.getByRole('button', { name: /Sarah Johnson/ }).click()
     const frame = screen.getByTitle('Sarah Johnson')
     await expect.element(frame).toBeVisible()
     const el = frame.element() as HTMLIFrameElement
@@ -495,7 +568,9 @@ describe('DashboardInbox mail', () => {
   it('opens a conversation in a drawer on a phone', async () => {
     await page.viewport(390, 844)
     const screen = await render(<DashboardInbox />)
-    await expect.poll(() => rows().length).toBe(15)
+    await expect.poll(() => rows().length).toBe(17)
+    // Nothing opens by itself on a phone.
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: /Inbox/ }).first())
     await userEvent.click(screen.getByRole('menuitem', { name: 'Mail' }))
     await screen.getByRole('button', { name: /Sarah Johnson/ }).click()

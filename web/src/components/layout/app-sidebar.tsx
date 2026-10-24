@@ -13,11 +13,14 @@ import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { visibleNav } from '@/lib/permissions'
 import { useAuthStore } from '@/stores/auth-store'
+import { useBrandingStore } from '@/stores/branding-store'
+import { fileUrl } from '@/lib/api'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const team = sidebarData.teams[0]
   const user = useAuthStore((state) => state.auth.user)
+  const logo = useBrandingStore((state) => state.logo)
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
@@ -30,9 +33,13 @@ export function AppSidebar() {
               asChild
             >
               <div>
-                <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
-                  <team.logo className='size-4' />
-                </div>
+                {logo ? (
+                  <img src={fileUrl(logo)} alt='' className='aspect-square size-8 shrink-0 rounded-lg object-contain' />
+                ) : (
+                  <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
+                    <team.logo className='size-4' />
+                  </div>
+                )}
                 <div className='grid flex-1 text-start text-sm leading-tight'>
                   <span className='truncate font-semibold'>{team.name}</span>
                   <span className='truncate text-xs'>{team.plan}</span>

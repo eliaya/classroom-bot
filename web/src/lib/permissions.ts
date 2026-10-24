@@ -46,6 +46,8 @@ export const ROUTE_PERMISSIONS: ReadonlyArray<readonly [string, readonly string[
   ['/settings/backup', ['backup:view']],
   ['/settings/users', ['users:view']],
   ['/settings/roles', ['users:view']],
+  // The site logo and favicon everyone sees: administrators only.
+  ['/settings/branding', [WILDCARD]],
   // Server setup guide: administrators only.
   ['/settings/setup', [WILDCARD]],
 ]

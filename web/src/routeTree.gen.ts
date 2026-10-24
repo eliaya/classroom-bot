@@ -34,6 +34,7 @@ import { Route as AuthenticatedSettingsSchedulerRouteImport } from './routes/_au
 import { Route as AuthenticatedSettingsRolesRouteImport } from './routes/_authenticated/settings/roles'
 import { Route as AuthenticatedSettingsOpencloudRouteImport } from './routes/_authenticated/settings/opencloud'
 import { Route as AuthenticatedSettingsLanguageRouteImport } from './routes/_authenticated/settings/language'
+import { Route as AuthenticatedSettingsBrandingRouteImport } from './routes/_authenticated/settings/branding'
 import { Route as AuthenticatedSettingsBackupRouteImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAuditRouteImport } from './routes/_authenticated/settings/audit'
 import { Route as AuthenticatedMaterialsSplatRouteImport } from './routes/_authenticated/materials/$'
@@ -182,6 +183,12 @@ const AuthenticatedSettingsLanguageRoute =
     path: '/language',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsBrandingRoute =
+  AuthenticatedSettingsBrandingRouteImport.update({
+    id: '/branding',
+    path: '/branding',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedSettingsBackupRoute =
   AuthenticatedSettingsBackupRouteImport.update({
     id: '/backup',
@@ -251,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/materials/$': typeof AuthenticatedMaterialsSplatRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/branding': typeof AuthenticatedSettingsBrandingRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
   '/settings/opencloud': typeof AuthenticatedSettingsOpencloudRoute
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
@@ -284,6 +292,7 @@ export interface FileRoutesByTo {
   '/materials/$': typeof AuthenticatedMaterialsSplatRoute
   '/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/branding': typeof AuthenticatedSettingsBrandingRoute
   '/settings/language': typeof AuthenticatedSettingsLanguageRoute
   '/settings/opencloud': typeof AuthenticatedSettingsOpencloudRoute
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
@@ -321,6 +330,7 @@ export interface FileRoutesById {
   '/_authenticated/materials/$': typeof AuthenticatedMaterialsSplatRoute
   '/_authenticated/settings/audit': typeof AuthenticatedSettingsAuditRoute
   '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/_authenticated/settings/branding': typeof AuthenticatedSettingsBrandingRoute
   '/_authenticated/settings/language': typeof AuthenticatedSettingsLanguageRoute
   '/_authenticated/settings/opencloud': typeof AuthenticatedSettingsOpencloudRoute
   '/_authenticated/settings/roles': typeof AuthenticatedSettingsRolesRoute
@@ -358,6 +368,7 @@ export interface FileRouteTypes {
     | '/materials/$'
     | '/settings/audit'
     | '/settings/backup'
+    | '/settings/branding'
     | '/settings/language'
     | '/settings/opencloud'
     | '/settings/roles'
@@ -391,6 +402,7 @@ export interface FileRouteTypes {
     | '/materials/$'
     | '/settings/audit'
     | '/settings/backup'
+    | '/settings/branding'
     | '/settings/language'
     | '/settings/opencloud'
     | '/settings/roles'
@@ -427,6 +439,7 @@ export interface FileRouteTypes {
     | '/_authenticated/materials/$'
     | '/_authenticated/settings/audit'
     | '/_authenticated/settings/backup'
+    | '/_authenticated/settings/branding'
     | '/_authenticated/settings/language'
     | '/_authenticated/settings/opencloud'
     | '/_authenticated/settings/roles'
@@ -636,6 +649,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsLanguageRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/branding': {
+      id: '/_authenticated/settings/branding'
+      path: '/branding'
+      fullPath: '/settings/branding'
+      preLoaderRoute: typeof AuthenticatedSettingsBrandingRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/backup': {
       id: '/_authenticated/settings/backup'
       path: '/backup'
@@ -705,6 +725,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAuditRoute: typeof AuthenticatedSettingsAuditRoute
   AuthenticatedSettingsBackupRoute: typeof AuthenticatedSettingsBackupRoute
+  AuthenticatedSettingsBrandingRoute: typeof AuthenticatedSettingsBrandingRoute
   AuthenticatedSettingsLanguageRoute: typeof AuthenticatedSettingsLanguageRoute
   AuthenticatedSettingsOpencloudRoute: typeof AuthenticatedSettingsOpencloudRoute
   AuthenticatedSettingsRolesRoute: typeof AuthenticatedSettingsRolesRoute
@@ -720,6 +741,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
   {
     AuthenticatedSettingsAuditRoute: AuthenticatedSettingsAuditRoute,
     AuthenticatedSettingsBackupRoute: AuthenticatedSettingsBackupRoute,
+    AuthenticatedSettingsBrandingRoute: AuthenticatedSettingsBrandingRoute,
     AuthenticatedSettingsLanguageRoute: AuthenticatedSettingsLanguageRoute,
     AuthenticatedSettingsOpencloudRoute: AuthenticatedSettingsOpencloudRoute,
     AuthenticatedSettingsRolesRoute: AuthenticatedSettingsRolesRoute,

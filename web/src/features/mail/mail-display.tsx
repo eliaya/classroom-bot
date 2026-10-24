@@ -1,30 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  Archive,
-  ChevronsUpDown,
-  EllipsisVertical,
-  ExternalLink,
-  Forward,
-  MailOpen,
-  OctagonAlert,
-  Reply,
-  ReplyAll,
-  Star,
-  Trash2,
-} from 'lucide-react'
+import { Archive, ChevronsUpDown, Forward, OctagonAlert, Reply, ReplyAll, Star, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { MailLabel, MailMessage, MailThread } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -34,7 +15,7 @@ import { LabelManager } from './label-manager'
 import { LabelDot } from './label-dot'
 import { formatMailDate, gmailThreadUrl, initials, labelName } from './mail-utils'
 
-export type MailAction = 'archive' | 'spam' | 'trash' | 'unread'
+export type MailAction = 'archive' | 'spam' | 'trash'
 
 export type MailDisplayProps = {
   thread: MailThread | null
@@ -64,7 +45,7 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
   const link = (label: string, icon: React.ReactNode) => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant='ghost' size='icon' asChild disabled={!thread}>
+        <Button variant='ghost' size='icon' className='size-8' asChild disabled={!thread}>
           <a href={gmail} target='_blank' rel='noreferrer' aria-disabled={!thread}>
             {icon}
             <span className='sr-only'>{label}</span>
@@ -78,26 +59,10 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
   return (
     <div className='flex h-full min-h-0 flex-col bg-background'>
       <DetailToolbar>
-        {/* Tags as on a post: by colour, from the toolbar. */}
+        {/* Tags as on a post: by colour, from the toolbar; every other action at the right. */}
         {thread && <TagColorPicker target={`mail:${thread.id}`} />}
-        <div className='hidden items-center lg:flex'>
-          <IconButton label={t('mail.archive')} disabled={off} onClick={() => onAction('archive')}>
-            <Archive />
-          </IconButton>
-          <IconButton label={t('mail.spam')} disabled={off} onClick={() => onAction('spam')}>
-            <OctagonAlert />
-          </IconButton>
-          <IconButton label={t('mail.trash')} disabled={off} onClick={() => onAction('trash')}>
-            <Trash2 />
-          </IconButton>
-          <LabelManager labels={own} applied={thread?.label_ids ?? []} disabled={off} onChange={onLabel} />
-        </div>
-        <Separator orientation='vertical' className='hidden h-6 self-center lg:block' />
-        <div className='hidden min-w-0 flex-1 items-center gap-2 lg:flex'>
-          <IconButton label={t(starred ? 'mail.unstar' : 'mail.star')} disabled={off} onClick={() => onStar(!starred)}>
-            <Star className={cn(starred && 'fill-amber-400 text-amber-400')} />
-          </IconButton>
-          <div className='flex min-w-0 flex-wrap items-center gap-1.5'>
+        <div className='ms-auto flex min-w-0 items-center gap-0.5'>
+          <div className='hidden min-w-0 items-center gap-1.5 overflow-hidden pe-1 lg:flex'>
             {applied.map(([l, i]) => (
               <Badge key={l.id} variant='outline' className='gap-1.5 whitespace-nowrap'>
                 <LabelDot label={l} index={i} className='size-1.5' />
@@ -105,44 +70,28 @@ export function MailDisplay({ thread, loading, labels, canUse, onAction, onStar,
               </Badge>
             ))}
           </div>
-        </div>
-        <div className='ms-auto flex shrink-0 items-center gap-0.5'>
+          <IconButton label={t('mail.archive')} className='size-8' disabled={off} onClick={() => onAction('archive')}>
+            <Archive />
+          </IconButton>
+          <IconButton label={t('mail.spam')} className='size-8' disabled={off} onClick={() => onAction('spam')}>
+            <OctagonAlert />
+          </IconButton>
+          <IconButton label={t('mail.trash')} className='size-8' disabled={off} onClick={() => onAction('trash')}>
+            <Trash2 />
+          </IconButton>
+          <LabelManager labels={own} applied={thread?.label_ids ?? []} disabled={off} onChange={onLabel} />
+          <IconButton
+            label={t(starred ? 'mail.unstar' : 'mail.star')}
+            className='size-8'
+            disabled={off}
+            onClick={() => onStar(!starred)}
+          >
+            <Star className={cn(starred && 'fill-amber-400 text-amber-400')} />
+          </IconButton>
+          <Separator orientation='vertical' className='mx-1 h-6 self-center' />
           {link(t('mail.reply'), <Reply />)}
           {link(t('mail.replyAll'), <ReplyAll />)}
           {link(t('mail.forward'), <Forward />)}
-          <Separator orientation='vertical' className='mx-1 h-6 self-center' />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant='ghost' size='icon' disabled={!thread}>
-                <EllipsisVertical />
-                <span className='sr-only'>{t('mail.more')}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end'>
-              {/* The toolbar's hidden actions, on narrow screens. */}
-              <DropdownMenuItem className='lg:hidden' disabled={off} onSelect={() => onAction('archive')}>
-                <Archive /> {t('mail.archive')}
-              </DropdownMenuItem>
-              <DropdownMenuItem className='lg:hidden' disabled={off} onSelect={() => onAction('spam')}>
-                <OctagonAlert /> {t('mail.spam')}
-              </DropdownMenuItem>
-              <DropdownMenuItem className='lg:hidden' disabled={off} onSelect={() => onAction('trash')}>
-                <Trash2 /> {t('mail.trash')}
-              </DropdownMenuItem>
-              <DropdownMenuItem className='lg:hidden' disabled={off} onSelect={() => onStar(!starred)}>
-                <Star /> {t(starred ? 'mail.unstar' : 'mail.star')}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className='lg:hidden' />
-              <DropdownMenuItem disabled={off} onSelect={() => onAction('unread')}>
-                <MailOpen /> {t('mail.markUnread')}
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <a href={gmail} target='_blank' rel='noreferrer'>
-                  <ExternalLink /> {t('mail.openInGmail')}
-                </a>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </DetailToolbar>
       {loading ? (

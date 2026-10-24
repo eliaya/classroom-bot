@@ -538,6 +538,22 @@ class ThemeSetting(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now_jst)
 
 
+class SiteBranding(SQLModel, table=True):
+    """Singleton row (id=1): the site logo and favicon the admin uploaded.
+
+    Kept in the database, not on disk, so backups carry them. A null image
+    means the built-in one.
+    """
+    __tablename__ = "site_branding"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    logo: Optional[bytes] = Field(default=None, sa_column=Column(LargeBinary, nullable=True))
+    logo_type: Optional[str] = None
+    favicon: Optional[bytes] = Field(default=None, sa_column=Column(LargeBinary, nullable=True))
+    favicon_type: Optional[str] = None
+    updated_at: datetime = Field(default_factory=now_jst)
+
+
 class OpenCloudSetting(SQLModel, table=True):
     """One row per user: the external storage that user's Drive attachments are
     moved to instead of their own Google Drive (the table name predates the

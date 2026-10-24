@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from src import __version__
 from src.api.deps import require_module
-from src.api.routes import audit, auth, backup, board, bot, bot_commands, bot_messages, courses, discord_meta, health, links, mail, materials, roles, scheduler, search, sync, tags, themes, todos, users
+from src.api.routes import audit, auth, backup, board, bot, bot_commands, bot_messages, courses, discord_meta, health, links, mail, materials, roles, scheduler, search, site, sync, tags, themes, todos, users
 from src.api.services.scheduler_service import SYNC_TICK_MINUTES, SchedulerService
 from src.config import settings, setup_logging
 from src.database import init_db
@@ -23,7 +23,7 @@ def _skip_audit(path: str, method: str) -> bool:
     if path.startswith("/api/audit") or path.startswith("/api/health"):
         return True
     if method == "GET" and path.startswith(
-        ("/api/sync/status", "/api/bot/status", "/api/scheduler", "/api/version", "/api/backup", "/api/auth/me")
+        ("/api/sync/status", "/api/bot/status", "/api/scheduler", "/api/version", "/api/backup", "/api/auth/me", "/api/site")
     ):
         return True
     return False
@@ -60,6 +60,8 @@ def create_app() -> FastAPI:
     app.include_router(tags.router, prefix="/api")
     # Themes: picking one's own needs only a session; installing guards itself (users:use).
     app.include_router(themes.router, prefix="/api")
+    # Site logo and favicon: reading is public (sign-in page, browser tab); changes guard themselves.
+    app.include_router(site.router, prefix="/api")
     app.include_router(search.router, prefix="/api", dependencies=guard("search"))
     app.include_router(sync.router, prefix="/api", dependencies=guard("sync"))
     app.include_router(links.router, prefix="/api", dependencies=guard("links"))

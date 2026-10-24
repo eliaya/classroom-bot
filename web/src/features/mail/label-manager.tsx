@@ -24,7 +24,7 @@ export function LabelManager({ labels, applied, disabled, onChange }: LabelManag
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <Button variant='ghost' size='icon' disabled={disabled}>
+            <Button variant='ghost' size='icon' className='size-8' disabled={disabled}>
               <Tag />
               <span className='sr-only'>{t('mail.manageLabels')}</span>
             </Button>
@@ -32,7 +32,7 @@ export function LabelManager({ labels, applied, disabled, onChange }: LabelManag
         </TooltipTrigger>
         <TooltipContent>{t('mail.manageLabels')}</TooltipContent>
       </Tooltip>
-      <PopoverContent align='start' className='w-56 p-2'>
+      <PopoverContent align='end' className='w-56 p-2'>
         <p className='px-2 pb-2 text-[11px] font-medium text-muted-foreground uppercase'>
           {t('mail.manageLabels')}
         </p>

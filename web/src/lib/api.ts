@@ -518,6 +518,8 @@ export type Theme = {
   dark: Record<string, string>
 }
 export type ThemeImport = { name: string; light: Record<string, string>; dark: Record<string, string> }
+/** API paths of the uploaded site logo and favicon (pass to `fileUrl`), or null for the built-in ones. */
+export type SiteBranding = { logo: string | null; favicon: string | null }
 
 export const api = {
   health: () => request<{ status: string }>('/health'),
@@ -580,6 +582,11 @@ export const api = {
   installTheme: (body: ThemeImport & { source?: string }) =>
     request<Theme>('/themes', { method: 'POST', body: JSON.stringify(body) }),
   deleteTheme: (id: number) => request<{ id: number; deleted: boolean }>(`/themes/${id}`, { method: 'DELETE' }),
+  siteBranding: () => request<SiteBranding>('/site/branding'),
+  // The raw image is the body; its type goes in Content-Type.
+  uploadSiteImage: (kind: keyof SiteBranding, file: File) =>
+    request<SiteBranding>(`/site/${kind}`, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } }),
+  deleteSiteImage: (kind: keyof SiteBranding) => request<SiteBranding>(`/site/${kind}`, { method: 'DELETE' }),
   listTags: () => request<{ items: Tag[]; total: number }>('/tags'),
   createTag: (name: string) =>
     request<Tag>('/tags', { method: 'POST', body: JSON.stringify({ name }) }),
@@ -640,6 +647,11 @@ export const api = {
   getStream: (id: string, limit = 50, offset = 0) =>
     request<{ items: StreamItem[]; count: number }>(
       `/courses/${id}/stream?limit=${limit}&offset=${offset}`
+    ),
+  // One item's synced attachments: an announcement's come only from here.
+  getAttachments: (courseId: string, itemId: string) =>
+    request<{ items: Attachment[]; total: number }>(
+      `/courses/${courseId}/attachments?item_id=${encodeURIComponent(itemId)}`
     ),
   getClasswork: (id: string, topicId?: string | null) => {
     const qs = topicId ? `?topic_id=${encodeURIComponent(topicId)}` : ''
