@@ -15,6 +15,7 @@ import {
   Tag as TagIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useDefaultLayout } from 'react-resizable-panels'
 import {
   api,
   type Attachment,
@@ -52,6 +53,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DetailHeader, DetailToolbar, IconButton, InboxItem, ListHeader, Pager } from '@/features/mail/inbox-ui'
@@ -141,6 +143,8 @@ export function DashboardInbox() {
   const [editing, setEditing] = useState<Tag | null>(null)
   // What the chosen tag is on (its target keys), loaded when it is chosen.
   const [tagged, setTagged] = useState<{ queue: Queue; targets: Set<string> } | null>(null)
+  // Column widths, kept per device; a window resize does not overwrite them.
+  const columns = useDefaultLayout({ id: 'dashboard-columns', onlySaveAfterUserInteractions: true })
 
   useEffect(() => {
     // shortcut: loads every post and slices here; add a server-side limit if it gets slow.
@@ -275,286 +279,293 @@ export function DashboardInbox() {
     detail,
   }
 
+  // The list column: a mailbox's conversations, or the queue's posts.
+  const listing = (
+    <>
+      {mailbox ? (
+        mail.labels?.granted ? (
+          <MailList
+            {...mail.list}
+            title={queueLabel(queue)}
+            onSelect={(item) => {
+              mail.list.onSelect(item)
+              if (mobile) setPostDrawer(true)
+            }}
+          />
+        ) : mail.labels ? (
+          <Alert className='m-4 w-auto'>
+            <AlertDescription className='flex flex-col items-start gap-3'>
+              {t('mail.notGranted')}
+              <Button asChild size='sm' variant='outline'>
+                <Link to='/settings'>{t('mail.goToSettings')}</Link>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : mail.labelsError ? (
+          <p role='alert' className='p-4 text-sm text-destructive'>
+            {mail.labelsError}
+          </p>
+        ) : (
+          <div className='flex flex-col gap-2 p-4'>
+            <Skeleton className='h-4 w-3/4' />
+            <Skeleton className='h-3 w-full' />
+          </div>
+        )
+      ) : (
+      <>
+      <ListHeader title={queueLabel(queue)}>
+        {!!inList.length && (
+          <Pager
+            range={t('dashboard.range', {
+              from: pageAt * limit + 1,
+              to: pageAt * limit + items.length,
+              total: inList.length,
+            })}
+            onPrev={pageAt > 0 ? () => (setPageIndex(pageAt - 1), setSelected(null)) : undefined}
+            onNext={pageAt < pages - 1 ? () => (setPageIndex(pageAt + 1), setSelected(null)) : undefined}
+          />
+        )}
+      </ListHeader>
+      <ScrollArea className='relative min-h-0 flex-1'>
+        <div className='flex flex-col p-3'>
+        {!posts ? (
+          [...Array(6)].map((_, i) => (
+            <div key={i} className='flex gap-3 p-3'>
+              <Skeleton className='size-10 rounded-full' />
+              <div className='flex flex-1 flex-col gap-2'>
+                <Skeleton className='h-4 w-1/2' />
+                <Skeleton className='h-3 w-3/4' />
+                <Skeleton className='h-3 w-full' />
+              </div>
+            </div>
+          ))
+        ) : !items.length ? (
+          <p className='p-6 text-center text-sm text-muted-foreground'>{t('dashboard.empty')}</p>
+        ) : (
+          items.map((post) => (
+            <PostRow
+              key={cardKey(post)}
+              post={post}
+              course={courseOf.get(post.course_id)}
+              author={authorOf(post)}
+              unread={isUnread(seen, post)}
+              selected={post === current}
+              onSelect={() => open(post)}
+            />
+          ))
+        )}
+        </div>
+      </ScrollArea>
+      </>
+      )}
+    </>
+  )
+
   return (
     // The sidebar keeps inbox7's tokens; the list and post panels are the Mail UI's, on the app's tokens.
     <div className='flex min-h-0 flex-1 overflow-hidden border-t bg-background text-foreground'>
-      <aside className='inbox7 hidden w-56 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex'>
-        <div className='flex h-14 items-center px-3'>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant='ghost' className='h-auto w-full justify-start gap-2 px-2 py-px has-[>svg]:px-2'>
-                <span className='truncate font-semibold'>{t('dashboard.workspace')}</span>
-                <ChevronDown className='size-3 text-muted-foreground' />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='start' className='inbox7 w-56'>
-              <DropdownMenuLabel className='text-xs font-medium text-muted-foreground'>
-                {t('dashboard.workspace')}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <Link to='/settings/language'>{t('dashboard.settings')}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to='/sync'>{t('dashboard.sync')}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href='https://classroom.google.com' target='_blank' rel='noreferrer'>
-                    {t('dashboard.openClassroom')}
-                  </a>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <div className='px-2 pb-2'>
-          <Button
-            variant='ghost'
-            className='h-9 w-full justify-start gap-2 px-2 has-[>svg]:px-2'
-            onClick={() => setPalette(true)}
-          >
-            <Search className='size-4' />
-            {t('dashboard.search')}
-            <kbd className='ml-auto inline-flex items-center gap-0.5 font-mono text-xs text-muted-foreground'>
-              <CommandIcon className='size-3' />K
-            </kbd>
-          </Button>
-        </div>
-        <ScrollArea className='relative min-h-0 flex-1 px-2'>
-          <div className='flex flex-col gap-1'>
-            {QUEUES.map((q) => (
-              <Fragment key={q.key}>
-                {/* Mail is its own page: linked between Materials and Archived. */}
-                {q.key === 'archived' && canMail && (
-                  <>
-                    <NavButton
-                      icon={Mail}
-                      label={t('nav.mail')}
-                      count={mailLabels.find((l) => l.id === 'INBOX')?.count ?? undefined}
-                      active={queue === 'mail:INBOX'}
-                      onClick={() => pickQueue('mail:INBOX')}
-                    />
-                    {/* The other mailboxes and the labels, while Mail is open. */}
-                    {mailbox && (
-                      <div className='flex flex-col gap-1 ps-4'>
-                        <a href={GMAIL_COMPOSE_URL} target='_blank' rel='noreferrer' className={NAV_ROW}>
-                          <SquarePen className='size-4 shrink-0' />
-                          <span className='min-w-0 flex-1 truncate'>{t('mail.compose')}</span>
-                        </a>
-                        {mailLabels
-                          .filter((l) => l.id !== 'INBOX')
-                          .map((l) => (
-                            <MailNavRow
-                              key={l.id}
-                              label={l}
-                              index={mail.labels!.labels.indexOf(l)}
-                              name={labelName(t, l)}
-                              active={mailbox === l.id}
-                              onClick={() => pickQueue(`mail:${l.id}`)}
-                            />
-                          ))}
-                      </div>
+      {mobile ? (
+        <div className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
+          <header className='flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4'>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant='ghost' size='sm' className='h-8 min-w-0 gap-1.5 rounded-[min(var(--radius-md),10px)] px-2.5'>
+                  <QueueIcon className='size-4' />
+                  <span className='truncate'>{queueLabel(queue)}</span>
+                  <ChevronDown className='size-3' />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='start' className='inbox7 w-56'>
+                {QUEUES.map((q) => (
+                  <Fragment key={q.key}>
+                    {q.key === 'archived' && canMail && (
+                      <DropdownMenuItem onSelect={() => pickQueue('mail:INBOX')}>
+                        <Mail className='size-4' />
+                        {t('nav.mail')}
+                      </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem onSelect={() => pickQueue(q.key)}>
+                      <q.icon className='size-4' />
+                      {queueLabel(q.key)}
+                    </DropdownMenuItem>
+                  </Fragment>
+                ))}
+                {mailLabels.length > 1 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className='text-xs font-medium text-muted-foreground'>{t('nav.mail')}</DropdownMenuLabel>
+                    {mailLabels
+                      .filter((l) => l.id !== 'INBOX')
+                      .map((l) => {
+                        const Icon = MAILBOX_ICONS[l.id]
+                        return (
+                          <DropdownMenuItem key={l.id} onSelect={() => pickQueue(`mail:${l.id}`)}>
+                            {Icon ? (
+                              <Icon className='size-4' />
+                            ) : (
+                              <LabelDot label={l} index={mail.labels!.labels.indexOf(l)} className='mx-1 size-2' />
+                            )}
+                            <span className='truncate'>{labelName(t, l)}</span>
+                          </DropdownMenuItem>
+                        )
+                      })}
                   </>
                 )}
-                <NavButton
-                  icon={q.icon}
-                  label={queueLabel(q.key)}
-                  count={unreadIn(q.key)}
-                  active={queue === q.key}
-                  onClick={() => pickQueue(q.key)}
-                />
-              </Fragment>
-            ))}
-          </div>
-          <div className='mt-4 mb-1 flex items-center justify-between gap-2 ps-2'>
-            <p className='text-xs font-medium text-muted-foreground'>{t('dashboard.tags')}</p>
-            <TagSortMenu prefs={tagPrefs} onChange={changePrefs} />
-          </div>
-          <div className='flex flex-col gap-1 pb-2'>
-            {buckets.map((tag) => (
-              <TagNavRow
-                key={tag.id}
-                tag={tag}
-                active={queue === `tag:${tag.id}`}
-                onClick={() => pickQueue(`tag:${tag.id}`)}
-                onEdit={() => setEditing(tag)}
-              />
-            ))}
-            {!tags.length && <p className='px-2 py-1 text-xs text-muted-foreground'>{t('dashboard.noTags')}</p>}
-          </div>
-        </ScrollArea>
-      </aside>
-
-      <div className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
-        <header className='flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4 md:hidden'>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant='ghost' size='sm' className='h-8 min-w-0 gap-1.5 rounded-[min(var(--radius-md),10px)] px-2.5'>
-                <QueueIcon className='size-4' />
-                <span className='truncate'>{queueLabel(queue)}</span>
-                <ChevronDown className='size-3' />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='start' className='inbox7 w-56'>
-              {QUEUES.map((q) => (
-                <Fragment key={q.key}>
-                  {q.key === 'archived' && canMail && (
-                    <DropdownMenuItem onSelect={() => pickQueue('mail:INBOX')}>
-                      <Mail className='size-4' />
-                      {t('nav.mail')}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onSelect={() => pickQueue(q.key)}>
-                    <q.icon className='size-4' />
-                    {queueLabel(q.key)}
-                  </DropdownMenuItem>
-                </Fragment>
-              ))}
-              {mailLabels.length > 1 && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className='text-xs font-medium text-muted-foreground'>{t('nav.mail')}</DropdownMenuLabel>
-                  {mailLabels
-                    .filter((l) => l.id !== 'INBOX')
-                    .map((l) => {
-                      const Icon = MAILBOX_ICONS[l.id]
-                      return (
-                        <DropdownMenuItem key={l.id} onSelect={() => pickQueue(`mail:${l.id}`)}>
-                          {Icon ? (
-                            <Icon className='size-4' />
-                          ) : (
-                            <LabelDot label={l} index={mail.labels!.labels.indexOf(l)} className='mx-1 size-2' />
-                          )}
-                          <span className='truncate'>{labelName(t, l)}</span>
-                        </DropdownMenuItem>
-                      )
-                    })}
-                </>
-              )}
-              {!!buckets.length && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className='text-xs font-medium text-muted-foreground'>
-                    {t('dashboard.tags')}
-                  </DropdownMenuLabel>
-                  {buckets.map((tag) => (
-                    <DropdownMenuItem key={tag.id} onSelect={() => pickQueue(`tag:${tag.id}`)}>
-                      <TagDot color={tag.color} />
-                      <span className='truncate'>{tag.name}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            variant='ghost'
-            size='icon'
-            className='size-8'
-            aria-label={t('dashboard.search')}
-            onClick={() => setPalette(true)}
-          >
-            <Search className='size-4' />
-          </Button>
-        </header>
-
-        <div className='flex min-h-0 flex-1 overflow-hidden'>
-          <div className='flex h-full w-full shrink-0 flex-col overflow-hidden border-r bg-background md:w-72'>
-            {mailbox ? (
-              mail.labels?.granted ? (
-                <MailList
-                  {...mail.list}
-                  title={queueLabel(queue)}
-                  onSelect={(item) => {
-                    mail.list.onSelect(item)
-                    if (mobile) setPostDrawer(true)
-                  }}
-                />
-              ) : mail.labels ? (
-                <Alert className='m-4 w-auto'>
-                  <AlertDescription className='flex flex-col items-start gap-3'>
-                    {t('mail.notGranted')}
-                    <Button asChild size='sm' variant='outline'>
-                      <Link to='/settings'>{t('mail.goToSettings')}</Link>
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              ) : mail.labelsError ? (
-                <p role='alert' className='p-4 text-sm text-destructive'>
-                  {mail.labelsError}
-                </p>
-              ) : (
-                <div className='flex flex-col gap-2 p-4'>
-                  <Skeleton className='h-4 w-3/4' />
-                  <Skeleton className='h-3 w-full' />
-                </div>
-              )
-            ) : (
-            <>
-            <ListHeader title={queueLabel(queue)}>
-              {!!inList.length && (
-                <Pager
-                  range={t('dashboard.range', {
-                    from: pageAt * limit + 1,
-                    to: pageAt * limit + items.length,
-                    total: inList.length,
-                  })}
-                  onPrev={pageAt > 0 ? () => (setPageIndex(pageAt - 1), setSelected(null)) : undefined}
-                  onNext={pageAt < pages - 1 ? () => (setPageIndex(pageAt + 1), setSelected(null)) : undefined}
-                />
-              )}
-            </ListHeader>
-            <ScrollArea className='relative min-h-0 flex-1'>
-              <div className='flex flex-col p-3'>
-              {!posts ? (
-                [...Array(6)].map((_, i) => (
-                  <div key={i} className='flex gap-3 p-3'>
-                    <Skeleton className='size-10 rounded-full' />
-                    <div className='flex flex-1 flex-col gap-2'>
-                      <Skeleton className='h-4 w-1/2' />
-                      <Skeleton className='h-3 w-3/4' />
-                      <Skeleton className='h-3 w-full' />
-                    </div>
-                  </div>
-                ))
-              ) : !items.length ? (
-                <p className='p-6 text-center text-sm text-muted-foreground'>{t('dashboard.empty')}</p>
-              ) : (
-                items.map((post) => (
-                  <PostRow
-                    key={cardKey(post)}
-                    post={post}
-                    course={courseOf.get(post.course_id)}
-                    author={authorOf(post)}
-                    unread={isUnread(seen, post)}
-                    selected={post === current}
-                    onSelect={() => open(post)}
-                  />
-                ))
-              )}
-              </div>
-            </ScrollArea>
-            </>
-            )}
-          </div>
-
-          {mailbox && !mobile && mail.labels?.granted ? (
-            <div className='hidden min-h-0 min-w-0 flex-1 flex-col md:flex'>
-              <MailDisplay {...mail.display} />
-            </div>
-          ) : (
-            !mailbox &&
-            shown &&
-            !mobile && (
-              <div className='hidden min-h-0 min-w-0 flex-1 md:flex'>
-                <Conversation {...shown} />
-              </div>
-            )
-          )}
+                {!!buckets.length && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className='text-xs font-medium text-muted-foreground'>
+                      {t('dashboard.tags')}
+                    </DropdownMenuLabel>
+                    {buckets.map((tag) => (
+                      <DropdownMenuItem key={tag.id} onSelect={() => pickQueue(`tag:${tag.id}`)}>
+                        <TagDot color={tag.color} />
+                        <span className='truncate'>{tag.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='size-8'
+              aria-label={t('dashboard.search')}
+              onClick={() => setPalette(true)}
+            >
+              <Search className='size-4' />
+            </Button>
+          </header>
+          <div className='flex min-h-0 flex-1 flex-col overflow-hidden bg-background'>{listing}</div>
         </div>
-      </div>
+      ) : (
+        // The shadcnblocks Resizable Three Columns layout: queues, list and post, each column resizable.
+        <ResizablePanelGroup
+          orientation='horizontal'
+          defaultLayout={columns.defaultLayout}
+          onLayoutChanged={columns.onLayoutChanged}
+        >
+          <ResizablePanel id='queues' defaultSize={224} minSize={180} maxSize={320} className='flex'>
+            <aside className='inbox7 flex min-w-0 flex-1 flex-col bg-sidebar text-sidebar-foreground'>
+              <div className='flex h-14 items-center px-3'>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant='ghost' className='h-auto w-full justify-start gap-2 px-2 py-px has-[>svg]:px-2'>
+                      <span className='truncate font-semibold'>{t('dashboard.workspace')}</span>
+                      <ChevronDown className='size-3 text-muted-foreground' />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align='start' className='inbox7 w-56'>
+                    <DropdownMenuLabel className='text-xs font-medium text-muted-foreground'>
+                      {t('dashboard.workspace')}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem asChild>
+                        <Link to='/settings/language'>{t('dashboard.settings')}</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to='/sync'>{t('dashboard.sync')}</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <a href='https://classroom.google.com' target='_blank' rel='noreferrer'>
+                          {t('dashboard.openClassroom')}
+                        </a>
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div className='px-2 pb-2'>
+                <Button
+                  variant='ghost'
+                  className='h-9 w-full justify-start gap-2 px-2 has-[>svg]:px-2'
+                  onClick={() => setPalette(true)}
+                >
+                  <Search className='size-4' />
+                  {t('dashboard.search')}
+                  <kbd className='ml-auto inline-flex items-center gap-0.5 font-mono text-xs text-muted-foreground'>
+                    <CommandIcon className='size-3' />K
+                  </kbd>
+                </Button>
+              </div>
+              <ScrollArea className='relative min-h-0 flex-1 px-2'>
+                <div className='flex flex-col gap-1'>
+                  {QUEUES.map((q) => (
+                    <Fragment key={q.key}>
+                      {/* Mail is its own page: linked between Materials and Archived. */}
+                      {q.key === 'archived' && canMail && (
+                        <>
+                          <NavButton
+                            icon={Mail}
+                            label={t('nav.mail')}
+                            count={mailLabels.find((l) => l.id === 'INBOX')?.count ?? undefined}
+                            active={queue === 'mail:INBOX'}
+                            onClick={() => pickQueue('mail:INBOX')}
+                          />
+                          {/* The other mailboxes and the labels, while Mail is open. */}
+                          {mailbox && (
+                            <div className='flex flex-col gap-1 ps-4'>
+                              <a href={GMAIL_COMPOSE_URL} target='_blank' rel='noreferrer' className={NAV_ROW}>
+                                <SquarePen className='size-4 shrink-0' />
+                                <span className='min-w-0 flex-1 truncate'>{t('mail.compose')}</span>
+                              </a>
+                              {mailLabels
+                                .filter((l) => l.id !== 'INBOX')
+                                .map((l) => (
+                                  <MailNavRow
+                                    key={l.id}
+                                    label={l}
+                                    index={mail.labels!.labels.indexOf(l)}
+                                    name={labelName(t, l)}
+                                    active={mailbox === l.id}
+                                    onClick={() => pickQueue(`mail:${l.id}`)}
+                                  />
+                                ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      <NavButton
+                        icon={q.icon}
+                        label={queueLabel(q.key)}
+                        count={unreadIn(q.key)}
+                        active={queue === q.key}
+                        onClick={() => pickQueue(q.key)}
+                      />
+                    </Fragment>
+                  ))}
+                </div>
+                <div className='mt-4 mb-1 flex items-center justify-between gap-2 ps-2'>
+                  <p className='text-xs font-medium text-muted-foreground'>{t('dashboard.tags')}</p>
+                  <TagSortMenu prefs={tagPrefs} onChange={changePrefs} />
+                </div>
+                <div className='flex flex-col gap-1 pb-2'>
+                  {buckets.map((tag) => (
+                    <TagNavRow
+                      key={tag.id}
+                      tag={tag}
+                      active={queue === `tag:${tag.id}`}
+                      onClick={() => pickQueue(`tag:${tag.id}`)}
+                      onEdit={() => setEditing(tag)}
+                    />
+                  ))}
+                  {!tags.length && <p className='px-2 py-1 text-xs text-muted-foreground'>{t('dashboard.noTags')}</p>}
+                </div>
+              </ScrollArea>
+            </aside>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel id='list' defaultSize={288} minSize={240} className='flex flex-col bg-background'>
+            {listing}
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel id='post' minSize={320} className='flex flex-col'>
+            {mailbox ? mail.labels?.granted && <MailDisplay {...mail.display} /> : shown && <Conversation {...shown} />}
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      )}
 
       <TagEditDialog tag={editing} onClose={() => setEditing(null)} />
 

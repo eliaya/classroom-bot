@@ -262,6 +262,22 @@ describe('DashboardInbox', () => {
     await expect.element(screen.getByRole('dialog').getByText('Open in Classroom')).toBeInTheDocument()
   })
 
+  it('keeps the column widths the user set after a reload', async () => {
+    const listWidth = () => Math.round(document.querySelectorAll('[data-panel]')[1].getBoundingClientRect().width)
+    const first = await render(<DashboardInbox />)
+    await expect.poll(() => rows().length).toBe(15)
+    const before = listWidth()
+    document.querySelectorAll<HTMLElement>('[data-slot="resizable-handle"]')[1].focus()
+    for (let i = 0; i < 3; i++) await userEvent.keyboard('{ArrowRight}')
+    await expect.poll(listWidth).toBeGreaterThan(before)
+    const resized = listWidth()
+    await first.unmount()
+
+    await render(<DashboardInbox />)
+    await expect.poll(() => rows().length).toBe(15)
+    expect(listWidth()).toBe(resized)
+  })
+
   it("keeps inbox7's tokens in the sidebar and the Mail UI's (the app's) in the list, light and dark", async () => {
     const screen = await render(<DashboardInbox />)
     await expect.poll(() => rows().length).toBe(15)

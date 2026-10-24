@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-10-24
+
+### Changed
+- **The Dashboard follows the shadcnblocks Resizable Three Columns layout.** On a wide screen the queues, the list and the post (or mail conversation) are three columns with a grip between them to drag each wider or narrower (or move with the arrow keys once focused); the queues take 180–320px, the list at least 240px and the post at least 320px. A phone keeps the list and opens a post in a drawer from the bottom. The widths a user sets are kept on that device (`localStorage`, key `react-resizable-panels:dashboard-columns`); resizing the window does not overwrite them.
+
 ## [0.32.0] - 2026-10-23
 
 **Upgrade notes.** The web image adds the `@embedpdf/engines` and `@radix-ui/react-toggle-group` packages: rebuild it with `./scripts/dev.sh`, not `--no-build`. The new columns `tags.color` and `users.theme_id`, and the tables `themes` and `theme_settings`, are added at startup. Installing a theme needs outbound HTTPS to `tweakcn.com` from the API. **Google Drive is now where synced files go by default:** on each user's next sync, attachments kept on the server are moved to their own Google Drive (folder `Classroom`) and the local copies deleted, for users whose Google connection allows creating files; the others keep them on the server until they connect Google again. A saved Google Drive external storage is switched off at startup and its files are read from Drive as before.
